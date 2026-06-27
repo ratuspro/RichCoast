@@ -6,7 +6,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    const g = this.make.graphics({ x: 0, y: 0 });
 
     // Ball — red circle
     g.fillStyle(0xff6b6b);
