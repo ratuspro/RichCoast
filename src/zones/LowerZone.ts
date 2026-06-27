@@ -3,17 +3,16 @@ import { Gate } from '../objects/Gate';
 import { NET_Y } from './UpperZone';
 
 export interface LowerZoneCallbacks {
-  onScore: (points: number) => void;
+  onScore: (points: number) => void; // available for future scoring mechanics
 }
 
 export class LowerZone {
   private scene: Phaser.Scene;
   private balls: Phaser.Physics.Arcade.Group;
   private walls: Phaser.Physics.Arcade.StaticGroup;
-  private callbacks: LowerZoneCallbacks;
+  callbacks: LowerZoneCallbacks; // kept for future scoring mechanics
 
   private gates: Gate[] = [];
-  private bottomSensor!: Phaser.Physics.Arcade.Image;
 
   constructor(
     scene: Phaser.Scene,
@@ -32,13 +31,6 @@ export class LowerZone {
     this.scene.add.rectangle(
       195, NET_Y + (844 - NET_Y) / 2, 390, 844 - NET_Y, 0x0d0d1a,
     ).setDepth(0);
-
-    // Bottom scoring sensor (slightly above bottom wall)
-    this.bottomSensor = this.scene.physics.add.image(195, 838, '__DEFAULT') as Phaser.Physics.Arcade.Image;
-    this.bottomSensor.setVisible(false);
-    (this.bottomSensor.body as Phaser.Physics.Arcade.Body).setSize(390, 10);
-    (this.bottomSensor.body as Phaser.Physics.Arcade.Body).allowGravity = false;
-    (this.bottomSensor.body as Phaser.Physics.Arcade.Body).immovable = true;
 
     // Ramps
     const ramps = this.scene.physics.add.staticGroup();
@@ -76,30 +68,11 @@ export class LowerZone {
     this.scene.physics.add.collider(this.balls, ramps);
     this.scene.physics.add.collider(this.balls, this.walls);
 
-    // Bottom sensor overlap
-    this.scene.physics.add.overlap(this.balls, this.bottomSensor, (ballObj) => {
-      const b = ballObj as Phaser.Physics.Arcade.Image;
-      if (!b.active) return;
-      b.destroy();
-      this.callbacks.onScore(10);
-      this.playScoreSound();
-    });
-
     // Gate overlaps for the initial ball group
     this.gates.forEach(gate => this.wireGateOverlap(gate, this.balls));
   }
 
-  update() {
-    // Catch balls that slip past the bottom sensor
-    this.balls.getChildren().forEach((obj) => {
-      const ball = obj as Phaser.Physics.Arcade.Image;
-      if (ball.y > 860) {
-        ball.destroy();
-        this.callbacks.onScore(10);
-        this.playScoreSound();
-      }
-    });
-  }
+  update() {}
 
   // Wire gate overlap for a specific ball (called for balls spawned by multiplyBall)
   wireGateOverlap(
@@ -128,6 +101,7 @@ export class LowerZone {
       const nb = this.scene.physics.add.image(bx + spread * 0.3, by, 'ball') as Phaser.Physics.Arcade.Image;
       nb.setCircle(12);
       nb.setBounce(0.5);
+      nb.setCollideWorldBounds(true);
       nb.setVelocity(vx + spread, vy + 50);
       this.balls.add(nb);
 
@@ -161,7 +135,7 @@ export class LowerZone {
     });
   }
 
-  private playScoreSound() {
+  playScoreSound() {
     const ctx = this.getAudioCtx();
     if (!ctx) return;
     [523, 659, 784].forEach((freq, i) => {

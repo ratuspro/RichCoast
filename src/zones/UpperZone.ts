@@ -164,6 +164,7 @@ export class UpperZone {
     const ball = this.scene.physics.add.image(195, 50, 'ball') as Phaser.Physics.Arcade.Image;
     ball.setCircle(12);
     ball.setBounce(0.6);
+    ball.setCollideWorldBounds(true);
     ball.setImmovable(false);
     (ball.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     this.balls.add(ball);
