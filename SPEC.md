@@ -28,6 +28,7 @@ A vacuum tunnel at the boundary between Zone A and Zone B. The player activates 
 - **Behaviour:** the closest ball to the tunnel entrance is sucked through — one ball per activation.
 - **Cooldown:** the tunnel cannot be activated again until Zone B is empty (no balls in flight).
 - **Strategy:** the player chooses the best moment to sacrifice a merged ball from Zone A for a Zone B payout.
+- **Interface:** on activation, Zone C hands the ball to Zone B and gates the trap-door on Zone B's flight state (busy/empty). See [TECH_SPEC.md](TECH_SPEC.md).
 
 ---
 
@@ -42,6 +43,7 @@ The lower portion of the screen. Once a ball falls through the trap-door it ente
 - **Miss:** a ball that reaches the funnel without hitting any gate scores its raw value unchanged.
 - **Scoring:** all balls that drain into the funnel add their value to the running total.
 - **Feel:** dynamic and physical like pinball. Outcomes should feel layout-driven and readable, not random like a slot machine.
+- **Interface:** Zone B receives the dropped ball at the shared entry point, owns scoring (it accumulates the running total for the HUD), and reports its flight state back to Zone C. See [TECH_SPEC.md](TECH_SPEC.md).
 
 ---
 
@@ -77,3 +79,12 @@ Abstract / geometric. Bold shapes, flat colors, no figurative metaphors. Dark ba
 - Full-screen portrait mode on mobile browser (~390×844).
 - Framework: Phaser 4 + TypeScript + Vite (current direction, not locked in).
 - No external asset dependencies — textures generated procedurally where possible.
+
+---
+
+## Architecture
+
+The code is split so two people can build it in parallel: **Dev 1 owns Zone A + Zone C +
+the shared shell/HUD; Dev 2 owns Zone B (including scoring)**, coupled only through a
+single agreed contract module. See [TECH_SPEC.md](TECH_SPEC.md) for the module layout,
+ownership, interface contract, and isolated-development workflow.
