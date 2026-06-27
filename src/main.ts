@@ -28,3 +28,9 @@ const game = new Phaser.Game(config);
 
 // Decide once, here, which slice to run; the scene reads it on create.
 game.registry.set(ZONE_MODE_KEY, parseZoneMode(window.location.search));
+
+// Dev-only handle so the browser console and automated (Playwright) tests can
+// inspect the running game. Stripped from production builds.
+if (import.meta.env.DEV) {
+  (window as unknown as { game: Phaser.Game }).game = game;
+}

@@ -53,17 +53,28 @@ through the contract events above.
 
 ## Status
 
-Scaffold in place; gameplay not yet built. The shared shell is complete and runnable:
-the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD, the thin
-`GameScene` + `?zone=` routing, the Matter world bounds, and the isolation layer
-(`src/dev/` stubs + harness) all exist and work. Tooling is Phaser 4 + Vite + TypeScript
-(strict) + Vitest; pure seam logic is unit-tested (`npm run test`). The zone systems are
-**skeletons**: each renders its region and exposes `TODO(zoneX)` seams. Contract plumbing
-is wired — Zone C's trap-door lock + nearest-ball world-query + `BALL_DROPPED` emit are
-live, and Zone B's busy/empty/score bookkeeping is ready to call — but the actual gameplay
-(aim/drop, merge collisions, gate splitting, funnel draining, feel) is unwritten and is each
-dev's half to build. Frozen decisions: Matter.js for both zones; `BALL_DROPPED.x` is always
-the fixed `Layout.zoneBEntry.x`.
+**Zone A is built; Zones B and C are still skeletons.** The shared shell is complete and
+runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD, the thin
+`GameScene` + `?zone=` routing, the Matter world bounds (now including the solid Zone A
+floor), and the isolation layer (`src/dev/` stubs + harness) all work. Tooling is Phaser 4 +
+Vite + TypeScript (strict) + Vitest; pure logic is unit-tested (`npm run test`) — the seam
+plus Zone A's `ballMath` and `MergeLogic`.
+
+**Zone A** (`src/zoneA/`) plays: drag along the top to aim, release to drop; balls are
+procedurally-textured Matter circles (colour + value) that grow heavier and grippier by
+tier, same-tier collisions merge into the next tier with a neighbour-shoving blast, a
+next-ball preview shows what's coming, and a ball resting above the death line for ~1s ends
+the run with a local overlay (game-over stays inside Zone A — no contract event). Every
+dropped ball stamps `body.ballData` so Zone C can find it. The zone splits into `tuning.ts`,
+`ballMath.ts`, `BallFactory.ts`, `AimController.ts`, `Board.ts`, plus the existing
+`BallQueue`/`MergeLogic`.
+
+**Zone C** is plumbed but unfinished: the trap-door lock + nearest-ball world-query +
+`BALL_DROPPED` emit are live, but the suck animation and *removing the consumed ball from
+Zone A* are still `TODO(zoneC)` (so in `?zone=ac` a sucked ball currently stays on the
+board). **Zone B** (`src/zoneB/`) is still a skeleton: busy/empty/score bookkeeping is ready
+to call, but gate splitting, funnel draining and scoring are unwritten — Dev 2's half. Frozen
+decisions: Matter.js for both zones; `BALL_DROPPED.x` is always the fixed `Layout.zoneBEntry.x`.
 
 > **Keep this section current.** As important phases finish, **rewrite** this paragraph to
 > describe the project's state *now* — don't append a changelog or history. It should always

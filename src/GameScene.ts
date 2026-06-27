@@ -112,9 +112,12 @@ export class GameScene extends Phaser.Scene {
       this.matter.add.rectangle(x, y, ww, hh, { isStatic: true });
     }
 
-    // TODO(seam): the Zone A/B divider with the trap-door gap belongs here, once
-    // Zone C's tunnel geometry is fixed. Left open while zones are skeletons so
-    // test balls aren't trapped above an unfinished floor.
+    // Zone A floor: where merge balls rest, keeping them above the divider. The
+    // trap-door is logical — Zone C reads ball bodies off the shared world and
+    // removes the consumed one — so it needs no physical gap and a solid floor is
+    // correct. Top edge sits on the Zone A/C boundary, clear of Zone B below.
+    const floorTop = Layout.zoneA.y + Layout.zoneA.height;
+    this.matter.add.rectangle(w / 2, floorTop + t / 2, w, t, { isStatic: true });
   }
 
   private teardown(): void {
