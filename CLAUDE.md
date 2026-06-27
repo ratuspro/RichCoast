@@ -53,8 +53,17 @@ through the contract events above.
 
 ## Status
 
-Pre-implementation: only `SPEC.md` and `TECH_SPEC.md` exist; no `src/` yet. The layout
-above is the agreed target, not existing code.
+Scaffold in place; gameplay not yet built. The shared shell is complete and runnable:
+the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD, the thin
+`GameScene` + `?zone=` routing, the Matter world bounds, and the isolation layer
+(`src/dev/` stubs + harness) all exist and work. Tooling is Phaser 4 + Vite + TypeScript
+(strict) + Vitest; pure seam logic is unit-tested (`npm run test`). The zone systems are
+**skeletons**: each renders its region and exposes `TODO(zoneX)` seams. Contract plumbing
+is wired — Zone C's trap-door lock + nearest-ball world-query + `BALL_DROPPED` emit are
+live, and Zone B's busy/empty/score bookkeeping is ready to call — but the actual gameplay
+(aim/drop, merge collisions, gate splitting, funnel draining, feel) is unwritten and is each
+dev's half to build. Frozen decisions: Matter.js for both zones; `BALL_DROPPED.x` is always
+the fixed `Layout.zoneBEntry.x`.
 
 > **Keep this section current.** As important phases finish, **rewrite** this paragraph to
 > describe the project's state *now* — don't append a changelog or history. It should always
