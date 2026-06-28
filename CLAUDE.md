@@ -51,6 +51,16 @@ through the contract events above.
 - `?zone=ac` / `?zone=b` / `?zone=full` (default) swap real systems for stubs so each half
   runs standalone. See TECH_SPEC.md "Working independently" before editing the stubs/harness.
 
+## Running it
+
+- `npm install` once, then `npm run dev` — Vite serves at **http://localhost:5173/**. Append
+  `?zone=ac`, `?zone=b`, or `?zone=full` to isolate a half.
+- `npm run test` (Vitest, pure logic), `npm run typecheck` (tsc strict), `npm run build`
+  (typecheck + production bundle), `npm run preview` (serve the build).
+- To verify a render headlessly: screenshot with Chrome —
+  `chrome --headless=new --window-size=390,844 --virtual-time-budget=4000 --screenshot=<path> http://localhost:5173/`.
+  Point `--screenshot` at a writable dir (a user temp path, not the sandbox scratchpad).
+
 ## Status
 
 **Zone A is built; Zones B and C are still skeletons.** The shared shell is complete and
