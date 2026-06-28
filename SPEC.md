@@ -34,16 +34,35 @@ A vacuum tunnel at the boundary between Zone A and Zone B. The player activates 
 
 ## Zone B — Ball-Split Multiplier (bottom)
 
-The lower portion of the screen. Once a ball falls through the trap-door it enters a physics arena with no player control. Moving gates split the ball into multiple copies of the same value. All copies eventually drain into a funnel at the bottom, each contributing its value to the score.
+The lower portion of the screen. Once a ball falls through the trap-door it enters a physics arena with no player control. Gates split the ball into multiple copies of the same value; walls guide trajectories; collectors capture balls and cash them out as score.
 
 - **Player input:** none — fully automatic once the ball enters.
 - **Gate mechanic:** a ball hitting a ×N gate is replaced by N balls of the same value. Example: a ball of value 8 hitting a ×2 gate becomes 2 balls of value 8.
 - **Cascading splits:** split balls can hit further gates and split again. A single ball can cascade into many copies.
 - **Multiple balls in flight:** the player can drop another ball into Zone B before the previous ones have drained — all coexist simultaneously. The trap-door cannot activate again while any ball is in Zone B.
-- **Miss:** a ball that reaches the funnel without hitting any gate scores its raw value unchanged.
-- **Scoring:** all balls that drain into the funnel add their value to the running total.
+- **Miss:** a ball that reaches a collector without hitting any gate scores its raw value unchanged.
+- **Scoring:** all balls that enter a collector add their value to the running total.
 - **Feel:** dynamic and physical like pinball. Outcomes should feel layout-driven and readable, not random like a slot machine.
 - **Interface:** Zone B receives the dropped ball at the shared entry point, owns scoring (it accumulates the running total for the HUD), and reports its flight state back to Zone C. See [TECH_SPEC.md](TECH_SPEC.md).
+
+### Gate types
+
+Three kinds of gate can appear in a Zone B layout. Each is a rigid line segment (with physical thickness) that splits any ball touching it.
+
+- **Static gate** — defined by a center point and an angle. Most static gates are near-horizontal but can be tilted to redirect balls. Does not move.
+- **Translating gate** — defined by two endpoints A and B. The gate slides back and forth between A and B on a fixed period. Center moves; angle stays constant.
+- **Rotating gate** — defined by a pivot point C and a length. The gate spins continuously (or oscillates) around C.
+
+### Collectors
+
+A collector is a sensor area — any shape, any position — that captures balls and turns them into score. Balls can be collected at the bottom of the arena (the most common case, since gravity pulls them down), at the sides (for balls that ricochet off walls), or anywhere else the layout designer places one. There is no single mandatory funnel; instead, the layout defines one or more collectors whose combined capture area covers the reachable exits.
+
+- Each collector is labelled with a multiplier (default ×1). A ball entering a ×M collector scores `value × M`.
+- A ball that enters any collector is removed from play and its score is committed.
+
+### Walls
+
+A wall is a static line segment — no gate behavior, no score — used purely as a physical barrier. Walls let the layout route balls between collectors, prevent them from reaching dead zones, and create predictable rebound paths. A wall can be placed anywhere inside Zone B.
 
 ---
 
@@ -88,3 +107,27 @@ The code is split so two people can build it in parallel: **Dev 1 owns Zone A + 
 the shared shell/HUD; Dev 2 owns Zone B (including scoring)**, coupled only through a
 single agreed contract module. See [TECH_SPEC.md](TECH_SPEC.md) for the module layout,
 ownership, interface contract, and isolated-development workflow.
+
+---
+
+## Open Questions
+
+### Progression (Incentivize Merge)
+
+**The problem:** Scoring is currently linear, so there is no incentive to merge. Four balls of value 1 sent to Zone B yield the same payout as one merged ball of value 4. This makes Zone A feel pointless as a puzzle — the optimal play is just to send balls as fast as possible.
+**The goal:** Merging should produce superlinear value, so a single high-tier ball sent to Zone B is worth meaningfully more than the equivalent number of low-tier balls. This creates a real tension: wait and merge for a bigger payout, but risk Zone A filling up and triggering game over sooner.
+**A rejected extreme:** One approach is to make merge results grow much faster than powers of 2 — e.g. 1+1→4, 4+4→64, 64+64→4096. This does make high-tier balls clearly superior, but the growth is too steep and makes low-tier play feel worthless rather than just suboptimal.
+**Open question:** Find a curve between pure linear and steeply exponential that feels fair and readable. The player should be able to intuit that merging is rewarding without needing to do maths. It is also unclear whether a player who never merges — dropping one ball at a time directly to Zone B — can still score competitively; ideally they should fall behind but not be immediately punished.
+
+### Losing Condition — Ball Buffer + Score Milestones
+
+A second losing condition runs in parallel with Zone A overflow. The player has a finite **ball buffer** — a count of balls remaining to drop into Zone A, shown as a simple number in the HUD (e.g. ×12).
+
+**Mechanics:**
+- Every ball dropped into Zone A costs 1 from the buffer.
+- Zone B tracks a **score milestone** — an escalating target that increases each time it is reached.
+- When the milestone is reached, the buffer is immediately refilled by a fixed amount (tunable; e.g. +10 balls).
+- If the buffer reaches 0, no new balls can be dropped. Balls already in Zone B continue to resolve — if one of them pushes the score over the current milestone before Zone B fully drains, the buffer refills and the run continues.
+- If Zone B empties with the buffer still at 0 and the milestone not yet reached, the run ends (game over).
+
+**Feel:** The player always has a visible next target, creating a clear "save yourself" goal when running low. Escalating milestones tighten pressure naturally over a long run without breaking the endless-run structure. Last-ball moments where Zone B just barely hits the milestone are intentionally dramatic.

@@ -53,8 +53,33 @@ through the contract events above.
 
 ## Status
 
-Pre-implementation: only `SPEC.md` and `TECH_SPEC.md` exist; no `src/` yet. The layout
-above is the agreed target, not existing code.
+**Zone A is built; Zones B and C are still skeletons.** The shared shell is complete and
+runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD, the thin
+`GameScene` + `?zone=` routing, the Matter world bounds (now including the solid Zone A
+floor), and the isolation layer (`src/dev/` stubs + harness) all work. Tooling is Phaser 4 +
+Vite + TypeScript (strict) + Vitest; pure logic is unit-tested (`npm run test`) — the seam
+plus Zone A's `ballMath` and `MergeLogic`.
+
+**Zone A** (`src/zoneA/`) plays: drag along the top to aim, release to drop; balls are
+procedurally-textured Matter circles (colour + value) that grow heavier and grippier by
+tier, same-tier collisions merge into the next tier with a neighbour-shoving blast, a
+next-ball preview shows what's coming, and a ball resting above the death line for ~1s ends
+the run with a local overlay (game-over stays inside Zone A — no contract event). Every
+dropped ball stamps `body.ballData` so Zone C can find it. The zone splits into `tuning.ts`,
+`ballMath.ts`, `BallFactory.ts`, `AimController.ts`, `Board.ts`, plus the existing
+`BallQueue`/`MergeLogic`.
+
+**Zone C** is plumbed but unfinished: the trap-door lock + nearest-ball world-query +
+`BALL_DROPPED` emit are live, but the suck animation and *removing the consumed ball from
+Zone A* are still `TODO(zoneC)` (so in `?zone=ac` a sucked ball currently stays on the
+board). **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three
+gate types (static, translating, rotating) split balls into copies via a pending-queue
+pattern, collectors (sensor areas, any position) drain balls and score their value ×
+collector multiplier, walls guide trajectories, and a `BallBuffer` tracks a finite ball
+supply that refills when Zone B score crosses escalating milestones — exhausting the buffer
+while Zone B is empty triggers a local game-over overlay. The `BUFFER_CHANGED` /
+`BUFFER_EXHAUSTED` events are wired to the HUD (buffer count, top-right). Frozen decisions:
+Matter.js for both zones; `BALL_DROPPED.x` is always the fixed `Layout.zoneBEntry.x`.
 
 > **Keep this section current.** As important phases finish, **rewrite** this paragraph to
 > describe the project's state *now* — don't append a changelog or history. It should always
