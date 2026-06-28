@@ -39,7 +39,7 @@ export interface ZoneBLayout {
   walls: WallDef[];
 }
 
-// Initial layout. All y values are absolute (zone B starts at y=492).
+// Initial layout. All y values are absolute (zone B starts at y=358).
 export const INITIAL_LAYOUT: ZoneBLayout = {
   gates: [
     // Static, horizontal, centre of arena
