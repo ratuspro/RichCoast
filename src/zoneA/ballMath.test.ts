@@ -9,11 +9,13 @@ import {
   RADII,
   SPAWN_Y,
   TIER_COLORS,
+  WARN_BAND,
 } from './tuning';
 import {
   blastImpulse,
   clampSpawnX,
   frictionForTier,
+  isNearDeath,
   isOverflow,
   isRestingAbove,
   midpoint,
@@ -115,5 +117,30 @@ describe('rest / overflow', () => {
   it('overflows once the rest threshold is reached', () => {
     expect(isOverflow(999, 1000)).toBe(false);
     expect(isOverflow(1000, 1000)).toBe(true);
+  });
+});
+
+describe('isNearDeath', () => {
+  const line = DEATH_LINE_Y;
+  const band = WARN_BAND;
+  const slow = 0.2;
+  const fast = 2.0;
+
+  it('flags a slow ball whose centre sits just below the line (warning band)', () => {
+    expect(isNearDeath(line + 1, slow, line, band, 0.8)).toBe(true);
+    expect(isNearDeath(line, slow, line, band, 0.8)).toBe(true); // on the line counts as near
+  });
+
+  it('does not flag a ball already over the line (that is overflow, not warning)', () => {
+    expect(isNearDeath(line - 1, slow, line, band, 0.8)).toBe(false);
+  });
+
+  it('does not flag a ball below the band', () => {
+    expect(isNearDeath(line + band, slow, line, band, 0.8)).toBe(false);
+    expect(isNearDeath(line + band + 50, slow, line, band, 0.8)).toBe(false);
+  });
+
+  it('does not flag a fast ball even inside the band', () => {
+    expect(isNearDeath(line + 1, fast, line, band, 0.8)).toBe(false);
   });
 });

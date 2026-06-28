@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { blastImpulse, isOverflow, isRestingAbove, midpoint, nextRestMs } from './ballMath';
+import { blastImpulse, isNearDeath, isOverflow, isRestingAbove, midpoint, nextRestMs } from './ballMath';
 import { canMerge, mergedTier } from './MergeLogic';
+import { Sfx } from '../core/Sfx';
 import type { Ball, BallFactory } from './BallFactory';
-import { BLAST_RADIUS, BLAST_STRENGTH, DEATH_LINE_Y, REST_MS, REST_SPEED, SPAWN_Y } from './tuning';
+import { BLAST_RADIUS, BLAST_STRENGTH, DEATH_LINE_Y, REST_MS, REST_SPEED, SPAWN_Y, WARN_BAND } from './tuning';
 
 /**
  * The live merge board: owns every dropped ball, merges same-tier pairs on contact,
@@ -17,12 +18,14 @@ export class Board {
   private readonly registry = new Map<MatterJS.BodyType, Ball>();
   private readonly pending: Array<{ a: Ball; b: Ball }> = [];
   private over = false;
+  private dangerActive = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly factory: BallFactory,
     private readonly onGameOver: () => void,
     private readonly onEmpty?: () => void,
+    private readonly onDanger?: (near: boolean) => void,
   ) {
     scene.matter.world.on(Phaser.Physics.Matter.Events.COLLISION_START, this.onCollisionStart);
   }
@@ -40,11 +43,16 @@ export class Board {
   }
 
   destroy(): void {
-    this.scene.matter.world.off(
-      Phaser.Physics.Matter.Events.COLLISION_START,
-      this.onCollisionStart,
-    );
-    for (const ball of [...this.registry.values()]) ball.image.destroy();
+    // On scene shutdown/restart, Phaser's Matter plugin runs its own SHUTDOWN handler first
+    // and sets `matter.world` to null (destroying the world, which clears its own listeners
+    // and bodies). So when we get here mid-restart the world may already be gone — guard it,
+    // and let Phaser's display-list teardown reclaim the ball images. Touching a null world
+    // here used to throw and abort the whole restart.
+    const world = this.scene.matter.world;
+    if (world) {
+      world.off(Phaser.Physics.Matter.Events.COLLISION_START, this.onCollisionStart);
+      for (const ball of [...this.registry.values()]) ball.image.destroy();
+    }
     this.registry.clear();
     this.pending.length = 0;
   }
@@ -85,6 +93,7 @@ export class Board {
       const merged = this.factory.spawn(where.x, where.y, tier);
       this.register(merged);
       this.applyBlast(where, merged.body);
+      Sfx.merge();
     }
   }
 
@@ -99,8 +108,12 @@ export class Board {
     }
   }
 
-  /** End the run if any ball has rested above the death line long enough. */
+  /**
+   * End the run if any ball has rested above the death line long enough, and
+   * flag the death-line warning when any resting ball is close (but not yet over).
+   */
   private scanOverflow(delta: number): void {
+    let near = false;
     for (const ball of this.registry.values()) {
       const resting = isRestingAbove(
         ball.body.position.y,
@@ -114,6 +127,15 @@ export class Board {
         this.onGameOver();
         return;
       }
+      near ||= isNearDeath(ball.body.position.y, ball.body.speed, DEATH_LINE_Y, WARN_BAND, REST_SPEED);
     }
+    this.setDanger(near);
+  }
+
+  /** Emit a danger transition only when it changes, so the warning tween isn't restarted each frame. */
+  private setDanger(near: boolean): void {
+    if (near === this.dangerActive) return;
+    this.dangerActive = near;
+    this.onDanger?.(near);
   }
 }

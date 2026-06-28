@@ -5,9 +5,15 @@ import { BallQueue } from './BallQueue';
 import type { BallFactory } from './BallFactory';
 import { DROP_COOLDOWN_MS, SPAWN_Y } from './tuning';
 
-const PREVIEW_X = Layout.WIDTH - 34;
-const PREVIEW_Y = 40;
-const PREVIEW_SIZE = 44;
+// One coherent top-right queue row: `NEXT (o)  N left`. The preview ball is the icon;
+// the count sits on the far right, clear of the centred score. Shared type treatment.
+const ROW_Y = 30;
+const LABEL_X = Layout.WIDTH - 152;
+const PREVIEW_X = Layout.WIDTH - 100;
+const PREVIEW_SIZE = 36;
+const COUNT_X = Layout.WIDTH - 14;
+const LABEL_COLOR = '#7c8aa6'; // muted slate for the "NEXT" / unit text
+const COUNT_COLOR = '#e6ebf5'; // brighter for the live number
 
 /**
  * Drag-to-aim input for Zone A. The current ball is a body-less sprite that tracks
@@ -27,6 +33,7 @@ export class AimController {
   private readonly aimImage: Phaser.GameObjects.Image;
   private readonly previewImage: Phaser.GameObjects.Image;
   private readonly previewLabel: Phaser.GameObjects.Text;
+  private readonly countText: Phaser.GameObjects.Text;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -38,17 +45,27 @@ export class AimController {
       .setDepth(10);
 
     this.previewLabel = scene.add
-      .text(PREVIEW_X, PREVIEW_Y - PREVIEW_SIZE / 2 - 12, 'NEXT', {
+      .text(LABEL_X, ROW_Y, 'NEXT', {
         fontFamily: 'monospace',
-        fontSize: '11px',
-        color: '#566080',
+        fontSize: '12px',
+        color: LABEL_COLOR,
       })
-      .setOrigin(0.5)
+      .setOrigin(0, 0.5)
       .setDepth(20);
     this.previewImage = scene.add
-      .image(PREVIEW_X, PREVIEW_Y, factory.ensureTexture(this.queue.peekNext()))
+      .image(PREVIEW_X, ROW_Y, factory.ensureTexture(this.queue.peekNext()))
       .setDisplaySize(PREVIEW_SIZE, PREVIEW_SIZE)
       .setDepth(20);
+    // Balls-left-to-drop count, on the same row. Hidden until the first value arrives.
+    this.countText = scene.add
+      .text(COUNT_X, ROW_Y, '', {
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        color: COUNT_COLOR,
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(20)
+      .setVisible(false);
 
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown);
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove);
@@ -56,6 +73,11 @@ export class AimController {
     scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onPointerUp);
 
     this.moveAimTo(this.aimX);
+  }
+
+  /** Update the balls-left-to-drop count in the queue row (revealed on first call). */
+  setBallsLeft(count: number): void {
+    this.countText.setText(`${count} left`).setVisible(true);
   }
 
   /** Freeze input and hide the aim ball (called on game over). */
@@ -83,6 +105,7 @@ export class AimController {
     this.aimImage.destroy();
     this.previewImage.destroy();
     this.previewLabel.destroy();
+    this.countText.destroy();
   }
 
   private onPointerDown = (pointer: Phaser.Input.Pointer): void => {

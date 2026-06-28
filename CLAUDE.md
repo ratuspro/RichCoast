@@ -40,7 +40,8 @@ section when the work touches it:
 - **Dev 1:** Zone A (merge), Zone C (trap-door), HUD, scene bootstrap (`src/zoneA/`,
   `src/zoneC/`, `src/core/HUD.ts`, `main.ts`, `GameScene.ts`).
 - **Dev 2:** Zone B (split arena, gates, funnel, scoring) — `src/zoneB/`.
-- **Shared:** `src/core/` (`contracts.ts`, `EventBus.ts`, `Layout.ts`) — changes need both.
+- **Shared:** `src/core/` (`contracts.ts`, `EventBus.ts`, `Layout.ts`, `BallColors.ts`) —
+  changes need both. `BallColors.ts` is the single tier palette both zones draw from.
 
 When a task lands in one owner's area, stay within those files; reach the other half only
 through the contract events above.
@@ -76,12 +77,20 @@ B's `BallBuffer`.
 
 **Zone A** (`src/zoneA/`) plays: drag along the top to aim, release to drop; balls are
 procedurally-textured Matter circles (colour + value) that grow heavier and grippier by
-tier, same-tier collisions merge into the next tier with a neighbour-shoving blast, a
-next-ball preview shows what's coming, and a ball resting above the death line for ~1s ends
-the run with a local overlay (game-over stays inside Zone A — no contract event). Every
-dropped ball stamps `body.ballData` so Zone C can find it. The zone splits into `tuning.ts`,
-`ballMath.ts`, `BallFactory.ts`, `AimController.ts`, `Board.ts`, plus the existing
-`BallQueue`/`MergeLogic`.
+tier, same-tier collisions merge into the next tier with a neighbour-shoving blast. Ball
+colours come from the shared `src/core/BallColors.ts` "Jewel Tones" palette (one source for
+both zones, so a transferred ball keeps its exact colour). A top-right **queue row** in
+`AimController` pairs the next-ball preview with the balls-left-to-drop count on one styled
+line. Zone A owns the run's game-over: both conditions —
+a ball resting above the death line for ~1s (overflow) and the stalemate (buffer 0 + Zone A
+empty + Zone B empty) — converge on one handler that pauses the whole Matter world and draws
+a single **full-screen** overlay showing `GAME OVER`, the final score (mirrored from the
+existing `SCORE_CHANGED` event), and a **RESTART** button that calls `scene.restart()`. A red
+`DeathLine` warning at `DEATH_LINE_Y` stays hidden until a ball rests within `WARN_BAND` of it
+(`Board` reports the danger transition; `isNearDeath` in `ballMath.ts` is the pure predicate).
+Game-over needs no contract event. Every dropped ball stamps `body.ballData` so Zone C can
+find it. The zone splits into `tuning.ts`, `ballMath.ts`, `BallFactory.ts`, `AimController.ts`,
+`Board.ts`, `DeathLine.ts`, plus the existing `BallQueue`/`MergeLogic`.
 
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,
@@ -89,7 +98,8 @@ collectors (sensor areas, any position) drain balls and score their value × col
 multiplier, walls guide trajectories, and a `BallBuffer` tracks a finite ball supply that
 refills when Zone B score crosses escalating milestones — exhausting the buffer while Zone B
 is empty triggers a local game-over overlay. The `BUFFER_CHANGED` / `BUFFER_EXHAUSTED` events
-are wired to the HUD (buffer count, top-right). The zone splits into `ZoneBSystem` plus
+feed Zone A's queue-row balls-left count (the HUD itself is now score-only). Ball textures use
+the same shared `src/core/BallColors.ts` palette as Zone A. The zone splits into `ZoneBSystem` plus
 `GateSystem`, `CollectorSystem`, `WallSystem`, `ZoneBBall`, `BallBuffer`, and `zoneLayout.ts`;
 the old `Funnel.ts` skeleton is **superseded by `CollectorSystem` and is now dead code**.
 
@@ -103,6 +113,15 @@ fixed-radius (14px) ball of the same tier — the source ball's Zone-A size neve
 The tap locks the door immediately to block a double-suck during the tween. Frozen
 decisions: Matter.js for both zones; `BALL_DROPPED.x` is always the fixed
 `Layout.zoneBEntry.x`.
+
+**Audio** (`src/core/Sfx.ts`) plays: a procedural Web Audio engine (soft synth bells/marimba,
+no asset files) initialised once in `GameScene` from Phaser's own AudioContext (so the mobile
+autoplay-unlock is handled), self-silencing until init and a no-op under HTML5/NoAudio. It's a
+shared singleton each zone calls at its own local hook — drop/merge (Zone A), transition (Zone
+C), multiply/collect/goal (Zone B) — so the frozen contract stays untouched. Merge and Zone B
+multiply pitch-climb through a fast chain via the pure, unit-tested `comboPitch.ts` (<0.5s
+window, separate channels). **M** toggles mute. Volumes are tuned by relevance (goal loudest,
+collect quietest).
 
 > **Keep this section current.** As important phases finish, **rewrite** this paragraph to
 > describe the project's state *now* — don't append a changelog or history. It should always

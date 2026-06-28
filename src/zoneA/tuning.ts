@@ -55,6 +55,9 @@ export const REST_SPEED = 0.8;
 /** How long a ball must rest above the death line before the run ends (ms). */
 export const REST_MS = 1000;
 
+/** Px below the death line within which a resting ball flags the red warning line. */
+export const WARN_BAND = 28;
+
 // --- Input ----------------------------------------------------------------
 
 /** Brief lock-out after a drop so the next ball can't be slammed into the same spot. */
@@ -62,9 +65,7 @@ export const DROP_COOLDOWN_MS = 250;
 
 // --- Colour ---------------------------------------------------------------
 
-/** One flat hue per tier; index = tier-1. Must have TIER_COUNT (10) entries.
- *  High-contrast geometric palette (SPEC.md visual theme), no image assets. */
-export const TIER_COLORS: readonly number[] = [
-  0x4cc9f0, 0x4895ef, 0x4361ee, 0x3f37c9, 0x7209b7, 0xb5179e, 0xf72585, 0xff6d00,
-  0xffba08, 0x80ed99,
-];
+/** Tier palette lives in the shared `core/BallColors` so Zone A and Zone B stay
+ *  pixel-identical (a transferred ball keeps its colour). Re-exported here so the
+ *  rest of Zone A keeps importing it from `tuning` unchanged. */
+export { TIER_COLORS } from '../core/BallColors';

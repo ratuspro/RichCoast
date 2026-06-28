@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { colorForTier, hexColor } from '../core/BallColors';
 import type { BallSpec } from '../core/contracts';
 
 export const BALL_RADIUS = 14;
@@ -11,13 +12,6 @@ export const CAT_COLLECTOR = 0x0008;
 // Freshly-split balls ignore gates for 300 ms so they don't immediately re-trigger.
 const SPLIT_GRACE_MS = 300;
 
-const TIER_HUES = [200, 160, 120, 80, 40, 20, 0, 300, 260, 220] as const;
-
-/** 0xRRGGBB → `#rrggbb` CSS string */
-function hexColor(rgb: number): string {
-  return `#${rgb.toString(16).padStart(6, '0')}`;
-}
-
 export function createZoneBBall(
   scene: Phaser.Scene,
   x: number,
@@ -28,16 +22,21 @@ export function createZoneBBall(
 ): Phaser.Physics.Matter.Image {
   const key = `zb-ball-t${tier}`;
   if (!scene.textures.exists(key)) {
-    const hue = (TIER_HUES[(tier - 1) % TIER_HUES.length] ?? 200) / 360;
-    const color = Phaser.Display.Color.HSLToColor(hue, 0.7, 0.55).color;
+    // Same shared palette as Zone A, so a transferred ball keeps its exact colour.
+    const color = colorForTier(tier);
     const size = BALL_RADIUS * 2;
     const canvas = scene.textures.createCanvas(key, size, size);
     if (canvas) {
       const ctx = canvas.getContext();
+      // Match Zone A's thin dark rim so balls read as the same family across zones.
+      const lineW = Math.max(2, BALL_RADIUS * 0.08);
       ctx.beginPath();
-      ctx.arc(BALL_RADIUS, BALL_RADIUS, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.arc(BALL_RADIUS, BALL_RADIUS, BALL_RADIUS - lineW / 2, 0, Math.PI * 2);
       ctx.fillStyle = hexColor(color);
       ctx.fill();
+      ctx.lineWidth = lineW;
+      ctx.strokeStyle = 'rgba(11, 13, 18, 0.35)';
+      ctx.stroke();
       canvas.refresh();
     }
   }

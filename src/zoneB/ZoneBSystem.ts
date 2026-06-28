@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
+import { Sfx } from '../core/Sfx';
 import { INITIAL_LAYOUT } from './zoneLayout';
 import { GateSystem } from './GateSystem';
 import { CollectorSystem } from './CollectorSystem';
@@ -69,6 +70,7 @@ export class ZoneBSystem implements GameSystem {
     const spawnY = img.y;
     destroyZoneBBall(img);
     this.replaceBall(multiplier);
+    if (multiplier > 1) Sfx.multiply(multiplier);
 
     const SPREAD = 0.8;
     for (let i = 0; i < multiplier; i++) {
@@ -96,6 +98,7 @@ export class ZoneBSystem implements GameSystem {
     destroyZoneBBall(img);
     this.addScore(value * scoreMultiplier);
     this.onBallDrained();
+    Sfx.collect(value);
   }
 
   // --- Contract plumbing ---------------------------------------------------
@@ -125,6 +128,7 @@ export class ZoneBSystem implements GameSystem {
     this.emitScoreBar();
     if (filled) {
       this.bus.emit(GameEvent.ScoreBarFilled);
+      Sfx.goal();
     }
   }
 

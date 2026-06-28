@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameEvent, type BallBodyData, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
+import { Sfx } from '../core/Sfx';
 
 /** How long the suck tween runs before the ball lands in Zone B, in ms. */
 const SUCK_MS = 150;
@@ -28,8 +29,9 @@ interface BallBody {
  *
  * Fully plumbed: owns the cooldown lock (driven by Zone B's busy/empty events),
  * handles taps, finds the nearest ball still in Zone A via a shared-world query,
- * and emits BALL_DROPPED at the FIXED entry column. Only the suck animation/feel
- * and removing the consumed body are left as TODO.
+ * and hands the ball off to Zone B by emitting BALL_DROPPED at the FIXED entry
+ * column the instant it leaves Zone A (so the A→B transition is atomic on the bus),
+ * then plays a purely cosmetic suck animation.
  */
 export class ZoneCSystem implements GameSystem {
   private locked = false;
@@ -71,33 +73,30 @@ export class ZoneCSystem implements GameSystem {
     const { value, tier } = ball.ballData;
     const startX = ball.position.x;
     const startY = ball.position.y;
-
-    // Remove the ball from Zone A immediately by destroying its image — the Board
-    // self-prunes its registry off the image's DESTROY event (see Board.register).
     const image = ball.gameObject as Phaser.GameObjects.Image | undefined;
     const texKey = image?.texture?.key;
+
+    // Hand the ball off to Zone B FIRST, so the A→B transition is atomic on the bus:
+    // ZoneBBusy fires now (clearing Zone A's "Zone B empty" flag) before destroying the
+    // A ball can trigger Zone A's loss check. The suck below is then pure cosmetics.
+    this.emitDrop(value, tier);
+
+    // Remove the ball from Zone A by destroying its image — the Board self-prunes its
+    // registry off the image's DESTROY event (see Board.register).
     image?.destroy();
 
-    this.playSuck(startX, startY, texKey, value, tier);
+    Sfx.transition();
+    this.playSuck(startX, startY, texKey);
   }
 
   /**
-   * Cosmetic suck: animate a throwaway snapshot sprite from the ball's last position
-   * into the door mouth, then hand the ball off to Zone B. The real ball is already
-   * gone, so this never fights Zone A physics. Emits BALL_DROPPED on completion.
+   * Cosmetic suck: animate a throwaway snapshot sprite from the ball's last position into
+   * the door mouth. Purely visual — the ball was already handed off to Zone B in `onTap`,
+   * and the real ball is gone, so this never fights Zone A physics nor gates the handoff.
    */
-  private playSuck(
-    x: number,
-    y: number,
-    texKey: string | undefined,
-    value: number,
-    tier: number,
-  ): void {
+  private playSuck(x: number, y: number, texKey: string | undefined): void {
     const scene = this.scene;
-    if (!scene || !texKey) {
-      this.emitDrop(value, tier); // no sprite to animate — just hand off
-      return;
-    }
+    if (!scene || !texKey) return; // nothing to animate — the ball is already handed off
 
     const sprite = scene.add.image(x, y, texKey).setDepth(800);
     scene.tweens.add({
@@ -107,10 +106,7 @@ export class ZoneCSystem implements GameSystem {
       scale: 0,
       duration: SUCK_MS,
       ease: 'Cubic.easeIn',
-      onComplete: () => {
-        sprite.destroy();
-        this.emitDrop(value, tier);
-      },
+      onComplete: () => sprite.destroy(),
     });
   }
 

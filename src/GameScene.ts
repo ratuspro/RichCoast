@@ -11,6 +11,7 @@ import { StubZoneAC } from './dev/stubZoneAC';
 import { Harness } from './dev/harness';
 import { DebugHarness } from './dev/DebugHarness';
 import { isDebug, toggleDebug } from './core/DebugMode';
+import { Sfx } from './core/Sfx';
 
 /**
  * Which slice of the game is wired up:
@@ -54,6 +55,8 @@ export class GameScene extends Phaser.Scene {
     this.drawBackdrop();
     this.buildWorldGeometry();
 
+    Sfx.init(this);
+
     this.systems = this.buildSystems(mode);
     for (const system of this.systems) system.create(this);
 
@@ -62,6 +65,7 @@ export class GameScene extends Phaser.Scene {
       toggleDebug();
       this.applyDebug(isDebug());
     });
+    this.input.keyboard?.on('keydown-M', () => Sfx.toggleMute());
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }

@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { hexColor } from '../core/BallColors';
 import { tierToValue, type BallBodyData } from '../core/contracts';
 import { frictionForTier, radiusForTier } from './ballMath';
 import { DENSITY, FRICTION_AIR, FRICTION_STATIC, RESTITUTION, TIER_COLORS } from './tuning';
@@ -17,11 +18,6 @@ export interface Ball {
 
 /** A Matter body once ball identity is stamped on it — exactly what Zone C reads. */
 type TaggedBody = MatterJS.BodyType & { ballData: BallBodyData };
-
-/** 0xRRGGBB number → `#rrggbb` CSS string for the Canvas 2D API. */
-function hexColor(rgb: number): string {
-  return `#${rgb.toString(16).padStart(6, '0')}`;
-}
 
 /**
  * Builds Zone A balls. One procedurally-drawn texture per tier (flat colour + the

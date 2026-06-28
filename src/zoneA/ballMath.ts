@@ -77,3 +77,17 @@ export function isRestingAbove(
 export function isOverflow(restMs: number, thresholdMs: number): boolean {
   return restMs >= thresholdMs;
 }
+
+/**
+ * A slow ball whose centre sits just below the line — inside the warning band
+ * `[lineY, lineY + band)` — but not yet over it. Drives the red death-line warning.
+ */
+export function isNearDeath(
+  centerY: number,
+  speed: number,
+  lineY: number,
+  band: number,
+  speedThreshold: number,
+): boolean {
+  return speed < speedThreshold && centerY >= lineY && centerY < lineY + band;
+}
