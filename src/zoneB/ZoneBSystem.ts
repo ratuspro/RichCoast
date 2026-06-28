@@ -33,6 +33,7 @@ export class ZoneBSystem implements GameSystem {
   private total = 0;
 
   private barFill?: Phaser.GameObjects.Rectangle;
+  private barLabel?: Phaser.GameObjects.Text;
 
   constructor(private readonly bus: EventBus) {}
 
@@ -150,6 +151,15 @@ export class ZoneBSystem implements GameSystem {
       .rectangle(x, barY + BAR_HEIGHT / 2, 0, BAR_HEIGHT, BAR_COLOR_FILL)
       .setDepth(11)
       .setOrigin(0, 0.5);
+
+    this.barLabel = scene.add
+      .text(x + width / 2, barY - 4, '', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#8899bb',
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(12);
   }
 
   private updateBarVisual(): void {
@@ -157,5 +167,8 @@ export class ZoneBSystem implements GameSystem {
     const { x, width } = Layout.zoneB;
     this.barFill.width = width * this.scoreBar.getProgress();
     this.barFill.x = x;
+    this.barLabel?.setText(
+      `${this.scoreBar.getFilled()} / ${this.scoreBar.getTarget()}`,
+    );
   }
 }

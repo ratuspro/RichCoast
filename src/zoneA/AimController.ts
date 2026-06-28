@@ -114,7 +114,11 @@ export class AimController {
 
   private advanceQueue(): void {
     this.queue.pop();
-    this.aimImage.setTexture(this.factory.ensureTexture(this.queue.peek()));
+    const nextTier = this.queue.peek();
+    const nextDiameter = radiusForTier(nextTier) * 2;
+    this.aimImage
+      .setTexture(this.factory.ensureTexture(nextTier))
+      .setDisplaySize(nextDiameter, nextDiameter);
     this.previewImage
       .setTexture(this.factory.ensureTexture(this.queue.peekNext()))
       .setDisplaySize(PREVIEW_SIZE, PREVIEW_SIZE);

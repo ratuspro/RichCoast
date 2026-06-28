@@ -1,5 +1,5 @@
 /** Points needed to fill the bar and trigger a buffer refill. Tunable. */
-export const SCORE_BAR_TARGET = 100;
+export const SCORE_BAR_TARGET = 10;
 
 /**
  * Pure score-bar logic — no Phaser dependency, fully unit-testable.
@@ -10,7 +10,7 @@ export const SCORE_BAR_TARGET = 100;
 export class ScoreBar {
   private filled = 0;
 
-  constructor(private readonly target = SCORE_BAR_TARGET) {}
+  constructor(private readonly target = SCORE_BAR_TARGET) { }
 
   /** Returns true if this addition caused the bar to fill (and resets it). */
   add(points: number): boolean {
