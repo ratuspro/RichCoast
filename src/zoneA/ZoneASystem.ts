@@ -3,12 +3,12 @@ import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { Sfx } from '../core/Sfx';
+import { getStage, type ProgressionStage } from '../core/Progression';
 import { AimController } from './AimController';
 import { BallFactory } from './BallFactory';
+import { BallQueue } from './BallQueue';
 import { Board } from './Board';
 import { DeathLine } from './DeathLine';
-
-const BALL_BUFFER_INITIAL = 4;
 
 /**
  * A stalemate must persist this long before the run actually ends. Balls hand off between
@@ -18,15 +18,6 @@ const BALL_BUFFER_INITIAL = 4;
  */
 const STALEMATE_GRACE_MS = 250;
 
-/**
- * Zone A — the Suika-style merge board (Dev 1).
- *
- * Owns the ball buffer: a finite count of drops the player has remaining.
- * Dropping a ball costs 1. Zone B's score bar filling refills the buffer to
- * its full capacity. When the buffer hits 0 the player can still aim and wait
- * for Zone B to save them; if Zone B empties while the buffer is still 0 the
- * run ends.
- */
 export class ZoneASystem implements GameSystem {
   private scene?: Phaser.Scene;
   private board?: Board;
@@ -34,10 +25,11 @@ export class ZoneASystem implements GameSystem {
   private deathLine?: DeathLine;
   private over = false;
 
-  private ballBuffer = BALL_BUFFER_INITIAL;
-  private zoneBEmpty = true; // starts true — nothing is in flight yet
-  private score = 0; // latest Zone B total, mirrored for the game-over screen
-  private lossPending = false; // a stalemate is scheduled for grace-period re-check
+  private internalLevel = 1;
+  private ballBuffer = 0;
+  private zoneBEmpty = true;
+  private score = 0;
+  private lossPending = false;
 
   constructor(private readonly bus: EventBus) {}
 
@@ -45,18 +37,24 @@ export class ZoneASystem implements GameSystem {
     this.scene = scene;
     this.deathLine = new DeathLine(scene);
     const factory = new BallFactory(scene);
+
+    const queue = new BallQueue();
+    const initialStage = getStage(this.internalLevel);
+    this.applyStage(initialStage, queue);
+
     const board = new Board(
       scene,
       factory,
       () => this.handleGameOver(),
-      () => this.checkLoss(),   // fires when the last Zone A ball is destroyed
+      () => this.checkLoss(),
       (near) => this.deathLine?.setDanger(near),
     );
     const aim = new AimController(scene, factory, (x, tier) => {
       board.spawnDropped(x, tier);
       this.onBallDropped();
       Sfx.drop();
-    });
+    }, queue);
+
     this.board = board;
     this.aim = aim;
 
@@ -65,9 +63,18 @@ export class ZoneASystem implements GameSystem {
     this.bus.on(GameEvent.ScoreChanged, ({ total }) => { this.score = total; });
 
     this.bus.on(GameEvent.ScoreBarFilled, () => {
-      this.ballBuffer = BALL_BUFFER_INITIAL;
+      this.internalLevel += 1;
+      const stage = getStage(this.internalLevel);
+      this.applyStage(stage, queue);
       this.aim?.setDropLocked(false);
       this.emitBuffer();
+      this.bus.emit(GameEvent.ProgressionChanged, {
+        level: this.internalLevel,
+        minTier: stage.ballWindow[0],
+        maxTier: stage.ballWindow[1],
+        bufferCapacity: stage.bufferCapacity,
+        scoreBarTarget: stage.scoreBarTarget,
+      });
     });
 
     this.bus.on(GameEvent.ZoneBBusy,  () => { this.zoneBEmpty = false; });
@@ -88,6 +95,12 @@ export class ZoneASystem implements GameSystem {
     this.deathLine?.destroy();
   }
 
+  private applyStage(stage: ProgressionStage, queue: BallQueue): void {
+    queue.setWindow(stage.ballWindow[0], stage.ballWindow[1]);
+    if (stage.bufferBalls) queue.seed(stage.bufferBalls);
+    this.ballBuffer = stage.bufferCapacity;
+  }
+
   private onBallDropped(): void {
     if (this.ballBuffer <= 0) return;
     this.ballBuffer -= 1;
@@ -104,8 +117,8 @@ export class ZoneASystem implements GameSystem {
   }
 
   /**
-   * End the run only on a *settled* stalemate. Because balls hand off between zones through
-   * transient empty states, we confirm after a short grace and end only if it still holds.
+   * End the run only on a settled stalemate. Balls hand off between zones through transient
+   * empty states, so we confirm after a short grace and end only if it still holds.
    */
   private checkLoss(): void {
     if (this.over || this.lossPending || !this.isStalemate()) return;
@@ -118,7 +131,7 @@ export class ZoneASystem implements GameSystem {
 
   private emitBuffer(): void {
     this.bus.emit(GameEvent.BallBufferChanged, { count: this.ballBuffer });
-    this.aim?.setBallsLeft(this.ballBuffer); // mirror into the Zone A queue row
+    this.aim?.setBallsLeft(this.ballBuffer);
   }
 
   private handleGameOver(): void {
@@ -126,17 +139,10 @@ export class ZoneASystem implements GameSystem {
     this.over = true;
     this.aim?.disable();
     this.deathLine?.setDanger(false);
-    // Freeze the whole game (Zone A + Zone B physics) so the run reads as ended. This only
-    // pauses the current world; scene.restart() destroys it and boots a fresh, running one,
-    // so the pause never leaks into the next run.
     this.scene?.matter.world.pause();
     this.drawGameOverOverlay();
   }
 
-  /**
-   * The single, full-screen game-over screen: dims every zone, shows the final
-   * score, and offers a RESTART button that rebuilds the scene from scratch.
-   */
   private drawGameOverOverlay(): void {
     const scene = this.scene;
     if (!scene) return;

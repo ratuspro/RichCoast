@@ -110,14 +110,41 @@ ownership, interface contract, and isolated-development workflow.
 
 ---
 
-## Open Questions
+## Progression
 
-### Progression (Incentivize Merge)
+The game has no explicit levels. Internally, each time the score bar fills and resets counts as one level tick. Three parameters change as the internal level advances — the available ball tiers, the buffer capacity, and the score bar target. These shifts happen silently: no level-up screen, no announcement. The game simply becomes slightly different from run to run as the player improves.
 
-**The problem:** Scoring is currently linear, so there is no incentive to merge. Four balls of value 1 sent to Zone B yield the same payout as one merged ball of value 4. This makes Zone A feel pointless as a puzzle — the optimal play is just to send balls as fast as possible.
-**The goal:** Merging should produce superlinear value, so a single high-tier ball sent to Zone B is worth meaningfully more than the equivalent number of low-tier balls. This creates a real tension: wait and merge for a bigger payout, but risk Zone A filling up and triggering game over sooner.
-**A rejected extreme:** One approach is to make merge results grow much faster than powers of 2 — e.g. 1+1→4, 4+4→64, 64+64→4096. This does make high-tier balls clearly superior, but the growth is too steep and makes low-tier play feel worthless rather than just suboptimal.
-**Open question:** Find a curve between pure linear and steeply exponential that feels fair and readable. The player should be able to intuit that merging is rewarding without needing to do maths. It is also unclear whether a player who never merges — dropping one ball at a time directly to Zone B — can still score competitively; ideally they should fall behind but not be immediately punished.
+The exact values for each stage are defined in **`src/core/progression.json`**. The system reads the highest stage whose `fromLevel` is ≤ the current internal level and applies its parameters. Stages that are not listed are held at the previous stage's values.
+
+---
+
+### Ball Window
+
+Balls queued in Zone A are drawn randomly from a sliding window of consecutive tiers. The window is always four tiers wide. As the internal level rises, the window shifts upward — the lowest available tier increases by one and a higher tier is added at the top. The player never sees tier labels; they experience this as "the balls are getting bigger."
+
+- Early game: tiers 1–4 (smallest balls, easy to merge, low Zone B value).
+- Mid game: tiers 3–6 (medium balls; merging is harder but each ball sent to Zone B is worth more).
+- Late game: tiers 6–9 (large balls; the board fills quickly, every drop matters).
+
+The window never exposes tiers beyond 10 (the game's maximum). Once the window reaches its final position it stays there.
+
+---
+
+### Buffer Capacity
+
+The number of ball slots in the buffer starts at 4 and grows with the internal level. A larger buffer gives the player more room to breathe between score bar fills, partially offsetting the rising score bar target. Capacity grows slowly — roughly one extra slot every twenty-five levels — and is capped at 10.
+
+---
+
+### Score Bar Target
+
+The number of points required to fill the score bar increases with each stage. A rising target means the player must send higher-value balls through Zone B to keep up, which in turn requires more merging in Zone A. This is the primary difficulty lever: early targets are reachable with low-tier balls; later targets demand merged, high-tier balls to fill the bar in a reasonable number of Zone C activations.
+
+---
+
+### Open Question — Merge Incentive
+
+Scoring is currently linear: four balls of value 1 sent to Zone B yield the same payout as one merged ball of value 4. The progression system partially addresses this by shifting the ball window (making low-tier balls unavailable in later stages), but a direct superlinear merge bonus — where a higher-tier ball scores more than the sum of its source balls — remains an open design question. The window shift is the current answer; a value curve may be layered on top later.
 
 ### Losing Condition — Ball Buffer + Score Bar
 

@@ -24,7 +24,7 @@ const COUNT_COLOR = '#e6ebf5'; // brighter for the live number
  * invisible to Zone C's body query (correct: you can't suck a ball that isn't dropped).
  */
 export class AimController {
-  private readonly queue = new BallQueue();
+  private readonly queue: BallQueue;
   private dragging = false;
   private disabled = false;
   private aimX = Layout.WIDTH / 2;
@@ -39,7 +39,9 @@ export class AimController {
     private readonly scene: Phaser.Scene,
     private readonly factory: BallFactory,
     private readonly onDrop: (x: number, tier: number) => void,
+    queue?: BallQueue,
   ) {
+    this.queue = queue ?? new BallQueue();
     this.aimImage = scene.add
       .image(this.aimX, SPAWN_Y, factory.ensureTexture(this.queue.peek()))
       .setDepth(10);

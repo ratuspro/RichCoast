@@ -1,0 +1,241 @@
+{
+  "stages": [
+    {
+      "fromLevel": 1,
+      "ballWindow": [
+        1,
+        1
+      ],
+      "bufferCapacity": 4,
+      "scoreBarTarget": 4,
+      "bufferBalls": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "fromLevel": 2,
+      "ballWindow": [
+        1,
+        4
+      ],
+      "bufferCapacity": 4,
+      "scoreBarTarget": 10,
+      "bufferBalls": [
+        1,
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "fromLevel": 3,
+      "ballWindow": [
+        1,
+        4
+      ],
+      "bufferCapacity": 4,
+      "scoreBarTarget": 10,
+      "bufferBalls": [
+        2,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "fromLevel": 4,
+      "ballWindow": [
+        1,
+        4
+      ],
+      "bufferCapacity": 4,
+      "scoreBarTarget": 15,
+      "bufferBalls": [
+        1,
+        2,
+        3,
+        2
+      ]
+    },
+    {
+      "fromLevel": 5,
+      "ballWindow": [
+        1,
+        4
+      ],
+      "bufferCapacity": 4,
+      "scoreBarTarget": 20,
+      "bufferBalls": [
+        2,
+        3,
+        2,
+        3
+      ]
+    },
+    {
+      "fromLevel": 10,
+      "ballWindow": [
+        2,
+        5
+      ],
+      "bufferCapacity": 4,
+      "scoreBarTarget": 35
+    },
+    {
+      "fromLevel": 15,
+      "ballWindow": [
+        2,
+        5
+      ],
+      "bufferCapacity": 5,
+      "scoreBarTarget": 50
+    },
+    {
+      "fromLevel": 20,
+      "ballWindow": [
+        3,
+        6
+      ],
+      "bufferCapacity": 5,
+      "scoreBarTarget": 70
+    },
+    {
+      "fromLevel": 25,
+      "ballWindow": [
+        3,
+        6
+      ],
+      "bufferCapacity": 5,
+      "scoreBarTarget": 90
+    },
+    {
+      "fromLevel": 30,
+      "ballWindow": [
+        3,
+        6
+      ],
+      "bufferCapacity": 6,
+      "scoreBarTarget": 115
+    },
+    {
+      "fromLevel": 35,
+      "ballWindow": [
+        4,
+        7
+      ],
+      "bufferCapacity": 6,
+      "scoreBarTarget": 140
+    },
+    {
+      "fromLevel": 40,
+      "ballWindow": [
+        4,
+        7
+      ],
+      "bufferCapacity": 6,
+      "scoreBarTarget": 170
+    },
+    {
+      "fromLevel": 50,
+      "ballWindow": [
+        4,
+        7
+      ],
+      "bufferCapacity": 7,
+      "scoreBarTarget": 210
+    },
+    {
+      "fromLevel": 60,
+      "ballWindow": [
+        5,
+        8
+      ],
+      "bufferCapacity": 7,
+      "scoreBarTarget": 260
+    },
+    {
+      "fromLevel": 70,
+      "ballWindow": [
+        5,
+        8
+      ],
+      "bufferCapacity": 7,
+      "scoreBarTarget": 315
+    },
+    {
+      "fromLevel": 80,
+      "ballWindow": [
+        5,
+        8
+      ],
+      "bufferCapacity": 8,
+      "scoreBarTarget": 380
+    },
+    {
+      "fromLevel": 90,
+      "ballWindow": [
+        6,
+        9
+      ],
+      "bufferCapacity": 8,
+      "scoreBarTarget": 450
+    },
+    {
+      "fromLevel": 100,
+      "ballWindow": [
+        6,
+        9
+      ],
+      "bufferCapacity": 8,
+      "scoreBarTarget": 530
+    },
+    {
+      "fromLevel": 120,
+      "ballWindow": [
+        6,
+        9
+      ],
+      "bufferCapacity": 9,
+      "scoreBarTarget": 640
+    },
+    {
+      "fromLevel": 140,
+      "ballWindow": [
+        7,
+        10
+      ],
+      "bufferCapacity": 9,
+      "scoreBarTarget": 770
+    },
+    {
+      "fromLevel": 160,
+      "ballWindow": [
+        7,
+        10
+      ],
+      "bufferCapacity": 9,
+      "scoreBarTarget": 920
+    },
+    {
+      "fromLevel": 180,
+      "ballWindow": [
+        7,
+        10
+      ],
+      "bufferCapacity": 10,
+      "scoreBarTarget": 1100
+    },
+    {
+      "fromLevel": 200,
+      "ballWindow": [
+        7,
+        10
+      ],
+      "bufferCapacity": 10,
+      "scoreBarTarget": 1300
+    }
+  ]
+}

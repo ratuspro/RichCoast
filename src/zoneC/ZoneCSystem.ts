@@ -66,9 +66,11 @@ export class ZoneCSystem implements GameSystem {
     const ball = this.findNearestBall();
     if (!ball?.ballData) return; // nothing to suck yet (e.g. Zone A still empty)
 
-    // Lock right away so a second tap can't start a parallel suck during the tween;
-    // Zone B's busy/empty events take over the lock from here.
+    // Signal busy before destroying the ball so ZoneASystem.checkLoss() doesn't
+    // fire while the ball is in transit (board empties before ZoneBBusy would
+    // otherwise arrive from Zone B after the tween completes).
     this.setLocked(true);
+    this.bus.emit(GameEvent.ZoneBBusy);
 
     const { value, tier } = ball.ballData;
     const startX = ball.position.x;
