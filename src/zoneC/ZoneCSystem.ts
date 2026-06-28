@@ -4,8 +4,14 @@ import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { Sfx } from '../core/Sfx';
 
-/** How long the suck tween runs before the ball lands in Zone B, in ms. */
+/** How long the suck tween runs before the ball pops into Zone B, in ms. */
 const SUCK_MS = 150;
+/** The quick scale-up "spawn pop" at the entry column after the suck, in ms. */
+const POP_MS = 110;
+/** Duration of one left→right sweep leg (yoyo doubles it). Difficulty knob. */
+const SWEEP_MS = 1100;
+/** Inset of the sweep from each Zone B edge (~one ball radius + wall slack), in px. */
+const SWEEP_MARGIN = 18;
 
 /**
  * Minimal structural view of a Matter body carrying ball identity. Zone A stamps
@@ -27,16 +33,22 @@ interface BallBody {
 /**
  * Zone C — the trap-door (Dev 1).
  *
- * Fully plumbed: owns the cooldown lock (driven by Zone B's busy/empty events),
- * handles taps, finds the nearest ball still in Zone A via a shared-world query,
- * and hands the ball off to Zone B by emitting BALL_DROPPED at the FIXED entry
- * column the instant it leaves Zone A (so the A→B transition is atomic on the bus),
- * then plays a purely cosmetic suck animation.
+ * Owns the cooldown lock (driven by Zone B's busy/empty events) and a sweep marker
+ * that oscillates left↔right across the band while armed. A tap freezes the marker;
+ * its current column becomes the Zone B entry. ZoneBBusy fires up front (so Zone A's
+ * stalemate check stays blocked while the ball is mid-transit), then a suck→pop
+ * cosmetic runs and BALL_DROPPED is emitted at the frozen column when it lands — so
+ * WHERE a ball enters Zone B is a timing skill, not a fixed column.
  */
 export class ZoneCSystem implements GameSystem {
   private locked = false;
   private scene?: Phaser.Scene;
   private door?: Phaser.GameObjects.Rectangle;
+  private marker?: Phaser.GameObjects.Rectangle;
+  private sweepMinX = 0;
+  private sweepMaxX = 0;
+  /** Elapsed sweep time (ms); advanced only while armed, reset to 0 on re-arm. */
+  private sweepT = 0;
 
   constructor(private readonly bus: EventBus) {}
 
@@ -53,11 +65,40 @@ export class ZoneCSystem implements GameSystem {
       .setInteractive({ useHandCursor: true });
     this.door.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
 
+    // The sweep marker: a puck gliding left↔right along the door band. Where it sits
+    // when the player taps becomes the Zone B entry column, so its travel is inset by
+    // one ball radius from each edge — a ball can never spawn into the side wall.
+    const mouthY = r.y + r.height / 2;
+    this.sweepMinX = Layout.zoneB.x + SWEEP_MARGIN;
+    this.sweepMaxX = Layout.zoneB.x + Layout.zoneB.width - SWEEP_MARGIN;
+    this.marker = scene.add
+      .rectangle(this.sweepMinX, mouthY, 18, 12, 0x6cf0c2)
+      .setStrokeStyle(2, 0xffffff)
+      .setDepth(50);
+
     this.refreshDoor();
   }
 
-  update(_time: number, _delta: number): void {
-    // Event-driven; nothing per frame.
+  /**
+   * The marker is driven straight off the `locked` flag every frame — no tween to get
+   * stuck. Armed: it oscillates left↔right (cosine, so it eases in/out at both ends).
+   * Locked: it's hidden and frozen. Because this reads the current state each tick, the
+   * sweep always reappears the instant Zone B clears (`locked` → false), self-healing
+   * regardless of how the busy/empty events interleave.
+   */
+  update(_time: number, delta: number): void {
+    const marker = this.marker;
+    if (!marker) return;
+    if (this.locked) {
+      marker.setVisible(false);
+      return;
+    }
+    marker.setVisible(true);
+    this.sweepT += delta;
+    const period = SWEEP_MS * 2; // there and back
+    const phase = ((this.sweepT % period) / period) * Math.PI * 2;
+    const k = (1 - Math.cos(phase)) / 2; // 0→1→0, zero velocity at each end
+    marker.x = this.sweepMinX + (this.sweepMaxX - this.sweepMinX) * k;
   }
 
   private onTap(): void {
@@ -66,9 +107,13 @@ export class ZoneCSystem implements GameSystem {
     const ball = this.findNearestBall();
     if (!ball?.ballData) return; // nothing to suck yet (e.g. Zone A still empty)
 
-    // Signal busy before destroying the ball so ZoneASystem.checkLoss() doesn't
-    // fire while the ball is in transit (board empties before ZoneBBusy would
-    // otherwise arrive from Zone B after the tween completes).
+    // Freeze the sweep the instant the player commits — the marker's current column is
+    // where the ball will enter Zone B. Capture it before setLocked() hides the marker.
+    const spawnX = this.marker?.x ?? Layout.zoneBEntry.x;
+
+    // Signal busy up front so ZoneASystem.checkLoss() can't read a stalemate while the
+    // ball is mid-transit: BALL_DROPPED is now deferred to the end of the suck→pop, but
+    // Zone A still sees "Zone B busy", so the board emptying here is never a game-over.
     this.setLocked(true);
     this.bus.emit(GameEvent.ZoneBBusy);
 
@@ -78,43 +123,64 @@ export class ZoneCSystem implements GameSystem {
     const image = ball.gameObject as Phaser.GameObjects.Image | undefined;
     const texKey = image?.texture?.key;
 
-    // Hand the ball off to Zone B FIRST, so the A→B transition is atomic on the bus:
-    // ZoneBBusy fires now (clearing Zone A's "Zone B empty" flag) before destroying the
-    // A ball can trigger Zone A's loss check. The suck below is then pure cosmetics.
-    this.emitDrop(value, tier);
-
     // Remove the ball from Zone A by destroying its image — the Board self-prunes its
     // registry off the image's DESTROY event (see Board.register).
     image?.destroy();
 
     Sfx.transition();
-    this.playSuck(startX, startY, texKey);
+    // Cosmetic suck → spawn pop → hand off to Zone B at the frozen column.
+    this.playSuck(startX, startY, texKey, value, tier, spawnX);
   }
 
   /**
-   * Cosmetic suck: animate a throwaway snapshot sprite from the ball's last position into
-   * the door mouth. Purely visual — the ball was already handed off to Zone B in `onTap`,
-   * and the real ball is gone, so this never fights Zone A physics nor gates the handoff.
+   * Cosmetic suck → spawn pop → handoff. A throwaway snapshot sprite slides from the ball's
+   * last Zone-A position to the frozen entry column at the door mouth (suck), then pops up at
+   * the top of Zone B (pop), and only when the pop lands do we emit BALL_DROPPED so Zone B's
+   * real ball appears exactly there — deferring the emit avoids any double-ball flicker. If
+   * there's no sprite to animate we still hand the ball off so Zone B isn't starved.
    */
-  private playSuck(x: number, y: number, texKey: string | undefined): void {
+  private playSuck(
+    x: number,
+    y: number,
+    texKey: string | undefined,
+    value: number,
+    tier: number,
+    spawnX: number,
+  ): void {
     const scene = this.scene;
-    if (!scene || !texKey) return; // nothing to animate — the ball is already handed off
+    if (!scene || !texKey) {
+      this.emitDrop(value, tier, spawnX);
+      return;
+    }
 
+    const mouthY = Layout.zoneC.y + Layout.zoneC.height / 2;
     const sprite = scene.add.image(x, y, texKey).setDepth(800);
     scene.tweens.add({
       targets: sprite,
-      x: Layout.zoneBEntry.x,
-      y: Layout.zoneC.y + Layout.zoneC.height / 2,
-      scale: 0,
+      x: spawnX,
+      y: mouthY,
+      scale: 0.4,
       duration: SUCK_MS,
       ease: 'Cubic.easeIn',
-      onComplete: () => sprite.destroy(),
+      onComplete: () => {
+        sprite.setPosition(spawnX, Layout.zoneBEntry.y);
+        scene.tweens.add({
+          targets: sprite,
+          scale: 1,
+          duration: POP_MS,
+          ease: 'Back.easeOut',
+          onComplete: () => {
+            this.emitDrop(value, tier, spawnX);
+            sprite.destroy();
+          },
+        });
+      },
     });
   }
 
-  private emitDrop(value: number, tier: number): void {
-    // FROZEN: x is always the fixed Zone B entry column — never the ball's A position.
-    this.bus.emit(GameEvent.BallDropped, { value, tier, x: Layout.zoneBEntry.x });
+  private emitDrop(value: number, tier: number, x: number): void {
+    // x is the column the player picked by tapping the Zone C sweep marker at the right moment.
+    this.bus.emit(GameEvent.BallDropped, { value, tier, x });
   }
 
   /**
@@ -146,7 +212,11 @@ export class ZoneCSystem implements GameSystem {
   }
 
   private setLocked(locked: boolean): void {
+    const wasLocked = this.locked;
     this.locked = locked;
+    // On re-arm (locked→unlocked) restart the sweep from the left edge. update() does the
+    // actual showing/hiding each frame, so the marker can't get stuck out of sync.
+    if (wasLocked && !locked) this.sweepT = 0;
     this.refreshDoor();
   }
 

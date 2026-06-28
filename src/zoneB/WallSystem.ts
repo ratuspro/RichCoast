@@ -1,14 +1,19 @@
 import Phaser from 'phaser';
 import type { GameSystem } from '../core/contracts';
+import * as Layout from '../core/Layout';
 import type { WallDef } from './zoneLayout';
 import { CAT_WALL, CAT_BALL } from './ZoneBBall';
 
 const DEFAULT_THICKNESS = 6;
+/** Thickness of the invisible Zone B containment border (kept mostly off-screen). */
+const BOUND_THICKNESS = 40;
 
 export class WallSystem implements GameSystem {
   constructor(private readonly layout: WallDef[]) {}
 
   create(scene: Phaser.Scene): void {
+    this.addContainment(scene);
+
     for (const wall of this.layout) {
       const thickness = wall.thickness ?? DEFAULT_THICKNESS;
       const dx = wall.x2 - wall.x1;
@@ -36,4 +41,31 @@ export class WallSystem implements GameSystem {
   }
 
   update(_time: number, _delta: number): void {}
+
+  /**
+   * Invisible left/right/bottom border so balls are always contained within the
+   * screen. The scene's outer world walls use the default collision category, which
+   * Zone B balls deliberately don't mask against (so they pass through them and
+   * escape off-screen, leaving inFlight stuck). These use CAT_WALL — which every
+   * ball collides with — so nothing can leave the play area. The bottom edge sits
+   * behind the funnel ramps, whose only opening is the collector mouth, so a ball
+   * reaching the bottom always drains rather than resting there.
+   */
+  private addContainment(scene: Phaser.Scene): void {
+    const { x, y, width, height } = Layout.zoneB;
+    const t = BOUND_THICKNESS;
+    const cy = y + height / 2;
+    const opts: Phaser.Types.Physics.Matter.MatterBodyConfig = {
+      isStatic: true,
+      label: 'zoneB-bound',
+      collisionFilter: { category: CAT_WALL, mask: CAT_BALL },
+      friction: 0.1,
+      restitution: 0.3,
+    };
+    // Left / right verticals: inner faces exactly at x and x+width, extended below
+    // to meet the bottom. Bottom horizontal: inner face at y+height (screen bottom).
+    scene.matter.add.rectangle(x - t / 2, cy, t, height + t, opts);
+    scene.matter.add.rectangle(x + width + t / 2, cy, t, height + t, opts);
+    scene.matter.add.rectangle(x + width / 2, y + height + t / 2, width + t * 2, t, opts);
+  }
 }

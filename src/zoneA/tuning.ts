@@ -27,11 +27,11 @@ export const RADII: readonly number[] = [13, 17, 21, 26, 32, 39, 47, 56, 66, 78]
 /** Surface friction grows with tier: FRICTION_BASE + FRICTION_STEP*(tier-1), clamped. */
 export const FRICTION_BASE = 0.08;
 export const FRICTION_STEP = 0.025;
-export const FRICTION_MAX = 0.45;
+export const FRICTION_MAX = 0.25;
 
 /** Constant friction terms applied to every ball. */
 export const FRICTION_AIR = 0.01;
-export const FRICTION_STATIC = 0.6;
+export const FRICTION_STATIC = 0.1;
 
 /** Uniform density — Matter derives mass from density*area, so bigger tier = heavier. */
 export const DENSITY = 0.001;

@@ -95,7 +95,15 @@ find it. The zone splits into `tuning.ts`, `ballMath.ts`, `BallFactory.ts`, `Aim
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,
 collectors (sensor areas, any position) drain balls and score their value × collector
-multiplier, walls guide trajectories, and a `BallBuffer` tracks a finite ball supply that
+multiplier, and walls guide trajectories.
+The playfield is now one of **two layouts** (`LAYOUT_1`, `LAYOUT_2` in `zoneLayout.ts`),
+chosen at random per run via `pickRandomLayout()` in `ZoneBSystem`'s constructor (so each
+boot/`scene.restart()` re-rolls). Both are static "shelf cascade" layouts modelled on the
+reference art: stacked horizontal multiplier gates split by vertical/diagonal guide rails,
+funnelling into one bottom collector. Gate bars are tier-coloured (green for multiplier ≥4,
+gold below) with a bold white `X#` label; multipliers are tuned (≤4) so cascades stay
+balanced. Gate visuals live in `GateSystem.buildBody()`. A `BallBuffer` tracks a finite
+supply that
 refills when Zone B score crosses escalating milestones — exhausting the buffer while Zone B
 is empty triggers a local game-over overlay. The `BUFFER_CHANGED` / `BUFFER_EXHAUSTED` events
 feed Zone A's queue-row balls-left count (the HUD itself is now score-only). Ball textures use
@@ -104,15 +112,24 @@ the same shared `src/core/BallColors.ts` palette as Zone A. The zone splits into
 the old `Funnel.ts` skeleton is **superseded by `CollectorSystem` and is now dead code**.
 
 **Zone C** (`src/zoneC/ZoneCSystem.ts`) plays: the trap-door lock is driven by Zone B's
-busy/empty events; a tap picks the Zone-A ball nearest the door by **edge distance**
-(Euclidean centre-to-mouth minus the body's `circleRadius`, so a bigger ball whose edge
-reaches nearer wins), removes it from Zone A by destroying its Matter.Image (the Board
-self-prunes off the DESTROY event), plays a ~150ms cosmetic "suck" tween of a throwaway
-snapshot sprite into the door, then emits `BALL_DROPPED` so Zone B spawns a fresh
-fixed-radius (14px) ball of the same tier — the source ball's Zone-A size never carries over.
-The tap locks the door immediately to block a double-suck during the tween. Frozen
-decisions: Matter.js for both zones; `BALL_DROPPED.x` is always the fixed
-`Layout.zoneBEntry.x`.
+busy/empty events. While armed, a **sweep marker** (a puck) oscillates left↔right across the
+door band (driven each frame in `update()` off the `locked` flag — a cosine ease so it slows at
+each end — inset ~one ball radius from each Zone B edge; reading the live state per frame means
+the sweep always reappears the instant Zone B clears). A tap
+**freezes the marker** — its current column is the Zone B entry — and picks the Zone-A ball
+nearest the door by **edge distance** (Euclidean centre-to-mouth minus the body's
+`circleRadius`, so a bigger ball whose edge reaches nearer wins). It locks the door + emits
+`ZONE_B_BUSY` up front (so Zone A's stalemate check can't misfire while the ball is
+mid-transit), removes the ball from Zone A by destroying its Matter.Image (the Board
+self-prunes off the DESTROY event), then runs a cosmetic **suck → pop** on a throwaway
+snapshot sprite (slide to the frozen column at the door, then a quick scale-up pop at the top
+of Zone B). Only when the pop lands does it emit `BALL_DROPPED` at the frozen `x`, so Zone B
+spawns a fresh fixed-radius (14px) ball of the same tier **exactly under where the marker
+stopped** — deferring the emit avoids double-ball flicker, and the source ball's Zone-A size
+never carries over. The marker freezes/hides on lock and resumes on `ZONE_B_EMPTY`. Frozen
+decisions: Matter.js for both zones; **`BALL_DROPPED.x` is now the player-chosen sweep column**
+(no longer a fixed `Layout.zoneBEntry.x`) — Zone B already spawned at `ball.x`, so this needed
+no Zone B change, only honest comments on the seam.
 
 **Audio** (`src/core/Sfx.ts`) plays: a procedural Web Audio engine (soft synth bells/marimba,
 no asset files) initialised once in `GameScene` from Phaser's own AudioContext (so the mobile

@@ -3,7 +3,7 @@ import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { Sfx } from '../core/Sfx';
-import { INITIAL_LAYOUT } from './zoneLayout';
+import { pickRandomLayout } from './zoneLayout';
 import { GateSystem } from './GateSystem';
 import { CollectorSystem } from './CollectorSystem';
 import { WallSystem } from './WallSystem';
@@ -22,13 +22,11 @@ export class ZoneBSystem implements GameSystem {
   private scene?: Phaser.Scene;
   private readonly scoreBar = new ScoreBar();
 
-  private readonly gates = new GateSystem(INITIAL_LAYOUT.gates, {
-    onSplit: (img, multiplier) => this.handleSplit(img, multiplier),
-  });
-  private readonly collectors = new CollectorSystem(INITIAL_LAYOUT.collectors, {
-    onDrain: (img, value, scoreMultiplier) => this.handleDrain(img, value, scoreMultiplier),
-  });
-  private readonly walls = new WallSystem(INITIAL_LAYOUT.walls);
+  // One of the two layouts, chosen at random per run (this system is reconstructed on every
+  // scene boot, including scene.restart()).
+  private readonly gates: GateSystem;
+  private readonly collectors: CollectorSystem;
+  private readonly walls: WallSystem;
 
   private inFlight = 0;
   private total = 0;
@@ -36,7 +34,16 @@ export class ZoneBSystem implements GameSystem {
   private barFill?: Phaser.GameObjects.Rectangle;
   private barLabel?: Phaser.GameObjects.Text;
 
-  constructor(private readonly bus: EventBus) {}
+  constructor(private readonly bus: EventBus) {
+    const layout = pickRandomLayout();
+    this.gates = new GateSystem(layout.gates, {
+      onSplit: (img, multiplier) => this.handleSplit(img, multiplier),
+    });
+    this.collectors = new CollectorSystem(layout.collectors, {
+      onDrain: (img, value, scoreMultiplier) => this.handleDrain(img, value, scoreMultiplier),
+    });
+    this.walls = new WallSystem(layout.walls);
+  }
 
   create(scene: Phaser.Scene): void {
     this.scene = scene;

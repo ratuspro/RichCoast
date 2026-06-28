@@ -68,11 +68,11 @@ export interface BallDroppedPayload extends BallSpec {
   /**
    * Horizontal entry into Zone B.
    *
-   * FROZEN DECISION: Zone C always sends the fixed Zone B entry column
-   * (`Layout.zoneBEntry.x`). The field stays in the payload for honesty/future
-   * flexibility, but keeping it constant is deliberate — it makes the arena's
-   * outcomes layout-driven and readable instead of depending on where the ball
-   * happened to sit in Zone A.
+   * Chosen by the player: Zone C runs a marker that sweeps left↔right across the
+   * trap-door band, and a tap freezes it — the marker's column at that instant is
+   * the entry `x`. It lands in `[Layout.zoneB.x + margin, zoneB.x + width - margin]`
+   * (inset so a ball never spawns into a side wall). Zone B spawns at exactly this
+   * `x`, making WHERE a ball enters a timing skill rather than a fixed column.
    */
   x: number;
 }

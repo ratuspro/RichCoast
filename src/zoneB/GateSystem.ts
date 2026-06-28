@@ -90,10 +90,12 @@ export class GateSystem implements GameSystem {
     const rect = scene.matter.add.rectangle(cx, cy, def.length, GATE_THICKNESS, opts);
     scene.matter.body.setAngle(rect, angle);
 
-    // Visual: a coloured bar with "×N" label
-    const g = scene.add.rectangle(cx, cy, def.length, GATE_THICKNESS, 0xccddff).setDepth(5);
-    const labelText = scene.add.text(cx, cy - 10, `\xd7${def.multiplier}`, {
-      fontFamily: 'monospace', fontSize: '11px', color: '#ccddff',
+    // Visual: a tier-coloured bar (green for high multipliers, gold for low) with a bold
+    // white "X N" label centred on the bar.
+    const color = def.multiplier >= 4 ? 0x5ec24a : 0xc9a227;
+    const g = scene.add.rectangle(cx, cy, def.length, GATE_THICKNESS, color).setDepth(5);
+    const labelText = scene.add.text(cx, cy, `X${def.multiplier}`, {
+      fontFamily: 'sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#ffffff',
     }).setOrigin(0.5).setDepth(6);
 
     // Track the visual rect alongside the body so we can move it in update()
@@ -116,7 +118,7 @@ export class GateSystem implements GameSystem {
       const ny = td.ay + (td.by - td.ay) * t;
       this.scene.matter.body.setPosition(body, { x: nx, y: ny });
       if (gfx) { gfx.x = nx; gfx.y = ny; }
-      if (labelText) { labelText.x = nx; labelText.y = ny - 10; }
+      if (labelText) { labelText.x = nx; labelText.y = ny; }
     } else {
       // rotating
       const rd = def as RotatingGate;
