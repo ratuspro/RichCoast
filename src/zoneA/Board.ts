@@ -51,12 +51,16 @@ export class Board {
 
   getBallCount(): number { return this.registry.size; }
 
+  private merging = false;
+
   private register(ball: Ball): void {
     this.registry.set(ball.body, ball);
     // Self-prune when the image is destroyed (by a merge here, or later by Zone C's suck).
+    // Skip the empty check during a merge batch — the merged result hasn't been registered
+    // yet, so the registry momentarily hits zero even though a ball is being born.
     ball.image.once(Phaser.GameObjects.Events.DESTROY, () => {
       this.registry.delete(ball.body);
-      if (this.registry.size === 0) this.onEmpty?.();
+      if (!this.merging && this.registry.size === 0) this.onEmpty?.();
     });
   }
 
@@ -77,6 +81,7 @@ export class Board {
 
   private resolveMerges(): void {
     if (this.pending.length === 0) return;
+    this.merging = true;
     for (const { a, b } of this.pending.splice(0)) {
       const where = midpoint(a.body.position, b.body.position);
       const tier = mergedTier(a.tier);
@@ -86,6 +91,8 @@ export class Board {
       this.register(merged);
       this.applyBlast(where, merged.body);
     }
+    this.merging = false;
+    if (this.registry.size === 0) this.onEmpty?.();
   }
 
   /** Push nearby balls outward from a merge point (additive velocity kick). */

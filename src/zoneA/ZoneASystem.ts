@@ -2,54 +2,62 @@ import type Phaser from 'phaser';
 import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
+import { getStage, type ProgressionStage } from '../core/Progression';
 import { AimController } from './AimController';
 import { BallFactory } from './BallFactory';
+import { BallQueue } from './BallQueue';
 import { Board } from './Board';
 
-const BALL_BUFFER_INITIAL = 4;
-
-/**
- * Zone A — the Suika-style merge board (Dev 1).
- *
- * Owns the ball buffer: a finite count of drops the player has remaining.
- * Dropping a ball costs 1. Zone B's score bar filling refills the buffer to
- * its full capacity. When the buffer hits 0 the player can still aim and wait
- * for Zone B to save them; if Zone B empties while the buffer is still 0 the
- * run ends.
- */
 export class ZoneASystem implements GameSystem {
   private scene?: Phaser.Scene;
   private board?: Board;
   private aim?: AimController;
   private over = false;
 
-  private ballBuffer = BALL_BUFFER_INITIAL;
-  private zoneBEmpty = true; // starts true — nothing is in flight yet
+  private internalLevel = 1;
+  private ballBuffer = 0;
+  private zoneBEmpty = true;
 
   constructor(private readonly bus: EventBus) {}
 
   create(scene: Phaser.Scene): void {
     this.scene = scene;
     const factory = new BallFactory(scene);
+
+    const queue = new BallQueue();
+    const initialStage = getStage(this.internalLevel);
+    this.applyStage(initialStage, queue);
+
     const board = new Board(
       scene,
       factory,
       () => this.handleGameOver(),
-      () => this.checkLoss(),   // fires when the last Zone A ball is destroyed
+      () => this.checkLoss(),
     );
     const aim = new AimController(scene, factory, (x, tier) => {
       board.spawnDropped(x, tier);
       this.onBallDropped();
-    });
+    }, queue);
+
     this.board = board;
     this.aim = aim;
 
     this.emitBuffer();
 
     this.bus.on(GameEvent.ScoreBarFilled, () => {
-      this.ballBuffer = BALL_BUFFER_INITIAL;
+      this.internalLevel += 1;
+      const stage = getStage(this.internalLevel);
+      this.applyStage(stage, queue);
+      this.ballBuffer = stage.bufferCapacity;
       this.aim?.setDropLocked(false);
       this.emitBuffer();
+      this.bus.emit(GameEvent.ProgressionChanged, {
+        level: this.internalLevel,
+        minTier: stage.ballWindow[0],
+        maxTier: stage.ballWindow[1],
+        bufferCapacity: stage.bufferCapacity,
+        scoreBarTarget: stage.scoreBarTarget,
+      });
     });
 
     this.bus.on(GameEvent.ZoneBBusy,  () => { this.zoneBEmpty = false; });
@@ -69,6 +77,12 @@ export class ZoneASystem implements GameSystem {
     this.board?.destroy();
   }
 
+  private applyStage(stage: ProgressionStage, queue: BallQueue): void {
+    queue.setWindow(stage.ballWindow[0], stage.ballWindow[1]);
+    if (stage.bufferBalls) queue.seed(stage.bufferBalls);
+    this.ballBuffer = stage.bufferCapacity;
+  }
+
   private onBallDropped(): void {
     if (this.ballBuffer <= 0) return;
     this.ballBuffer -= 1;
@@ -79,7 +93,6 @@ export class ZoneASystem implements GameSystem {
     }
   }
 
-  /** Run ends only when all three doors are closed simultaneously. */
   private checkLoss(): void {
     if (this.ballBuffer === 0 && this.zoneBEmpty && (this.board?.getBallCount() ?? 0) === 0) {
       this.handleGameOver();

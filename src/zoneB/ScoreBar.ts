@@ -10,7 +10,7 @@ export const SCORE_BAR_TARGET = 10;
 export class ScoreBar {
   private filled = 0;
 
-  constructor(private readonly target = SCORE_BAR_TARGET) { }
+  constructor(private target = SCORE_BAR_TARGET) {}
 
   /** Returns true if this addition caused the bar to fill (and resets it). */
   add(points: number): boolean {
@@ -22,8 +22,8 @@ export class ScoreBar {
     return false;
   }
 
+  setTarget(target: number): void { this.target = target; }
   getFilled(): number { return this.filled; }
   getTarget(): number { return this.target; }
-  /** 0–1 progress fraction. */
   getProgress(): number { return this.filled / this.target; }
 }

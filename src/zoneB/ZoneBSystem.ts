@@ -46,6 +46,11 @@ export class ZoneBSystem implements GameSystem {
     this.buildScoreBar(scene);
     this.emitScoreBar();
 
+    this.bus.on(GameEvent.ProgressionChanged, ({ scoreBarTarget }) => {
+      this.scoreBar.setTarget(scoreBarTarget);
+      this.emitScoreBar();
+    });
+
     this.bus.on(GameEvent.BallDropped, (ball) => {
       const img = createZoneBBall(scene, ball.x, Layout.zoneBEntry.y, ball.value, ball.tier);
       this.onBallSpawned();

@@ -58,6 +58,8 @@ export const GameEvent = {
   ScoreBarChanged: 'SCORE_BAR_CHANGED',
   /** Zone A → HUD: ball buffer count changed. */
   BallBufferChanged: 'BALL_BUFFER_CHANGED',
+  /** Zone A → all: internal level advanced; carries the new stage parameters. */
+  ProgressionChanged: 'PROGRESSION_CHANGED',
 } as const;
 
 export type GameEventName = (typeof GameEvent)[keyof typeof GameEvent];
@@ -88,6 +90,14 @@ export interface BallBufferChangedPayload {
   count: number;
 }
 
+export interface ProgressionChangedPayload {
+  level: number;
+  minTier: number;
+  maxTier: number;
+  bufferCapacity: number;
+  scoreBarTarget: number;
+}
+
 /** Event name → payload type. `void` = a signal with no data. */
 export interface GameEventMap {
   [GameEvent.BallDropped]: BallDroppedPayload;
@@ -97,6 +107,7 @@ export interface GameEventMap {
   [GameEvent.ScoreBarFilled]: void;
   [GameEvent.ScoreBarChanged]: ScoreBarChangedPayload;
   [GameEvent.BallBufferChanged]: BallBufferChangedPayload;
+  [GameEvent.ProgressionChanged]: ProgressionChangedPayload;
 }
 
 // ---------------------------------------------------------------------------
