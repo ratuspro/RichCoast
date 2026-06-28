@@ -10,12 +10,13 @@ import { WIDTH } from './Layout';
  * it just renders whatever total the bus reports.
  */
 export class HUD implements GameSystem {
-  private text?: Phaser.GameObjects.Text;
+  private scoreText?: Phaser.GameObjects.Text;
+  private bufferText?: Phaser.GameObjects.Text;
 
   constructor(private readonly bus: EventBus) {}
 
   create(scene: Phaser.Scene): void {
-    this.text = scene.add
+    this.scoreText = scene.add
       .text(WIDTH / 2, 16, '0', {
         fontFamily: 'monospace',
         fontSize: '28px',
@@ -24,8 +25,21 @@ export class HUD implements GameSystem {
       .setOrigin(0.5, 0)
       .setDepth(1000); // always above the zones
 
+    this.bufferText = scene.add
+      .text(WIDTH - 12, 16, '×20', {
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        color: '#88ccff',
+      })
+      .setOrigin(1, 0)
+      .setDepth(1000);
+
     this.bus.on(GameEvent.ScoreChanged, ({ total }) => {
-      this.text?.setText(String(total));
+      this.scoreText?.setText(String(total));
+    });
+
+    this.bus.on(GameEvent.BufferChanged, ({ count }) => {
+      this.bufferText?.setText(`×${count}`);
     });
   }
 

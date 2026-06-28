@@ -17,8 +17,9 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'matter',
     matter: {
       gravity: { x: 0, y: 1 },
-      // Body/constraint outlines while developing; off in production builds.
-      debug: import.meta.env.DEV,
+      // Always create the debug graphic so it can be toggled at runtime
+      // via ?debug=2 or the D key without a page reload.
+      debug: true,
     },
   },
   scene: [GameScene],

@@ -9,6 +9,8 @@ import { ZoneBSystem } from './zoneB/ZoneBSystem';
 import { StubZoneB } from './dev/stubZoneB';
 import { StubZoneAC } from './dev/stubZoneAC';
 import { Harness } from './dev/harness';
+import { DebugHarness } from './dev/DebugHarness';
+import { isDebug, toggleDebug } from './core/DebugMode';
 
 /**
  * Which slice of the game is wired up:
@@ -32,6 +34,7 @@ export function parseZoneMode(search: string): ZoneMode {
 export class GameScene extends Phaser.Scene {
   private readonly bus = new EventBus();
   private systems: GameSystem[] = [];
+  private debugHarness?: DebugHarness;
 
   constructor() {
     super('GameScene');
@@ -45,6 +48,12 @@ export class GameScene extends Phaser.Scene {
 
     this.systems = this.buildSystems(mode);
     for (const system of this.systems) system.create(this);
+
+    this.applyDebug(isDebug());
+    this.input.keyboard?.on('keydown-D', () => {
+      toggleDebug();
+      this.applyDebug(isDebug());
+    });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
@@ -66,13 +75,16 @@ export class GameScene extends Phaser.Scene {
       }
 
       case 'full':
-      default:
+      default: {
+        this.debugHarness = new DebugHarness(this.bus);
         return [
           new ZoneASystem(),
           new ZoneCSystem(this.bus),
           new ZoneBSystem(this.bus),
           hud,
+          this.debugHarness,
         ];
+      }
     }
   }
 
@@ -118,6 +130,12 @@ export class GameScene extends Phaser.Scene {
     // correct. Top edge sits on the Zone A/C boundary, clear of Zone B below.
     const floorTop = Layout.zoneA.y + Layout.zoneA.height;
     this.matter.add.rectangle(w / 2, floorTop + t / 2, w, t, { isStatic: true });
+  }
+
+  private applyDebug(on: boolean): void {
+    this.matter.world.drawDebug = on;
+    if (!on) this.matter.world.debugGraphic?.clear();
+    this.debugHarness?.setVisible(on);
   }
 
   private teardown(): void {

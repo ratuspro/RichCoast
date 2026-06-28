@@ -52,6 +52,10 @@ export const GameEvent = {
   ZoneBEmpty: 'ZONE_B_EMPTY',
   /** Zone B → HUD: running score total changed. */
   ScoreChanged: 'SCORE_CHANGED',
+  /** Zone B → HUD: buffer count or next-milestone changed. */
+  BufferChanged: 'BUFFER_CHANGED',
+  /** Zone B → scene: buffer exhausted + Zone B empty = game over. */
+  BufferExhausted: 'BUFFER_EXHAUSTED',
 } as const;
 
 export type GameEventName = (typeof GameEvent)[keyof typeof GameEvent];
@@ -73,12 +77,19 @@ export interface ScoreChangedPayload {
   total: number;
 }
 
+export interface BufferChangedPayload {
+  count: number;
+  nextMilestone: number;
+}
+
 /** Event name → payload type. `void` = a signal with no data. */
 export interface GameEventMap {
   [GameEvent.BallDropped]: BallDroppedPayload;
   [GameEvent.ZoneBBusy]: void;
   [GameEvent.ZoneBEmpty]: void;
   [GameEvent.ScoreChanged]: ScoreChangedPayload;
+  [GameEvent.BufferChanged]: BufferChangedPayload;
+  [GameEvent.BufferExhausted]: void;
 }
 
 // ---------------------------------------------------------------------------
