@@ -119,15 +119,55 @@ ownership, interface contract, and isolated-development workflow.
 **A rejected extreme:** One approach is to make merge results grow much faster than powers of 2 — e.g. 1+1→4, 4+4→64, 64+64→4096. This does make high-tier balls clearly superior, but the growth is too steep and makes low-tier play feel worthless rather than just suboptimal.
 **Open question:** Find a curve between pure linear and steeply exponential that feels fair and readable. The player should be able to intuit that merging is rewarding without needing to do maths. It is also unclear whether a player who never merges — dropping one ball at a time directly to Zone B — can still score competitively; ideally they should fall behind but not be immediately punished.
 
-### Losing Condition — Ball Buffer + Score Milestones
+### Losing Condition — Ball Buffer + Score Bar
 
-A second losing condition runs in parallel with Zone A overflow. The player has a finite **ball buffer** — a count of balls remaining to drop into Zone A, shown as a simple number in the HUD (e.g. ×12).
+A second losing condition runs in parallel with Zone A overflow. The player has a finite **ball buffer** — a supply of balls available to drop into Zone A. The buffer is replenished by progress in Zone B.
+
+---
+
+## Systems
+
+### Ball Buffer
+
+The ball buffer is the player's fuel supply. It holds a fixed number of balls (currently 4) that are queued and ready to drop into Zone A. Each slot is occupied by a randomly generated ball drawn from the low tiers, identical in distribution to Zone A's normal queue.
 
 **Mechanics:**
-- Every ball dropped into Zone A costs 1 from the buffer.
-- Zone B tracks a **score milestone** — an escalating target that increases each time it is reached.
-- When the milestone is reached, the buffer is immediately refilled by a fixed amount (tunable; e.g. +10 balls).
-- If the buffer reaches 0, no new balls can be dropped. Balls already in Zone B continue to resolve — if one of them pushes the score over the current milestone before Zone B fully drains, the buffer refills and the run continues.
-- If Zone B empties with the buffer still at 0 and the milestone not yet reached, the run ends (game over).
 
-**Feel:** The player always has a visible next target, creating a clear "save yourself" goal when running low. Escalating milestones tighten pressure naturally over a long run without breaking the endless-run structure. Last-ball moments where Zone B just barely hits the milestone are intentionally dramatic.
+- Dropping a ball into Zone A consumes one slot from the buffer. The next ball in the queue immediately becomes the active ball.
+- The buffer is always full at the start of the run. Slots are not replaced as they are consumed — the count decreases until a refill event occurs.
+- When the buffer reaches 0, no new balls can be dropped into Zone A. Any balls already on the board in Zone A or in flight through Zone B continue to play out normally.
+- If the buffer is 0 and Zone B is completely empty (no balls in flight, no balls waiting to drain), the run ends — game over.
+- A last-chance window exists: with buffer at 0, if a ball still in Zone B triggers a score refill before Zone B fully empties, the buffer is restored and the run continues.
+
+**Capacity:**
+
+The buffer currently holds 4 balls. Future progression may increase this capacity as the game advances, but the starting value is fixed at 4 for the initial version.
+
+**Visual:**
+
+The buffer is displayed in the HUD as a row of small ball icons, one per remaining slot. Each icon shows the ball's color, which corresponds to its tier — giving the player a visual read of what is coming. Empty slots are shown as dim outlines. The buffer sits at the top of the screen, in the Zone A HUD area.
+
+---
+
+### Score Bar
+
+The score bar tracks cumulative Zone B output toward the next buffer refill. It is a horizontal fill bar displayed at the bottom of Zone B.
+
+**Mechanics:**
+
+- Every ball that drains into a Zone B collector adds its scored value (`value × collector multiplier`) to the bar.
+- When the bar reaches its target, it resets to zero and the ball buffer is immediately refilled to its full capacity.
+- The bar target is currently fixed. It is designed to escalate over time as the run progresses, but for the initial version the target stays constant throughout the run.
+- The bar and the ball buffer are independent systems; they communicate through a single event (bar full → refill buffer). Neither system has direct knowledge of the other's internal state.
+
+**Overall score:**
+
+In addition to the bar, a running total of all points scored in the session is shown in the HUD. This cumulative number never resets and represents the player's final score at game over. The score bar and the overall score both draw from the same Zone B drain events but serve different purposes: the bar drives the refill loop, the total measures overall performance.
+
+**Visual:**
+
+The score bar is a horizontal progress bar spanning the bottom edge of Zone B. It fills left to right as balls drain. A small label shows the current total score above or beside the bar. When the bar fills, a brief flash or animation signals the refill before it resets.
+
+---
+
+**Feel:** The buffer and the bar create a visible cause-and-effect loop: drop balls into Zone A → merge and send them to Zone B → Zone B fills the bar → bar refills the buffer → repeat. Running low on buffer adds pressure without being an immediate death sentence; the player still has Zone B to bail them out. Last-ball moments where a single ball in Zone B just barely tops the bar and saves the run are intentionally dramatic.

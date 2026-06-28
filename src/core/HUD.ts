@@ -4,10 +4,8 @@ import type { EventBus } from './EventBus';
 import { WIDTH } from './Layout';
 
 /**
- * Top-of-screen score readout. Part of the shell (Dev 1).
- *
- * Pure consumer of `SCORE_CHANGED` — it never computes score (Zone B owns that),
- * it just renders whatever total the bus reports.
+ * Top-of-screen HUD. Renders cumulative score and (Phase 3) ball buffer count.
+ * Pure consumer of bus events — never computes anything itself.
  */
 export class HUD implements GameSystem {
   private scoreText?: Phaser.GameObjects.Text;
@@ -23,27 +21,27 @@ export class HUD implements GameSystem {
         color: '#ffffff',
       })
       .setOrigin(0.5, 0)
-      .setDepth(1000); // always above the zones
+      .setDepth(1000);
 
+    // Phase 3: small ball-buffer count, top-right corner.
     this.bufferText = scene.add
-      .text(WIDTH - 12, 16, '×20', {
+      .text(WIDTH - 12, 16, '', {
         fontFamily: 'monospace',
-        fontSize: '18px',
+        fontSize: '16px',
         color: '#88ccff',
       })
       .setOrigin(1, 0)
-      .setDepth(1000);
+      .setDepth(1000)
+      .setVisible(false);
 
     this.bus.on(GameEvent.ScoreChanged, ({ total }) => {
       this.scoreText?.setText(String(total));
     });
 
-    this.bus.on(GameEvent.BufferChanged, ({ count }) => {
-      this.bufferText?.setText(`×${count}`);
+    this.bus.on(GameEvent.BallBufferChanged, ({ count }) => {
+      this.bufferText?.setText(`×${count}`).setVisible(true);
     });
   }
 
-  update(_time: number, _delta: number): void {
-    // Score is event-driven; nothing to do per frame.
-  }
+  update(_time: number, _delta: number): void {}
 }

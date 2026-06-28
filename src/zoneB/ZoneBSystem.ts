@@ -6,16 +6,20 @@ import { INITIAL_LAYOUT } from './zoneLayout';
 import { GateSystem } from './GateSystem';
 import { CollectorSystem } from './CollectorSystem';
 import { WallSystem } from './WallSystem';
-import { BallBuffer } from './BallBuffer';
+import { ScoreBar } from './ScoreBar';
 import {
   createZoneBBall,
   destroyZoneBBall,
   getBallData,
 } from './ZoneBBall';
 
+const BAR_HEIGHT = 10;
+const BAR_COLOR_BG = 0x1a2535;
+const BAR_COLOR_FILL = 0x4488ff;
+
 export class ZoneBSystem implements GameSystem {
   private scene?: Phaser.Scene;
-  private readonly buffer = new BallBuffer();
+  private readonly scoreBar = new ScoreBar();
 
   private readonly gates = new GateSystem(INITIAL_LAYOUT.gates, {
     onSplit: (img, multiplier) => this.handleSplit(img, multiplier),
@@ -27,7 +31,8 @@ export class ZoneBSystem implements GameSystem {
 
   private inFlight = 0;
   private total = 0;
-  private exhausted = false;
+
+  private barFill?: Phaser.GameObjects.Rectangle;
 
   constructor(private readonly bus: EventBus) {}
 
@@ -37,17 +42,13 @@ export class ZoneBSystem implements GameSystem {
     this.collectors.create(scene);
     this.walls.create(scene);
 
-    // Emit initial buffer state so the HUD shows the starting count.
-    this.emitBuffer();
+    this.buildScoreBar(scene);
+    this.emitScoreBar();
 
     this.bus.on(GameEvent.BallDropped, (ball) => {
-      if (this.exhausted) return;
-      this.buffer.spend();
-      this.emitBuffer();
-
       const img = createZoneBBall(scene, ball.x, Layout.zoneBEntry.y, ball.value, ball.tier);
       this.onBallSpawned();
-      void img; // img is live in the Matter world; lifecycle managed by destroy on drain/split
+      void img;
     });
   }
 
@@ -68,13 +69,10 @@ export class ZoneBSystem implements GameSystem {
     destroyZoneBBall(img);
     this.replaceBall(multiplier);
 
-    // Fan copies symmetrically around straight-down.
-    // t ∈ [-0.5, 0.5] maps each copy across the spread; for 1 copy t=0 (straight down).
-    const SPREAD = 0.8; // total fan width in radians (~46°)
+    const SPREAD = 0.8;
     for (let i = 0; i < multiplier; i++) {
       const t = multiplier > 1 ? i / (multiplier - 1) - 0.5 : 0;
-      const fanAngle = t * SPREAD; // negative = left, positive = right
-      // Screen coords: x right, y down. fanAngle=0 → straight down.
+      const fanAngle = t * SPREAD;
       const ox = Math.sin(fanAngle) * 18;
       const oy = Math.cos(fanAngle) * 18;
       const copy = createZoneBBall(
@@ -83,7 +81,7 @@ export class ZoneBSystem implements GameSystem {
         spawnY + oy,
         data.value,
         data.tier,
-        true, // fromSplit — temporary gate grace period
+        true,
       );
       copy.setVelocity(Math.sin(fanAngle) * 3, Math.cos(fanAngle) * 3);
     }
@@ -111,64 +109,53 @@ export class ZoneBSystem implements GameSystem {
     this.inFlight -= 1;
     if (this.inFlight === 0) {
       this.bus.emit(GameEvent.ZoneBEmpty);
-      if (this.buffer.isExhausted() && !this.exhausted) {
-        this.exhausted = true;
-        this.bus.emit(GameEvent.BufferExhausted);
-        this.showGameOver();
-      }
     }
   }
 
-  /**
-   * Called when a gate splits a ball: adjust inFlight by (multiplier - 1).
-   * The original ball is already destroyed; multiplier copies will be spawned.
-   */
   private replaceBall(multiplier: number): void {
     this.inFlight += multiplier - 1;
-    // inFlight was >= 1 and multiplier >= 2, so still >= 2. No BUSY/EMPTY to emit.
   }
 
   private addScore(points: number): void {
     this.total += points;
     this.bus.emit(GameEvent.ScoreChanged, { total: this.total });
-    if (this.buffer.refillIfMilestone(this.total)) {
-      this.emitBuffer();
+
+    const filled = this.scoreBar.add(points);
+    this.emitScoreBar();
+    if (filled) {
+      this.bus.emit(GameEvent.ScoreBarFilled);
     }
   }
 
-  private emitBuffer(): void {
-    this.bus.emit(GameEvent.BufferChanged, {
-      count: this.buffer.getCount(),
-      nextMilestone: this.buffer.getNextMilestone(),
+  private emitScoreBar(): void {
+    this.bus.emit(GameEvent.ScoreBarChanged, {
+      filled: this.scoreBar.getFilled(),
+      target: this.scoreBar.getTarget(),
     });
+    this.updateBarVisual();
   }
 
-  // --- Game-over overlay (self-contained in Zone B) -------------------------
+  // --- Score bar visual ----------------------------------------------------
 
-  private showGameOver(): void {
-    if (!this.scene) return;
+  private buildScoreBar(scene: Phaser.Scene): void {
     const { x, y, width, height } = Layout.zoneB;
-    const cx = x + width / 2;
-    const cy = y + height / 2;
+    const barY = y + height - BAR_HEIGHT;
 
-    this.scene.add.rectangle(cx, cy, width, height, 0x000000, 0.75).setDepth(3000);
-    this.scene.add
-      .text(cx, cy - 24, 'GAME OVER', {
-        fontFamily: 'monospace', fontSize: '28px', color: '#ff4466',
-      })
-      .setOrigin(0.5)
-      .setDepth(3001);
-    this.scene.add
-      .text(cx, cy + 16, `Score: ${this.total}`, {
-        fontFamily: 'monospace', fontSize: '18px', color: '#ffffff',
-      })
-      .setOrigin(0.5)
-      .setDepth(3001);
-    this.scene.add
-      .text(cx, cy + 44, 'Ball buffer exhausted', {
-        fontFamily: 'monospace', fontSize: '13px', color: '#aaaaaa',
-      })
-      .setOrigin(0.5)
-      .setDepth(3001);
+    scene.add
+      .rectangle(x + width / 2, barY + BAR_HEIGHT / 2, width, BAR_HEIGHT, BAR_COLOR_BG)
+      .setDepth(10)
+      .setOrigin(0.5);
+
+    this.barFill = scene.add
+      .rectangle(x, barY + BAR_HEIGHT / 2, 0, BAR_HEIGHT, BAR_COLOR_FILL)
+      .setDepth(11)
+      .setOrigin(0, 0.5);
+  }
+
+  private updateBarVisual(): void {
+    if (!this.barFill) return;
+    const { x, width } = Layout.zoneB;
+    this.barFill.width = width * this.scoreBar.getProgress();
+    this.barFill.x = x;
   }
 }

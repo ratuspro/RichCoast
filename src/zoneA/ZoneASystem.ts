@@ -1,20 +1,21 @@
 import type Phaser from 'phaser';
-import type { GameSystem } from '../core/contracts';
+import { GameEvent, type GameSystem } from '../core/contracts';
+import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { AimController } from './AimController';
 import { BallFactory } from './BallFactory';
 import { Board } from './Board';
 
+const BALL_BUFFER_INITIAL = 4;
+
 /**
  * Zone A — the Suika-style merge board (Dev 1).
  *
- * Composition root: wires the procedural {@link BallFactory}, the physics
- * {@link Board} (merges + blast + overflow) and the drag-to-aim {@link AimController}.
- * Stays self-contained — it emits nothing on the bus; Zone C reads its ball bodies
- * straight from the shared Matter world.
- *
- * Game-over is local: the frozen contract has no GAME_OVER event, so on overflow we
- * just freeze Zone A's input and paint an overlay — Zones B/C keep running.
+ * Owns the ball buffer: a finite count of drops the player has remaining.
+ * Dropping a ball costs 1. Zone B's score bar filling refills the buffer to
+ * its full capacity. When the buffer hits 0 the player can still aim and wait
+ * for Zone B to save them; if Zone B empties while the buffer is still 0 the
+ * run ends.
  */
 export class ZoneASystem implements GameSystem {
   private scene?: Phaser.Scene;
@@ -22,13 +23,40 @@ export class ZoneASystem implements GameSystem {
   private aim?: AimController;
   private over = false;
 
+  private ballBuffer = BALL_BUFFER_INITIAL;
+  private zoneBEmpty = true; // starts true — nothing is in flight yet
+
+  constructor(private readonly bus: EventBus) {}
+
   create(scene: Phaser.Scene): void {
     this.scene = scene;
     const factory = new BallFactory(scene);
-    const board = new Board(scene, factory, () => this.handleGameOver());
-    const aim = new AimController(scene, factory, (x, tier) => board.spawnDropped(x, tier));
+    const board = new Board(
+      scene,
+      factory,
+      () => this.handleGameOver(),
+      () => this.checkLoss(),   // fires when the last Zone A ball is destroyed
+    );
+    const aim = new AimController(scene, factory, (x, tier) => {
+      board.spawnDropped(x, tier);
+      this.onBallDropped();
+    });
     this.board = board;
     this.aim = aim;
+
+    this.emitBuffer();
+
+    this.bus.on(GameEvent.ScoreBarFilled, () => {
+      this.ballBuffer = BALL_BUFFER_INITIAL;
+      this.aim?.setDropLocked(false);
+      this.emitBuffer();
+    });
+
+    this.bus.on(GameEvent.ZoneBBusy,  () => { this.zoneBEmpty = false; });
+    this.bus.on(GameEvent.ZoneBEmpty, () => {
+      this.zoneBEmpty = true;
+      this.checkLoss();
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -39,6 +67,27 @@ export class ZoneASystem implements GameSystem {
   destroy(): void {
     this.aim?.destroy();
     this.board?.destroy();
+  }
+
+  private onBallDropped(): void {
+    if (this.ballBuffer <= 0) return;
+    this.ballBuffer -= 1;
+    this.emitBuffer();
+    if (this.ballBuffer === 0) {
+      this.aim?.setDropLocked(true);
+      this.checkLoss();
+    }
+  }
+
+  /** Run ends only when all three doors are closed simultaneously. */
+  private checkLoss(): void {
+    if (this.ballBuffer === 0 && this.zoneBEmpty && (this.board?.getBallCount() ?? 0) === 0) {
+      this.handleGameOver();
+    }
+  }
+
+  private emitBuffer(): void {
+    this.bus.emit(GameEvent.BallBufferChanged, { count: this.ballBuffer });
   }
 
   private handleGameOver(): void {

@@ -22,6 +22,7 @@ export class Board {
     private readonly scene: Phaser.Scene,
     private readonly factory: BallFactory,
     private readonly onGameOver: () => void,
+    private readonly onEmpty?: () => void,
   ) {
     scene.matter.world.on(Phaser.Physics.Matter.Events.COLLISION_START, this.onCollisionStart);
   }
@@ -48,10 +49,15 @@ export class Board {
     this.pending.length = 0;
   }
 
+  getBallCount(): number { return this.registry.size; }
+
   private register(ball: Ball): void {
     this.registry.set(ball.body, ball);
     // Self-prune when the image is destroyed (by a merge here, or later by Zone C's suck).
-    ball.image.once(Phaser.GameObjects.Events.DESTROY, () => this.registry.delete(ball.body));
+    ball.image.once(Phaser.GameObjects.Events.DESTROY, () => {
+      this.registry.delete(ball.body);
+      if (this.registry.size === 0) this.onEmpty?.();
+    });
   }
 
   /** Flag mergeable new contacts; defer the actual world mutation to `update()`. */

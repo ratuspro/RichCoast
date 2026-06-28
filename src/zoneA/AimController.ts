@@ -65,6 +65,16 @@ export class AimController {
     this.aimImage.setVisible(false);
   }
 
+  /**
+   * Soft-lock: block drops without hiding the aim ball or disabling aiming.
+   * Used when the ball buffer is empty but Zone B may still save the run.
+   */
+  setDropLocked(locked: boolean): void {
+    this.dropLocked = locked;
+  }
+
+  private dropLocked = false;
+
   destroy(): void {
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown);
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove);
@@ -91,6 +101,7 @@ export class AimController {
   private onPointerUp = (): void => {
     if (!this.dragging) return;
     this.dragging = false;
+    if (this.dropLocked) return; // buffer empty — aim is still live, drop is not
     this.onDrop(this.aimX, this.queue.peek());
     this.advanceQueue();
     this.dropReadyAt = this.scene.time.now + DROP_COOLDOWN_MS;

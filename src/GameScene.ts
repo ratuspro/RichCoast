@@ -67,7 +67,7 @@ export class GameScene extends Phaser.Scene {
 
     switch (mode) {
       case 'ac':
-        return [new ZoneASystem(), new ZoneCSystem(this.bus), hud, new StubZoneB(this.bus)];
+        return [new ZoneASystem(this.bus), new ZoneCSystem(this.bus), hud, new StubZoneB(this.bus)];
 
       case 'b': {
         const driver = new StubZoneAC(this.bus);
@@ -78,7 +78,7 @@ export class GameScene extends Phaser.Scene {
       default: {
         this.debugHarness = new DebugHarness(this.bus);
         return [
-          new ZoneASystem(),
+          new ZoneASystem(this.bus),
           new ZoneCSystem(this.bus),
           new ZoneBSystem(this.bus),
           hud,
