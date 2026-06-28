@@ -64,7 +64,7 @@ through the contract events above.
 
 ## Status
 
-**Zones A and B both play; Zone C is the one remaining gap.** The shared shell is complete
+**All three zones play.** The shared shell is complete
 and runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD (score
 + buffer count), the thin `GameScene` + `?zone=` routing, the Matter world bounds (including
 the solid Zone A floor), and the isolation layer (`src/dev/` stubs + harness) all work. A
@@ -93,10 +93,15 @@ are wired to the HUD (buffer count, top-right). The zone splits into `ZoneBSyste
 `GateSystem`, `CollectorSystem`, `WallSystem`, `ZoneBBall`, `BallBuffer`, and `zoneLayout.ts`;
 the old `Funnel.ts` skeleton is **superseded by `CollectorSystem` and is now dead code**.
 
-**Zone C** is the remaining gap — plumbed but unfinished: the trap-door lock + nearest-ball
-world-query + `BALL_DROPPED` emit are live, but the suck animation and *removing the consumed
-ball from Zone A* are still `TODO(zoneC)` (so in `?zone=ac` a sucked ball currently stays on
-the board). Frozen decisions: Matter.js for both zones; `BALL_DROPPED.x` is always the fixed
+**Zone C** (`src/zoneC/ZoneCSystem.ts`) plays: the trap-door lock is driven by Zone B's
+busy/empty events; a tap picks the Zone-A ball nearest the door by **edge distance**
+(Euclidean centre-to-mouth minus the body's `circleRadius`, so a bigger ball whose edge
+reaches nearer wins), removes it from Zone A by destroying its Matter.Image (the Board
+self-prunes off the DESTROY event), plays a ~150ms cosmetic "suck" tween of a throwaway
+snapshot sprite into the door, then emits `BALL_DROPPED` so Zone B spawns a fresh
+fixed-radius (14px) ball of the same tier — the source ball's Zone-A size never carries over.
+The tap locks the door immediately to block a double-suck during the tween. Frozen
+decisions: Matter.js for both zones; `BALL_DROPPED.x` is always the fixed
 `Layout.zoneBEntry.x`.
 
 > **Keep this section current.** As important phases finish, **rewrite** this paragraph to

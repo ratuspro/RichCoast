@@ -5,7 +5,7 @@
  * Zone-A feel, tweakable without touching the seam. `ballMath.ts` turns these into
  * the per-tier values the system reads at runtime.
  *
- * Design space is Layout's 390x844; Zone A is the top 390x448 band.
+ * Design space is Layout's 390x844; Zone A is the top 390x314 band.
  */
 
 // --- Geometry (design-space px) -------------------------------------------

@@ -19,7 +19,9 @@ export interface Rect {
 
 // Vertical split (tunable). Zone A = big merge board on top, Zone C = thin
 // trap-door band, Zone B = pinball arena below. The three tile the full height.
-const ZONE_A_HEIGHT = 448;
+// Zone A was shortened by 30% (448 → 314); the freed height flows into Zone B,
+// which absorbs it automatically as the remainder below.
+const ZONE_A_HEIGHT = Math.round(448 * 0.7);
 const ZONE_C_HEIGHT = 44;
 const ZONE_B_HEIGHT = HEIGHT - ZONE_A_HEIGHT - ZONE_C_HEIGHT;
 
