@@ -8,10 +8,14 @@ import { Sfx } from '../core/Sfx';
 const SUCK_MS = 150;
 /** The quick scale-up "spawn pop" at the entry column after the suck, in ms. */
 const POP_MS = 110;
-/** Duration of one left→right sweep leg (yoyo doubles it). Difficulty knob. */
+/** Duration of one edge→edge sweep leg (the return leg doubles it). Difficulty knob. */
 const SWEEP_MS = 1100;
 /** Inset of the sweep from each Zone B edge (~one ball radius + wall slack), in px. */
 const SWEEP_MARGIN = 18;
+/** Number of evenly-spaced positions the lit marker steps between. */
+const SWEEP_POSITIONS = 9;
+/** Per-position dwell so one leg (8 steps) == SWEEP_MS, keeping the old cadence. */
+const STEP_MS = SWEEP_MS / (SWEEP_POSITIONS - 1);
 
 /**
  * Minimal structural view of a Matter body carrying ball identity. Zone A stamps
@@ -33,18 +37,26 @@ interface BallBody {
 /**
  * Zone C — the trap-door (Dev 1).
  *
- * Owns the cooldown lock (driven by Zone B's busy/empty events) and a sweep marker
- * that oscillates left↔right across the band while armed. A tap freezes the marker;
- * its current column becomes the Zone B entry. ZoneBBusy fires up front (so Zone A's
- * stalemate check stays blocked while the ball is mid-transit), then a suck→pop
- * cosmetic runs and BALL_DROPPED is emitted at the frozen column when it lands — so
- * WHERE a ball enters Zone B is a timing skill, not a fixed column.
+ * Owns the cooldown lock (driven by Zone B's busy/empty events) and a row of nine
+ * evenly-spaced position markers across the band; while armed, the lit one steps
+ * edge→edge and back. A tap freezes on the lit position; its column becomes the Zone B
+ * entry. ZoneBBusy fires up front (so Zone A's stalemate check stays blocked while the
+ * ball is mid-transit), then a suck→pop cosmetic runs and BALL_DROPPED is emitted at the
+ * frozen column when it lands — so WHERE a ball enters Zone B is a timing skill, picked
+ * from nine discrete columns rather than a fixed one.
  */
 export class ZoneCSystem implements GameSystem {
   private locked = false;
   private scene?: Phaser.Scene;
   private door?: Phaser.GameObjects.Rectangle;
-  private marker?: Phaser.GameObjects.Rectangle;
+  /** The nine dim position markers; the active one glows. */
+  private dots: Phaser.GameObjects.Rectangle[] = [];
+  /** Precomputed x of each position, indexed the same as `dots`. */
+  private positionsX: number[] = [];
+  /** Which position is currently lit (read by onTap to freeze the column). */
+  private activeIndex = 0;
+  /** Last styled index, so update() restyles only when the lit position changes. */
+  private styledIndex = -1;
   private sweepMinX = 0;
   private sweepMaxX = 0;
   /** Elapsed sweep time (ms); advanced only while armed, reset to 0 on re-arm. */
@@ -65,40 +77,59 @@ export class ZoneCSystem implements GameSystem {
       .setInteractive({ useHandCursor: true });
     this.door.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
 
-    // The sweep marker: a puck gliding left↔right along the door band. Where it sits
-    // when the player taps becomes the Zone B entry column, so its travel is inset by
-    // one ball radius from each edge — a ball can never spawn into the side wall.
+    // Nine evenly-spaced markers along the door band. The lit one is where a tap drops
+    // the ball, so the span is inset by one ball radius from each edge — a ball can never
+    // spawn into the side wall.
     const mouthY = r.y + r.height / 2;
     this.sweepMinX = Layout.zoneB.x + SWEEP_MARGIN;
     this.sweepMaxX = Layout.zoneB.x + Layout.zoneB.width - SWEEP_MARGIN;
-    this.marker = scene.add
-      .rectangle(this.sweepMinX, mouthY, 18, 12, 0x6cf0c2)
-      .setStrokeStyle(2, 0xffffff)
-      .setDepth(50);
+    for (let i = 0; i < SWEEP_POSITIONS; i++) {
+      const x = this.sweepMinX + ((this.sweepMaxX - this.sweepMinX) * i) / (SWEEP_POSITIONS - 1);
+      this.positionsX.push(x);
+      const dot = scene.add.rectangle(x, mouthY, 12, 12, 0x6cf0c2).setDepth(50);
+      this.dots.push(dot);
+      this.styleDot(i, false);
+    }
 
     this.refreshDoor();
   }
 
+  /** Bright + outlined when active, dim and small when not. One place for both looks. */
+  private styleDot(i: number, active: boolean): void {
+    const dot = this.dots[i];
+    if (!dot) return;
+    if (active) {
+      dot.setFillStyle(0x6cf0c2, 1).setStrokeStyle(2, 0xffffff).setScale(1.25);
+    } else {
+      dot.setFillStyle(0x2f5d51, 0.45).setStrokeStyle(0).setScale(1);
+    }
+  }
+
   /**
-   * The marker is driven straight off the `locked` flag every frame — no tween to get
-   * stuck. Armed: it oscillates left↔right (cosine, so it eases in/out at both ends).
-   * Locked: it's hidden and frozen. Because this reads the current state each tick, the
+   * The lit position is driven straight off the `locked` flag every frame — no tween to
+   * get stuck. Armed: the lit index steps edge→edge and back (ping-pong) at STEP_MS each.
+   * Locked: all markers are hidden. Because this reads the current state each tick, the
    * sweep always reappears the instant Zone B clears (`locked` → false), self-healing
    * regardless of how the busy/empty events interleave.
    */
   update(_time: number, delta: number): void {
-    const marker = this.marker;
-    if (!marker) return;
+    if (this.dots.length === 0) return;
     if (this.locked) {
-      marker.setVisible(false);
+      for (const dot of this.dots) dot.setVisible(false);
+      this.styledIndex = -1; // force a restyle on re-arm
       return;
     }
-    marker.setVisible(true);
+    for (const dot of this.dots) dot.setVisible(true);
+
     this.sweepT += delta;
-    const period = SWEEP_MS * 2; // there and back
-    const phase = ((this.sweepT % period) / period) * Math.PI * 2;
-    const k = (1 - Math.cos(phase)) / 2; // 0→1→0, zero velocity at each end
-    marker.x = this.sweepMinX + (this.sweepMaxX - this.sweepMinX) * k;
+    const cycle = 2 * (SWEEP_POSITIONS - 1); // steps in one full ping-pong
+    const step = Math.floor(this.sweepT / STEP_MS) % cycle;
+    this.activeIndex = step < SWEEP_POSITIONS ? step : cycle - step;
+
+    if (this.activeIndex !== this.styledIndex) {
+      for (let i = 0; i < this.dots.length; i++) this.styleDot(i, i === this.activeIndex);
+      this.styledIndex = this.activeIndex;
+    }
   }
 
   private onTap(): void {
@@ -107,9 +138,9 @@ export class ZoneCSystem implements GameSystem {
     const ball = this.findNearestBall();
     if (!ball?.ballData) return; // nothing to suck yet (e.g. Zone A still empty)
 
-    // Freeze the sweep the instant the player commits — the marker's current column is
-    // where the ball will enter Zone B. Capture it before setLocked() hides the marker.
-    const spawnX = this.marker?.x ?? Layout.zoneBEntry.x;
+    // Freeze the sweep the instant the player commits — the lit position's column is
+    // where the ball will enter Zone B. Capture it before setLocked() hides the markers.
+    const spawnX = this.positionsX[this.activeIndex] ?? Layout.zoneBEntry.x;
 
     // Signal busy up front so ZoneASystem.checkLoss() can't read a stalemate while the
     // ball is mid-transit: BALL_DROPPED is now deferred to the end of the suck→pop, but
@@ -214,8 +245,8 @@ export class ZoneCSystem implements GameSystem {
   private setLocked(locked: boolean): void {
     const wasLocked = this.locked;
     this.locked = locked;
-    // On re-arm (locked→unlocked) restart the sweep from the left edge. update() does the
-    // actual showing/hiding each frame, so the marker can't get stuck out of sync.
+    // On re-arm (locked→unlocked) restart the step sequence from the left edge (index 0).
+    // update() does the actual showing/hiding each frame, so markers can't get stuck out of sync.
     if (wasLocked && !locked) this.sweepT = 0;
     this.refreshDoor();
   }

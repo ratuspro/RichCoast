@@ -7,7 +7,7 @@ import { DROP_COOLDOWN_MS, SPAWN_Y } from './tuning';
 
 // One coherent top-right queue row: `NEXT (o)  N left`. The preview ball is the icon;
 // the count sits on the far right, clear of the centred score. Shared type treatment.
-const ROW_Y = 30;
+const ROW_Y = 21;
 const LABEL_X = Layout.WIDTH - 152;
 const PREVIEW_X = Layout.WIDTH - 100;
 const PREVIEW_SIZE = 36;

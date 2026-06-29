@@ -10,9 +10,11 @@
 
 // --- Geometry (design-space px) -------------------------------------------
 
-/** The row the current/aim ball sits on, near the top. Above the death line and
- *  far enough below the y=0 ceiling that the largest spawnable ball (tier 4) clears it. */
-export const SPAWN_Y = 56;
+/** The row the current/aim ball sits on, near the top. Above the death line and far
+ *  enough below the HUD chrome bar (42px tall) that the largest spawnable ball (tier 4,
+ *  radius 26) clears it: top edge at y=42 meets the bar, bottom at y=94 stays above the
+ *  death line. */
+export const SPAWN_Y = 68;
 
 /** Forgiving death line, just below the spawn row: a ball resting ABOVE this for
  *  REST_MS ends the run (see ballMath.isRestingAbove / isOverflow). */

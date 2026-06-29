@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { colorForTier, hexColor } from '../core/BallColors';
 import type { BallSpec } from '../core/contracts';
 
-export const BALL_RADIUS = 14;
+export const BALL_RADIUS = 10;
 
 export const CAT_BALL      = 0x0001;
 export const CAT_GATE      = 0x0002;
@@ -42,8 +42,8 @@ export function createZoneBBall(
   }
 
   const collisionFilter = fromSplit
-    ? { category: CAT_BALL, mask: CAT_WALL | CAT_COLLECTOR }          // skip gates during grace
-    : { category: CAT_BALL, mask: CAT_GATE | CAT_WALL | CAT_COLLECTOR };
+    ? { category: CAT_BALL, mask: CAT_BALL | CAT_WALL | CAT_COLLECTOR }          // skip gates during grace, but still bump other balls
+    : { category: CAT_BALL, mask: CAT_BALL | CAT_GATE | CAT_WALL | CAT_COLLECTOR };
 
   const img = scene.matter.add.image(x, y, key, undefined, {
     shape: { type: 'circle', radius: BALL_RADIUS },
@@ -62,7 +62,7 @@ export function createZoneBBall(
     scene.time.delayedCall(SPLIT_GRACE_MS, () => {
       if (!img.active) return;
       img.setCollisionCategory(CAT_BALL);
-      img.setCollidesWith([CAT_GATE, CAT_WALL, CAT_COLLECTOR]);
+      img.setCollidesWith([CAT_BALL, CAT_GATE, CAT_WALL, CAT_COLLECTOR]);
     });
   }
 
