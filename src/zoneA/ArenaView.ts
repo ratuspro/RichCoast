@@ -20,7 +20,7 @@ import { DEATH_LINE_Y, SPAWN_Y } from './tuning';
 /** Multiplier applied to the arena scale at each milestone (geometric growth: `s` ramps
  *  1, 1.18, 1.39, 1.64, …). The camera zoom is 1/s, so each milestone shrinks balls by the
  *  same 1/GROW ratio. */
-export const GROW = 1.18;
+export const GROW = 1.6;
 
 /** Camera tween duration for one zoom-out, in ms. */
 const ZOOM_MS = 1200;
