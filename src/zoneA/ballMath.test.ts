@@ -43,15 +43,19 @@ describe('tuning tables', () => {
 });
 
 describe('radiusForTier', () => {
-  it('is strictly increasing across tiers', () => {
+  it('is strictly increasing across the base table', () => {
     for (let t = 2; t <= TIER_COUNT; t++) {
       expect(radiusForTier(t)).toBeGreaterThan(radiusForTier(t - 1));
     }
   });
 
-  it('clamps out-of-range tiers to the ends', () => {
+  it('keeps growing past the base table (tiers are unbounded)', () => {
+    expect(radiusForTier(TIER_COUNT + 1)).toBeGreaterThan(radiusForTier(TIER_COUNT));
+    expect(radiusForTier(TIER_COUNT + 5)).toBeGreaterThan(radiusForTier(TIER_COUNT + 4));
+  });
+
+  it('clamps tiers below 1 to the smallest', () => {
     expect(radiusForTier(0)).toBe(radiusForTier(1));
-    expect(radiusForTier(99)).toBe(radiusForTier(TIER_COUNT));
   });
 });
 

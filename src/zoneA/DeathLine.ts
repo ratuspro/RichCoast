@@ -1,6 +1,5 @@
 import type Phaser from 'phaser';
-import { WIDTH } from '../core/Layout';
-import { DEATH_LINE_Y } from './tuning';
+import type { ArenaView } from './ArenaView';
 
 const LINE_COLOR = 0xff4d4d;
 const LINE_THICKNESS = 2;
@@ -20,12 +19,24 @@ export class DeathLine {
   private pulse?: Phaser.Tweens.Tween;
   private danger = false;
 
-  constructor(private readonly scene: Phaser.Scene) {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly arena: ArenaView,
+  ) {
     this.line = scene.add
-      .rectangle(WIDTH / 2, DEATH_LINE_Y, WIDTH, LINE_THICKNESS, LINE_COLOR)
+      .rectangle(0, 0, 1, LINE_THICKNESS, LINE_COLOR)
       .setOrigin(0.5)
       .setDepth(50)
       .setVisible(false);
+    arena.claim(this.line); // zooms with the arena via the dedicated camera
+    this.reposition();
+  }
+
+  /** Move/resize the line to span the (possibly grown) arena at its scaled death-line y. */
+  reposition(): void {
+    const w = this.arena.maxX - this.arena.minX;
+    this.line.setPosition((this.arena.minX + this.arena.maxX) / 2, this.arena.deathLineY);
+    this.line.setSize(w, LINE_THICKNESS * this.arena.scale);
   }
 
   /** Show the pulsing red line (true) or hide it (false). No-op if unchanged. */

@@ -1,5 +1,5 @@
 import { TIER_COUNT } from '../core/contracts';
-import { FRICTION_BASE, FRICTION_MAX, FRICTION_STEP, RADII } from './tuning';
+import { FRICTION_BASE, FRICTION_MAX, FRICTION_STEP, RADII, RADIUS_GROWTH } from './tuning';
 
 /**
  * Pure Zone A math — no Phaser, no state. Turns the `tuning.ts` tables into the
@@ -19,9 +19,15 @@ function clampTier(tier: number): number {
   return Math.floor(tier);
 }
 
-/** Visual/physics radius for a tier (1-based). Out-of-range tiers clamp to the ends. */
+/**
+ * Visual/physics radius for a tier (1-based). Tiers within the base table read it directly;
+ * since merges are uncapped, tiers past the table keep growing geometrically (no clamp), so
+ * ever-larger balls render — the expanding arena (see ArenaView) is what makes room for them.
+ * Tiers below 1 clamp to the smallest.
+ */
 export function radiusForTier(tier: number): number {
-  return RADII[clampTier(tier) - 1];
+  if (tier <= RADII.length) return RADII[clampTier(tier) - 1];
+  return RADII[RADII.length - 1] * RADIUS_GROWTH ** (tier - RADII.length);
 }
 
 /** Surface friction for a tier — grows with tier, clamped to FRICTION_MAX. */

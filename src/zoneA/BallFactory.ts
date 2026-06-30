@@ -1,8 +1,8 @@
 import type Phaser from 'phaser';
-import { hexColor } from '../core/BallColors';
+import { colorForTier, hexColor } from '../core/BallColors';
 import { tierToValue, type BallBodyData } from '../core/contracts';
 import { frictionForTier, radiusForTier } from './ballMath';
-import { DENSITY, FRICTION_AIR, FRICTION_STATIC, RESTITUTION, TIER_COLORS } from './tuning';
+import { DENSITY, FRICTION_AIR, FRICTION_STATIC, RESTITUTION } from './tuning';
 
 /**
  * A live Zone A ball: its Matter.Image (sprite + body in one), its tier, and the
@@ -26,7 +26,14 @@ type TaggedBody = MatterJS.BodyType & { ballData: BallBodyData };
  * so Zone C can discover it on a shared-world query. No image assets.
  */
 export class BallFactory {
-  constructor(private readonly scene: Phaser.Scene) {}
+  /**
+   * @param onSpawn optional hook run on every freshly-spawned ball image — Zone A uses it to
+   *   add the ball to the arena render layer (so the dedicated arena camera draws it zoomed).
+   */
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly onSpawn?: (image: Phaser.Physics.Matter.Image) => void,
+  ) {}
 
   /** Stable texture key for a tier (also used by the aim ball + preview). */
   textureKey(tier: number): string {
@@ -52,7 +59,7 @@ export class BallFactory {
     const lineW = Math.max(2, radius * 0.08);
     ctx.beginPath();
     ctx.arc(radius, radius, radius - lineW / 2, 0, Math.PI * 2);
-    ctx.fillStyle = hexColor(TIER_COLORS[tier - 1]);
+    ctx.fillStyle = hexColor(colorForTier(tier));
     ctx.fill();
     ctx.lineWidth = lineW;
     ctx.strokeStyle = 'rgba(11, 13, 18, 0.35)';
@@ -90,6 +97,7 @@ export class BallFactory {
     const body = image.body as MatterJS.BodyType;
     (body as TaggedBody).ballData = { value: tierToValue(tier), tier };
 
+    this.onSpawn?.(image);
     return { image, body, tier, consumed: false, restMs: 0 };
   }
 }

@@ -2,8 +2,18 @@ import Phaser from 'phaser';
 import { blastImpulse, isNearDeath, isOverflow, isRestingAbove, midpoint, nextRestMs } from './ballMath';
 import { canMerge, mergedTier } from './MergeLogic';
 import { Sfx } from '../core/Sfx';
+import type { ArenaView } from './ArenaView';
 import type { Ball, BallFactory } from './BallFactory';
-import { BLAST_RADIUS, BLAST_STRENGTH, DEATH_LINE_Y, REST_MS, REST_SPEED, SPAWN_Y, WARN_BAND } from './tuning';
+import { BLAST_RADIUS, BLAST_STRENGTH, REST_MS, REST_SPEED, WARN_BAND } from './tuning';
+
+/** A blacklisted ball pulled off the board at a milestone — enough to animate its drain to Zone B. */
+export interface DrainedBall {
+  x: number;
+  y: number;
+  tier: number;
+  texKey: string;
+  worldDiameter: number;
+}
 
 /**
  * The live merge board: owns every dropped ball, merges same-tier pairs on contact,
@@ -23,6 +33,7 @@ export class Board {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly factory: BallFactory,
+    private readonly arena: ArenaView,
     private readonly onGameOver: () => void,
     private readonly onEmpty?: () => void,
     private readonly onDanger?: (near: boolean) => void,
@@ -30,10 +41,10 @@ export class Board {
     scene.matter.world.on(Phaser.Physics.Matter.Events.COLLISION_START, this.onCollisionStart);
   }
 
-  /** Drop a fresh ball into the board at the spawn row. */
+  /** Drop a fresh ball into the board at the (scale-aware) spawn row. */
   spawnDropped(x: number, tier: number): void {
     if (this.over) return;
-    this.register(this.factory.spawn(x, SPAWN_Y, tier));
+    this.register(this.factory.spawn(x, this.arena.spawnY, tier));
   }
 
   update(delta: number): void {
@@ -58,6 +69,28 @@ export class Board {
   }
 
   getBallCount(): number { return this.registry.size; }
+
+  /**
+   * Remove every board ball whose tier is below `minTier` — the tiers blacklisted when a
+   * milestone shifts the draw window up — and return a snapshot of each so the caller can
+   * animate them draining into Zone B. Destroying each image self-prunes the registry via its
+   * DESTROY hook (see `register`).
+   */
+  takeBallsBelow(minTier: number): DrainedBall[] {
+    const drained: DrainedBall[] = [];
+    for (const ball of [...this.registry.values()]) {
+      if (ball.tier >= minTier) continue;
+      drained.push({
+        x: ball.body.position.x,
+        y: ball.body.position.y,
+        tier: ball.tier,
+        texKey: ball.image.texture.key,
+        worldDiameter: ball.image.displayWidth,
+      });
+      ball.image.destroy();
+    }
+    return drained;
+  }
 
   private merging = false;
 
@@ -120,12 +153,15 @@ export class Board {
    * flag the death-line warning when any resting ball is close (but not yet over).
    */
   private scanOverflow(delta: number): void {
+    // The death line scales with the arena, so a milestone zoom-out moves it up as headroom grows.
+    const lineY = this.arena.deathLineY;
+    const band = WARN_BAND * this.arena.scale;
     let near = false;
     for (const ball of this.registry.values()) {
       const resting = isRestingAbove(
         ball.body.position.y,
         ball.body.speed,
-        DEATH_LINE_Y,
+        lineY,
         REST_SPEED,
       );
       ball.restMs = nextRestMs(ball.restMs, delta, resting);
@@ -134,7 +170,7 @@ export class Board {
         this.onGameOver();
         return;
       }
-      near ||= isNearDeath(ball.body.position.y, ball.body.speed, DEATH_LINE_Y, WARN_BAND, REST_SPEED);
+      near ||= isNearDeath(ball.body.position.y, ball.body.speed, lineY, band, REST_SPEED);
     }
     this.setDanger(near);
   }

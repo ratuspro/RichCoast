@@ -14,12 +14,21 @@ import type Phaser from 'phaser';
 // Tiers & values
 // ---------------------------------------------------------------------------
 
-/** Number of distinct merge tiers (powers of two). Tier 1 is the smallest ball. */
+/**
+ * Size of the base tier table — the radius table and colour palette have this many
+ * entries. It is NOT a gameplay ceiling: merges are uncapped, so tiers climb past this,
+ * with balls cycling colours (modulo) and growing by formula beyond the table. Tier 1 is
+ * the smallest ball.
+ */
 export const TIER_COUNT = 10;
 
-/** Tier (1-based) → ball value: 2^(tier-1). tier 1→1, 2→2, 3→4, 4→8, … */
+/**
+ * Tier (1-based) → ball value: 3^(tier-1). tier 1→1, 2→3, 3→9, 4→27, …
+ * Merges only join two equal balls and yield 1.5*(V+V) = 3V, so each merge triples the
+ * value — making the value ladder powers of three.
+ */
 export function tierToValue(tier: number): number {
-  return 2 ** (tier - 1);
+  return 3 ** (tier - 1);
 }
 
 /**
@@ -60,6 +69,8 @@ export const GameEvent = {
   BallBufferChanged: 'BALL_BUFFER_CHANGED',
   /** Zone A → all: internal level advanced; carries the new stage parameters. */
   ProgressionChanged: 'PROGRESSION_CHANGED',
+  /** Zone A → Zone C: arena zoom-out (milestone) is animating; lock input while `active`. */
+  ArenaZoom: 'ARENA_ZOOM',
 } as const;
 
 export type GameEventName = (typeof GameEvent)[keyof typeof GameEvent];
@@ -98,6 +109,11 @@ export interface ProgressionChangedPayload {
   scoreBarTarget: number;
 }
 
+export interface ArenaZoomPayload {
+  /** True while the zoom-out tween is running (input should stay locked); false when it lands. */
+  active: boolean;
+}
+
 /** Event name → payload type. `void` = a signal with no data. */
 export interface GameEventMap {
   [GameEvent.BallDropped]: BallDroppedPayload;
@@ -108,6 +124,7 @@ export interface GameEventMap {
   [GameEvent.ScoreBarChanged]: ScoreBarChangedPayload;
   [GameEvent.BallBufferChanged]: BallBufferChangedPayload;
   [GameEvent.ProgressionChanged]: ProgressionChangedPayload;
+  [GameEvent.ArenaZoom]: ArenaZoomPayload;
 }
 
 // ---------------------------------------------------------------------------

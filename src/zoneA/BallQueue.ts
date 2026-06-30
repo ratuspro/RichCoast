@@ -32,6 +32,18 @@ export class BallQueue {
   }
 
   /**
+   * Re-draw the current + next tiers from the active window. Called when a milestone shifts the
+   * window up so the in-hand and preview balls aren't stranded on now-blacklisted low tiers
+   * (setWindow alone only governs *future* draws). Clears any unconsumed seed first, so the
+   * draw always comes from the live random window — never a stale low-tier seed.
+   */
+  reroll(): void {
+    this.seeded = [];
+    this.currentTier = this.pullNext();
+    this.nextTier = this.pullNext();
+  }
+
+  /**
    * Pre-load specific tiers into the front of the queue.
    * Called on level transitions that have a defined `bufferBalls` list.
    * Once the seeded tiers are consumed, future draws use the random window.

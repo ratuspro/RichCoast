@@ -3,7 +3,7 @@ import { TIER_COUNT } from '../core/contracts';
 import { canMerge, mergedTier } from './MergeLogic';
 
 describe('canMerge', () => {
-  it('is true for equal tiers below the max', () => {
+  it('is true for equal tiers', () => {
     expect(canMerge(3, 3)).toBe(true);
   });
 
@@ -11,8 +11,9 @@ describe('canMerge', () => {
     expect(canMerge(2, 3)).toBe(false);
   });
 
-  it('is false at the max tier (nothing higher to merge into)', () => {
-    expect(canMerge(TIER_COUNT, TIER_COUNT)).toBe(false);
+  it('still merges at and beyond the base table tier (no cap)', () => {
+    expect(canMerge(TIER_COUNT, TIER_COUNT)).toBe(true);
+    expect(canMerge(TIER_COUNT + 5, TIER_COUNT + 5)).toBe(true);
   });
 });
 
@@ -22,7 +23,8 @@ describe('mergedTier', () => {
     expect(mergedTier(5)).toBe(6);
   });
 
-  it('caps at the max tier', () => {
-    expect(mergedTier(TIER_COUNT)).toBe(TIER_COUNT);
+  it('keeps stepping up past the base table tier (no cap)', () => {
+    expect(mergedTier(TIER_COUNT)).toBe(TIER_COUNT + 1);
+    expect(mergedTier(TIER_COUNT + 7)).toBe(TIER_COUNT + 8);
   });
 });

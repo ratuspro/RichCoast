@@ -33,7 +33,8 @@ section when the work touches it:
   unless the task is explicitly about the contract.
 - Cross-zone events: `BALL_DROPPED {value,tier,x}` (C→B), `ZONE_B_BUSY`/`ZONE_B_EMPTY`
   (B→C, drives the trap-door lock), `SCORE_CHANGED {total}` (B→HUD), `BUFFER_CHANGED
-  {count,nextMilestone}` (B→HUD), `BUFFER_EXHAUSTED` (B→scene, triggers Zone B game-over).
+  {count,nextMilestone}` (B→HUD), `BUFFER_EXHAUSTED` (B→scene, triggers Zone B game-over),
+  `ARENA_ZOOM {active}` (A→C, locks the trap-door while Zone A's milestone zoom-out animates).
 
 ## Ownership boundaries — don't cross them casually
 
@@ -67,8 +68,9 @@ through the contract events above.
 
 **All three zones play.** The shared shell is complete
 and runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD (score
-+ buffer count), the thin `GameScene` + `?zone=` routing, the Matter world bounds (including
-the solid Zone A floor), and the isolation layer (`src/dev/` stubs + harness) all work. A
++ buffer count), the thin `GameScene` + `?zone=` routing, the Matter world bottom wall (Zone A's
+own boundary + funnel floor now live in `ArenaView`), and the isolation layer (`src/dev/` stubs
++ harness) all work. A
 debug overlay (`src/core/DebugMode.ts` + `src/dev/DebugHarness.ts`, toggled by `?debug=2` or
 the **D** key) adds a DROP button (also SPACE) that fires `BALL_DROPPED` straight onto the
 bus plus a live event log. Tooling is Phaser 4 + Vite + TypeScript (strict) + Vitest; pure
@@ -77,20 +79,48 @@ B's `BallBuffer`.
 
 **Zone A** (`src/zoneA/`) plays: drag along the top to aim, release to drop; balls are
 procedurally-textured Matter circles (colour + value) that grow heavier and grippier by
-tier, same-tier collisions merge into the next tier with a neighbour-shoving blast. Ball
-colours come from the shared `src/core/BallColors.ts` "Jewel Tones" palette (one source for
-both zones, so a transferred ball keeps its exact colour). A top-right **queue row** in
+tier, same-**value** collisions merge into the next tier with a neighbour-shoving blast.
+Merging is **uncapped** — tiers climb forever — and each merge **triples** the value
+(`tierToValue` is now `3^(tier-1)`, since merging two equal balls yields `1.5×(V+V)=3V`).
+Ball radius reads the `RADII` table for tiers 1–10 and keeps growing geometrically past it
+(`RADIUS_GROWTH` in `tuning.ts`); colours come from the shared `src/core/BallColors.ts`
+"Jewel Tones" palette and **cycle** (modulo) past tier 10 (one source for both zones, so a
+transferred ball keeps its colour). Because balls grow without bound, the **arena expands at
+recurring milestones**: every 50 levels Zone A input freezes, `ArenaView` grows the playfield
+(scale `s ×= GROW=1.18`, so `s` ramps **geometrically** 1,1.18,1.39,…: ceiling rises, walls move
+out, funnel widens — always *outward*, never into Zone B) and a **dedicated Zone-A camera** zooms
+out (`zoom = 1/s`) so balls keep their real size yet appear ~1/GROW smaller each milestone with
+relative positions intact. Each
+milestone also **shifts the draw window up by 4 tiers** (hand-authored in `progression.json`:
+`[1,4]→[5,8]→[9,12]→…`), so the lowest 4 tiers are **blacklisted** from future spawns — the
+in-hand and Next pieces are **re-rolled** off any blacklisted tier (`BallQueue.reroll` +
+`AimController.refreshQueue`), and any now-obsolete balls still on the board are **drained
+together into Zone B** in one synchronized slide
+(`Board.takeBallsBelow` + `ZoneASystem.drainBlacklisted`, emitting `BALL_DROPPED` per ball when
+its slide lands — mirroring Zone C's up-front `ZONE_B_BUSY` so the emptying board can't read as
+a stalemate). Input + Zone C restore only once the ~1.2s zoom **and** the drain finish. The
+dedicated camera renders a Phaser **layer** of all Zone A gameplay; the
+main camera ignores that layer and the arena camera ignores the screen-space HUD/queue row, so
+the two never double-draw and the HUD stays full-size on top. Spawn row + death line scale with
+`s`. Zone C is locked during the tween via the `ARENA_ZOOM` event. A top-right **queue row** in
 `AimController` pairs the next-ball preview with the balls-left-to-drop count on one styled
-line. Zone A owns the run's game-over: both conditions —
+line; aiming maps the pointer through the arena camera (`getWorldPoint`) so it stays correct
+when zoomed. Zone A owns the run's game-over: both conditions —
 a ball resting above the death line for ~1s (overflow) and the stalemate (buffer 0 + Zone A
 empty + Zone B empty) — converge on one handler that pauses the whole Matter world and draws
 a single **full-screen** overlay showing `GAME OVER`, the final score (mirrored from the
-existing `SCORE_CHANGED` event), and a **RESTART** button that calls `scene.restart()`. A red
-`DeathLine` warning at `DEATH_LINE_Y` stays hidden until a ball rests within `WARN_BAND` of it
-(`Board` reports the danger transition; `isNearDeath` in `ballMath.ts` is the pure predicate).
-Game-over needs no contract event. Every dropped ball stamps `body.ballData` so Zone C can
-find it. The zone splits into `tuning.ts`, `ballMath.ts`, `BallFactory.ts`, `AimController.ts`,
-`Board.ts`, `DeathLine.ts`, plus the existing `BallQueue`/`MergeLogic`.
+existing `SCORE_CHANGED` event), and a **RESTART** button that calls `scene.restart()` (which
+resets the arena scale/camera/walls to `s=1`). A red `DeathLine` warning stays hidden until a
+ball rests within `WARN_BAND` of the (scaled) death line (`Board` reports the danger
+transition; `isNearDeath` in `ballMath.ts` is the pure predicate). Game-over needs no contract
+event. Every dropped ball stamps `body.ballData` so Zone C can find it. The zone splits into
+`tuning.ts`, `ballMath.ts`, `BallFactory.ts`, `AimController.ts`, `Board.ts`, `DeathLine.ts`,
+`ArenaView.ts`, plus the existing `BallQueue`/`MergeLogic`. The boundary walls + funnel floor
+now live in `ArenaView` (movable), not `GameScene` (which keeps only the off-screen bottom
+wall). `progression.json` is now **milestone-structured**: `ballWindow` holds at `[1,4]` through
+level 49, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 50-level milestone, and the
+`scoreBarTarget`s are rescaled to track the (powers-of-three, now much larger) per-window value
+magnitudes — both are starting numbers to tune by playtest.
 
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,
@@ -125,8 +155,12 @@ ball nearest the door by **edge distance** (Euclidean centre-to-mouth minus the 
 `ZONE_B_BUSY` up front (so Zone A's stalemate check can't misfire while the ball is
 mid-transit), removes the ball from Zone A by destroying its Matter.Image (the Board
 self-prunes off the DESTROY event), then runs a cosmetic **suck → pop** on a throwaway
-snapshot sprite (slide to the frozen column at the door, then a quick scale-up pop at the top
-of Zone B). Only when the pop lands does it emit `BALL_DROPPED` at the frozen `x`, so Zone B
+snapshot sprite (slide to the frozen column at the door, then a quick pop up to Zone B ball
+size). The snapshot starts at the ball's **apparent on-screen** position + size — `toApparent`
+maps Zone-A world coords through the `'arena'` camera (`worldView` + `zoom`), so after a
+milestone zoom-out the suck begins at the ball's shrunken on-screen size instead of the
+texture's full native size (and the arena camera is told to ignore the snapshot so it isn't
+double-drawn). Only when the pop lands does it emit `BALL_DROPPED` at the frozen `x`, so Zone B
 spawns a fresh fixed-radius (10px) ball of the same tier **exactly under the lit position**
 — deferring the emit avoids double-ball flicker, and the source ball's Zone-A size never
 carries over. The markers hide on lock and resume on `ZONE_B_EMPTY`. Frozen decisions:

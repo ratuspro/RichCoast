@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameEvent, type GameSystem } from '../core/contracts';
+import { GameEvent, tierToValue, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { isDebug } from '../core/DebugMode';
@@ -51,8 +51,7 @@ export class DebugHarness implements GameSystem {
 
   private drop(): void {
     const tier = Phaser.Math.Between(DROP_MIN_TIER, DROP_MAX_TIER);
-    const value = Math.pow(2, tier - 1);
-    this.bus.emit(GameEvent.BallDropped, { value, tier, x: Layout.zoneBEntry.x });
+    this.bus.emit(GameEvent.BallDropped, { value: tierToValue(tier), tier, x: Layout.zoneBEntry.x });
   }
 
   private buildUI(scene: Phaser.Scene): void {

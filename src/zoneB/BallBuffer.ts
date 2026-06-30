@@ -1,6 +1,10 @@
 export const BUFFER_INITIAL_COUNT = 20;
 export const BUFFER_REFILL_AMOUNT = 10;
-export const BUFFER_INITIAL_MILESTONE = 50;
+// Buffer refills as cumulative Zone B score crosses these escalating milestones. Since the
+// merge value ladder is now powers of three (values inflate fast), the first milestone is
+// scaled up so refills don't come trivially early; the multiplier keeps later ones in pace.
+// Starting point — tune by playtest.
+export const BUFFER_INITIAL_MILESTONE = 150;
 export const BUFFER_MILESTONE_MULTIPLIER = 2.5;
 
 export class BallBuffer {

@@ -20,26 +20,31 @@ export const SPAWN_Y = 68;
  *  REST_MS ends the run (see ballMath.isRestingAbove / isOverflow). */
 export const DEATH_LINE_Y = 96;
 
-/** Ball radius per tier; index = tier-1. Must have TIER_COUNT (10) entries.
- *  tier-10 diameter 156 < 390 (fits across); tier-4 radius 26 < SPAWN_Y (clears ceiling). */
+/** Ball radius for the base tier table; index = tier-1. Has TIER_COUNT (10) entries.
+ *  tier-10 diameter 156 < 390 (fits the base arena); tier-4 radius 26 < SPAWN_Y (clears ceiling).
+ *  Merges are uncapped, so tiers past the table grow geometrically — see RADIUS_GROWTH. */
 export const RADII: readonly number[] = [13, 17, 21, 26, 32, 39, 47, 56, 66, 78];
+
+/** Per-tier radius multiplier beyond the base table (≈ the table's own top step, 78/66).
+ *  radiusForTier(tier > 10) = RADII[last] * RADIUS_GROWTH^(tier-10). */
+export const RADIUS_GROWTH = 1.18;
 
 // --- Physics --------------------------------------------------------------
 
 /** Surface friction grows with tier: FRICTION_BASE + FRICTION_STEP*(tier-1), clamped. */
-export const FRICTION_BASE = 0.08;
+export const FRICTION_BASE = 0.4;
 export const FRICTION_STEP = 0.025;
-export const FRICTION_MAX = 0.25;
+export const FRICTION_MAX = 0.5;
 
 /** Constant friction terms applied to every ball. */
 export const FRICTION_AIR = 0.01;
 export const FRICTION_STATIC = 0.1;
 
 /** Uniform density — Matter derives mass from density*area, so bigger tier = heavier. */
-export const DENSITY = 0.001;
+export const DENSITY = 0.02;
 
 /** Restitution (bounciness). Modest, so balls settle but still bounce/roll a little. */
-export const RESTITUTION = 0.1;
+export const RESTITUTION = 0.2;
 
 // --- Merge blast ----------------------------------------------------------
 

@@ -22,7 +22,7 @@
         4
       ],
       "bufferCapacity": 4,
-      "scoreBarTarget": 10,
+      "scoreBarTarget": 30,
       "bufferBalls": [
         1,
         2,
@@ -37,7 +37,7 @@
         4
       ],
       "bufferCapacity": 4,
-      "scoreBarTarget": 10,
+      "scoreBarTarget": 40,
       "bufferBalls": [
         2,
         1,
@@ -52,7 +52,7 @@
         4
       ],
       "bufferCapacity": 4,
-      "scoreBarTarget": 15,
+      "scoreBarTarget": 55,
       "bufferBalls": [
         1,
         2,
@@ -67,7 +67,7 @@
         4
       ],
       "bufferCapacity": 4,
-      "scoreBarTarget": 20,
+      "scoreBarTarget": 70,
       "bufferBalls": [
         2,
         3,
@@ -78,74 +78,74 @@
     {
       "fromLevel": 10,
       "ballWindow": [
-        2,
-        5
+        1,
+        4
       ],
       "bufferCapacity": 4,
-      "scoreBarTarget": 35
+      "scoreBarTarget": 110
     },
     {
       "fromLevel": 15,
       "ballWindow": [
-        2,
-        5
+        1,
+        4
       ],
       "bufferCapacity": 5,
-      "scoreBarTarget": 50
+      "scoreBarTarget": 150
     },
     {
       "fromLevel": 20,
       "ballWindow": [
-        3,
-        6
+        1,
+        4
       ],
       "bufferCapacity": 5,
-      "scoreBarTarget": 70
+      "scoreBarTarget": 195
     },
     {
       "fromLevel": 25,
       "ballWindow": [
-        3,
-        6
+        1,
+        4
       ],
       "bufferCapacity": 5,
-      "scoreBarTarget": 90
+      "scoreBarTarget": 235
     },
     {
       "fromLevel": 30,
       "ballWindow": [
-        3,
-        6
+        1,
+        4
       ],
       "bufferCapacity": 6,
-      "scoreBarTarget": 115
+      "scoreBarTarget": 275
     },
     {
       "fromLevel": 35,
       "ballWindow": [
-        4,
-        7
+        1,
+        4
       ],
       "bufferCapacity": 6,
-      "scoreBarTarget": 140
+      "scoreBarTarget": 320
     },
     {
       "fromLevel": 40,
       "ballWindow": [
-        4,
-        7
+        1,
+        4
       ],
       "bufferCapacity": 6,
-      "scoreBarTarget": 170
+      "scoreBarTarget": 370
     },
     {
       "fromLevel": 50,
       "ballWindow": [
-        4,
-        7
+        5,
+        8
       ],
       "bufferCapacity": 7,
-      "scoreBarTarget": 210
+      "scoreBarTarget": 2400
     },
     {
       "fromLevel": 60,
@@ -154,7 +154,7 @@
         8
       ],
       "bufferCapacity": 7,
-      "scoreBarTarget": 260
+      "scoreBarTarget": 5000
     },
     {
       "fromLevel": 70,
@@ -163,7 +163,7 @@
         8
       ],
       "bufferCapacity": 7,
-      "scoreBarTarget": 315
+      "scoreBarTarget": 9000
     },
     {
       "fromLevel": 80,
@@ -172,70 +172,79 @@
         8
       ],
       "bufferCapacity": 8,
-      "scoreBarTarget": 380
+      "scoreBarTarget": 16000
     },
     {
       "fromLevel": 90,
       "ballWindow": [
-        6,
-        9
+        5,
+        8
       ],
       "bufferCapacity": 8,
-      "scoreBarTarget": 450
+      "scoreBarTarget": 26000
     },
     {
       "fromLevel": 100,
       "ballWindow": [
-        6,
-        9
+        9,
+        12
       ],
       "bufferCapacity": 8,
-      "scoreBarTarget": 530
+      "scoreBarTarget": 200000
     },
     {
       "fromLevel": 120,
       "ballWindow": [
-        6,
-        9
+        9,
+        12
       ],
       "bufferCapacity": 9,
-      "scoreBarTarget": 640
+      "scoreBarTarget": 600000
     },
     {
       "fromLevel": 140,
       "ballWindow": [
-        7,
-        10
+        9,
+        12
       ],
       "bufferCapacity": 9,
-      "scoreBarTarget": 770
+      "scoreBarTarget": 1500000
+    },
+    {
+      "fromLevel": 150,
+      "ballWindow": [
+        13,
+        16
+      ],
+      "bufferCapacity": 9,
+      "scoreBarTarget": 8000000
     },
     {
       "fromLevel": 160,
       "ballWindow": [
-        7,
-        10
+        13,
+        16
       ],
       "bufferCapacity": 9,
-      "scoreBarTarget": 920
+      "scoreBarTarget": 16000000
     },
     {
       "fromLevel": 180,
       "ballWindow": [
-        7,
-        10
+        13,
+        16
       ],
       "bufferCapacity": 10,
-      "scoreBarTarget": 1100
+      "scoreBarTarget": 40000000
     },
     {
       "fromLevel": 200,
       "ballWindow": [
-        7,
-        10
+        17,
+        20
       ],
       "bufferCapacity": 10,
-      "scoreBarTarget": 1300
+      "scoreBarTarget": 1300000000
     }
   ]
 }

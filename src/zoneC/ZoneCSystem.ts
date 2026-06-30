@@ -14,6 +14,8 @@ const SWEEP_MS = 1100;
 const SWEEP_MARGIN = 18;
 /** Number of evenly-spaced positions the lit marker steps between. */
 const SWEEP_POSITIONS = 9;
+/** On-screen size the suck snapshot lands at — matches Zone B's fixed ball (radius 10). */
+const ZONE_B_BALL_PX = 20;
 /** Per-position dwell so one leg (8 steps) == SWEEP_MS, keeping the old cadence. */
 const STEP_MS = SWEEP_MS / (SWEEP_POSITIONS - 1);
 
@@ -47,6 +49,8 @@ interface BallBody {
  */
 export class ZoneCSystem implements GameSystem {
   private locked = false;
+  /** Separate lock raised while Zone A's milestone zoom-out animates (ArenaZoom event). */
+  private zoomLocked = false;
   private scene?: Phaser.Scene;
   private door?: Phaser.GameObjects.Rectangle;
   /** The nine dim position markers; the active one glows. */
@@ -70,6 +74,14 @@ export class ZoneCSystem implements GameSystem {
     // Cooldown: locked while Zone B has balls in flight, re-armed when it's empty.
     this.bus.on(GameEvent.ZoneBBusy, () => this.setLocked(true));
     this.bus.on(GameEvent.ZoneBEmpty, () => this.setLocked(false));
+
+    // Freeze the door for the duration of a Zone A milestone zoom-out (composes with the
+    // Zone-B-driven lock, so neither source clobbers the other).
+    this.bus.on(GameEvent.ArenaZoom, ({ active }) => {
+      this.zoomLocked = active;
+      if (!active) this.sweepT = 0; // restart the sweep from the edge when the zoom lands
+      this.refreshDoor();
+    });
 
     const r = Layout.zoneC;
     this.door = scene.add
@@ -112,9 +124,14 @@ export class ZoneCSystem implements GameSystem {
    * sweep always reappears the instant Zone B clears (`locked` → false), self-healing
    * regardless of how the busy/empty events interleave.
    */
+  /** True when the door is held — by Zone B activity OR an in-progress arena zoom-out. */
+  private isLocked(): boolean {
+    return this.locked || this.zoomLocked;
+  }
+
   update(_time: number, delta: number): void {
     if (this.dots.length === 0) return;
-    if (this.locked) {
+    if (this.isLocked()) {
       for (const dot of this.dots) dot.setVisible(false);
       this.styledIndex = -1; // force a restyle on re-arm
       return;
@@ -133,7 +150,7 @@ export class ZoneCSystem implements GameSystem {
   }
 
   private onTap(): void {
-    if (this.locked) return;
+    if (this.isLocked()) return;
 
     const ball = this.findNearestBall();
     if (!ball?.ballData) return; // nothing to suck yet (e.g. Zone A still empty)
@@ -149,10 +166,13 @@ export class ZoneCSystem implements GameSystem {
     this.bus.emit(GameEvent.ZoneBBusy);
 
     const { value, tier } = ball.ballData;
-    const startX = ball.position.x;
-    const startY = ball.position.y;
     const image = ball.gameObject as Phaser.GameObjects.Image | undefined;
     const texKey = image?.texture?.key;
+
+    // Capture how the ball actually appears on screen BEFORE destroying it: Zone A's camera may
+    // be zoomed out (post-milestone), so the ball sits smaller and offset from its world coords.
+    const worldDiameter = (ball.circleRadius ?? ZONE_B_BALL_PX / 2) * 2;
+    const start = this.toApparent(ball.position.x, ball.position.y, worldDiameter);
 
     // Remove the ball from Zone A by destroying its image — the Board self-prunes its
     // registry off the image's DESTROY event (see Board.register).
@@ -160,7 +180,28 @@ export class ZoneCSystem implements GameSystem {
 
     Sfx.transition();
     // Cosmetic suck → spawn pop → hand off to Zone B at the frozen column.
-    this.playSuck(startX, startY, texKey, value, tier, spawnX);
+    this.playSuck(start, texKey, value, tier, spawnX);
+  }
+
+  /**
+   * Map a Zone-A ball's world position + size to how it appears on screen. Zone A's dedicated
+   * camera may be zoomed out (after a milestone), so a ball sits smaller and offset from its
+   * world coords; the suck snapshot rides the MAIN camera into Zone B, so it must start from
+   * the on-screen spot/size. With no arena camera (e.g. ?zone=b) world == screen.
+   */
+  private toApparent(
+    worldX: number,
+    worldY: number,
+    worldSize: number,
+  ): { x: number; y: number; size: number } {
+    const cam = this.scene?.cameras.getCamera('arena');
+    if (!cam) return { x: worldX, y: worldY, size: worldSize };
+    const view = cam.worldView;
+    return {
+      x: cam.x + (worldX - view.x) * cam.zoom,
+      y: cam.y + (worldY - view.y) * cam.zoom,
+      size: worldSize * cam.zoom,
+    };
   }
 
   /**
@@ -171,8 +212,7 @@ export class ZoneCSystem implements GameSystem {
    * there's no sprite to animate we still hand the ball off so Zone B isn't starved.
    */
   private playSuck(
-    x: number,
-    y: number,
+    start: { x: number; y: number; size: number },
     texKey: string | undefined,
     value: number,
     tier: number,
@@ -185,19 +225,25 @@ export class ZoneCSystem implements GameSystem {
     }
 
     const mouthY = Layout.zoneC.y + Layout.zoneC.height / 2;
-    const sprite = scene.add.image(x, y, texKey).setDepth(800);
+    const sprite = scene.add.image(start.x, start.y, texKey).setDepth(800);
+    sprite.setDisplaySize(start.size, start.size); // start at the ball's true on-screen size
+    // The sprite rides the main camera into Zone B; keep the arena camera from double-drawing it.
+    scene.cameras.getCamera('arena')?.ignore(sprite);
+
     scene.tweens.add({
       targets: sprite,
       x: spawnX,
       y: mouthY,
-      scale: 0.4,
+      displayWidth: ZONE_B_BALL_PX * 0.5,
+      displayHeight: ZONE_B_BALL_PX * 0.5,
       duration: SUCK_MS,
       ease: 'Cubic.easeIn',
       onComplete: () => {
         sprite.setPosition(spawnX, Layout.zoneBEntry.y);
         scene.tweens.add({
           targets: sprite,
-          scale: 1,
+          displayWidth: ZONE_B_BALL_PX,
+          displayHeight: ZONE_B_BALL_PX,
           duration: POP_MS,
           ease: 'Back.easeOut',
           onComplete: () => {
@@ -253,7 +299,8 @@ export class ZoneCSystem implements GameSystem {
 
   private refreshDoor(): void {
     // Armed = blue, locked = dim red.
-    this.door?.setFillStyle(this.locked ? 0x3a1d1d : 0x1d2740);
-    this.door?.setStrokeStyle(2, this.locked ? 0xd55a5a : 0x3a7bd5);
+    const locked = this.isLocked();
+    this.door?.setFillStyle(locked ? 0x3a1d1d : 0x1d2740);
+    this.door?.setStrokeStyle(2, locked ? 0xd55a5a : 0x3a7bd5);
   }
 }

@@ -1,14 +1,28 @@
-import type Phaser from 'phaser';
-import { GameEvent, type GameSystem } from '../core/contracts';
+import Phaser from 'phaser';
+import { GameEvent, tierToValue, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { Sfx } from '../core/Sfx';
 import { getStage, type ProgressionStage } from '../core/Progression';
 import { AimController } from './AimController';
+import { ArenaView } from './ArenaView';
 import { BallFactory } from './BallFactory';
 import { BallQueue } from './BallQueue';
 import { Board } from './Board';
 import { DeathLine } from './DeathLine';
+
+/** Levels between arena zoom-out milestones (50, 100, 150, …). The draw-window *shift-ups* in
+ *  `progression.json` MUST land on these same levels — the milestone reads the new window's floor
+ *  (`stage.ballWindow[0]`) as its blacklist threshold, so a window that steps between milestones
+ *  would desync the scale/blacklist from the spawn pool. */
+const MILESTONE_EVERY = 50;
+
+/** Blacklist-drain: how long each snapshot slides from Zone A down into Zone B (ms). */
+const DRAIN_MS = 280;
+/** On-screen size a drained snapshot lands at — matches Zone B's fixed ball (radius 10). */
+const ZONE_B_BALL_PX = 20;
+/** Keep drained columns a touch inside the Zone B side walls. */
+const DRAIN_MARGIN = 12;
 
 /**
  * A stalemate must persist this long before the run actually ends. Balls hand off between
@@ -20,9 +34,11 @@ const STALEMATE_GRACE_MS = 250;
 
 export class ZoneASystem implements GameSystem {
   private scene?: Phaser.Scene;
+  private arena?: ArenaView;
   private board?: Board;
   private aim?: AimController;
   private deathLine?: DeathLine;
+  private queue?: BallQueue;
   private over = false;
 
   private internalLevel = 1;
@@ -35,21 +51,28 @@ export class ZoneASystem implements GameSystem {
 
   create(scene: Phaser.Scene): void {
     this.scene = scene;
-    this.deathLine = new DeathLine(scene);
-    const factory = new BallFactory(scene);
+
+    const arena = new ArenaView(scene);
+    arena.create();
+    this.arena = arena;
+
+    const factory = new BallFactory(scene, (img) => arena.claim(img));
+    this.deathLine = new DeathLine(scene, arena);
 
     const queue = new BallQueue();
+    this.queue = queue;
     const initialStage = getStage(this.internalLevel);
     this.applyStage(initialStage, queue);
 
     const board = new Board(
       scene,
       factory,
+      arena,
       () => this.handleGameOver(),
       () => this.checkLoss(),
       (near) => this.deathLine?.setDanger(near),
     );
-    const aim = new AimController(scene, factory, (x, tier) => {
+    const aim = new AimController(scene, factory, arena, (x, tier) => {
       board.spawnDropped(x, tier);
       this.onBallDropped();
       Sfx.drop();
@@ -66,7 +89,6 @@ export class ZoneASystem implements GameSystem {
       this.internalLevel += 1;
       const stage = getStage(this.internalLevel);
       this.applyStage(stage, queue);
-      this.aim?.setDropLocked(false);
       this.emitBuffer();
       this.bus.emit(GameEvent.ProgressionChanged, {
         level: this.internalLevel,
@@ -75,6 +97,11 @@ export class ZoneASystem implements GameSystem {
         bufferCapacity: stage.bufferCapacity,
         scoreBarTarget: stage.scoreBarTarget,
       });
+      // Every MILESTONE_EVERY levels the arena zooms out (input frozen during the tween) and
+      // the draw window jumps up, blacklisting the lowest tiers; otherwise just lift the
+      // buffer-empty drop lock as before. The new window's floor is the blacklist threshold.
+      if (this.internalLevel % MILESTONE_EVERY === 0) this.beginMilestoneZoom(stage.ballWindow[0]);
+      else this.aim?.setDropLocked(false);
     });
 
     this.bus.on(GameEvent.ZoneBBusy,  () => { this.zoneBEmpty = false; });
@@ -93,6 +120,81 @@ export class ZoneASystem implements GameSystem {
     this.aim?.destroy();
     this.board?.destroy();
     this.deathLine?.destroy();
+    this.arena?.destroy();
+  }
+
+  /**
+   * Run a milestone zoom-out: freeze Zone A input and lock Zone C (via the ArenaZoom event),
+   * grow the arena + tween the camera, then — once it settles — drain the freshly-blacklisted
+   * tiers into Zone B and only restore input/Zone C when that finishes. The death line and aim
+   * ball are re-seated to the grown arena up front so they animate with the camera.
+   */
+  private beginMilestoneZoom(newMinTier: number): void {
+    this.aim?.setFrozen(true);
+    // The window already shifted up (applyStage); re-roll the in-hand + Next pieces off any
+    // now-blacklisted tiers and refresh the queue row so it shows valid tiers when input returns.
+    this.queue?.reroll();
+    this.aim?.refreshQueue();
+    this.bus.emit(GameEvent.ArenaZoom, { active: true });
+    this.arena?.grow(() => {
+      this.drainBlacklisted(newMinTier, () => {
+        this.aim?.setFrozen(false);
+        this.aim?.setDropLocked(false);
+        this.bus.emit(GameEvent.ArenaZoom, { active: false });
+      });
+    });
+    this.deathLine?.reposition();
+    this.aim?.syncToArena();
+  }
+
+  /**
+   * Drain every board ball below the new draw-window floor into Zone B in one synchronized
+   * slide. Mirrors Zone C's handoff: signal Zone B busy up front (so the emptying board can't
+   * read as a stalemate), animate a throwaway snapshot of each ball from where it appears on
+   * screen down to the Zone B entry, then emit BALL_DROPPED for it when its slide lands.
+   */
+  private drainBlacklisted(minTier: number, onDone: () => void): void {
+    const scene = this.scene;
+    const arena = this.arena;
+    const board = this.board;
+    if (!scene || !arena || !board) { onDone(); return; }
+
+    const drained = board.takeBallsBelow(minTier);
+    if (drained.length === 0) { onDone(); return; }
+
+    // Up-front busy so the (now emptier) board can't be read as a stalemate mid-drain.
+    this.bus.emit(GameEvent.ZoneBBusy);
+    Sfx.transition();
+
+    const minX = Layout.zoneB.x + DRAIN_MARGIN;
+    const maxX = Layout.zoneB.x + Layout.zoneB.width - DRAIN_MARGIN;
+    let remaining = drained.length;
+
+    for (const d of drained) {
+      const start = arena.screenPoint(d.x, d.y);
+      const size = d.worldDiameter * arena.viewScale;
+      const targetX = Phaser.Math.Clamp(start.x, minX, maxX);
+      const tier = d.tier;
+
+      const sprite = scene.add.image(start.x, start.y, d.texKey).setDepth(800);
+      sprite.setDisplaySize(size, size);
+      arena.ignoreOnArenaCamera(sprite); // it leaves the arena into Zone B — main camera only
+
+      scene.tweens.add({
+        targets: sprite,
+        x: targetX,
+        y: Layout.zoneBEntry.y,
+        displayWidth: ZONE_B_BALL_PX,
+        displayHeight: ZONE_B_BALL_PX,
+        duration: DRAIN_MS,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          this.bus.emit(GameEvent.BallDropped, { value: tierToValue(tier), tier, x: targetX });
+          sprite.destroy();
+          if (--remaining === 0) onDone();
+        },
+      });
+    }
   }
 
   private applyStage(stage: ProgressionStage, queue: BallQueue): void {

@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import * as Layout from '../core/Layout';
 import { clampSpawnX, radiusForTier } from './ballMath';
+import type { ArenaView } from './ArenaView';
 import { BallQueue } from './BallQueue';
 import type { BallFactory } from './BallFactory';
-import { DROP_COOLDOWN_MS, SPAWN_Y } from './tuning';
+import { DROP_COOLDOWN_MS } from './tuning';
 
 // One coherent top-right queue row: `NEXT (o)  N left`. The preview ball is the icon;
 // the count sits on the far right, clear of the centred score. Shared type treatment.
@@ -38,13 +39,15 @@ export class AimController {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly factory: BallFactory,
+    private readonly arena: ArenaView,
     private readonly onDrop: (x: number, tier: number) => void,
     queue?: BallQueue,
   ) {
     this.queue = queue ?? new BallQueue();
     this.aimImage = scene.add
-      .image(this.aimX, SPAWN_Y, factory.ensureTexture(this.queue.peek()))
+      .image(this.aimX, arena.spawnY, factory.ensureTexture(this.queue.peek()))
       .setDepth(10);
+    arena.claim(this.aimImage); // zooms with the arena via the dedicated camera
 
     this.previewLabel = scene.add
       .text(LABEL_X, ROW_Y, 'NEXT', {
@@ -69,6 +72,10 @@ export class AimController {
       .setDepth(20)
       .setVisible(false);
 
+    // The queue row is screen-space chrome — keep it out of the zoomed arena camera so it
+    // doesn't render tiny inside the playfield once the arena grows.
+    arena.ignoreOnArenaCamera([this.previewImage, this.previewLabel, this.countText]);
+
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown);
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove);
     scene.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp);
@@ -90,6 +97,30 @@ export class AimController {
   }
 
   /**
+   * Reversible freeze for the milestone zoom-out: block aiming AND dropping and hide the aim
+   * ball, then restore it — unlike `disable()`, which is the permanent game-over lock.
+   */
+  setFrozen(on: boolean): void {
+    this.frozen = on;
+    this.dragging = false;
+    this.aimImage.setVisible(!on);
+  }
+
+  /** Re-clamp the aim ball to the (possibly grown) arena and re-seat it on the new spawn row. */
+  syncToArena(): void {
+    this.moveAimTo(this.aimX);
+  }
+
+  /**
+   * Re-read the queue's current + next tiers into the aim ball and preview. Called after a
+   * milestone re-rolls the queue (the in-hand/preview balls may have been blacklisted), so the
+   * row shows valid tiers when input returns. Does not pop — only refreshes visuals.
+   */
+  refreshQueue(): void {
+    this.syncQueueVisuals();
+  }
+
+  /**
    * Soft-lock: block drops without hiding the aim ball or disabling aiming.
    * Used when the ball buffer is empty but Zone B may still save the run.
    */
@@ -98,6 +129,7 @@ export class AimController {
   }
 
   private dropLocked = false;
+  private frozen = false;
 
   destroy(): void {
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown);
@@ -111,16 +143,16 @@ export class AimController {
   }
 
   private onPointerDown = (pointer: Phaser.Input.Pointer): void => {
-    if (this.disabled) return;
+    if (this.disabled || this.frozen) return;
     if (pointer.y > Layout.zoneA.height) return; // a tap on Zone C's door / Zone B, not us
     if (this.scene.time.now < this.dropReadyAt) return; // brief post-drop cooldown
     this.dragging = true;
-    this.moveAimTo(pointer.x);
+    this.moveAimTo(this.aimXFromPointer(pointer));
   };
 
   private onPointerMove = (pointer: Phaser.Input.Pointer): void => {
     if (!this.dragging) return;
-    this.moveAimTo(pointer.x);
+    this.moveAimTo(this.aimXFromPointer(pointer));
   };
 
   private onPointerUp = (): void => {
@@ -132,21 +164,31 @@ export class AimController {
     this.dropReadyAt = this.scene.time.now + DROP_COOLDOWN_MS;
   };
 
+  /** Map a screen pointer to an arena-world x — correct under the zoomed/scrolled camera. */
+  private aimXFromPointer(pointer: Phaser.Input.Pointer): number {
+    return this.arena.worldPoint(pointer.x, pointer.y).x;
+  }
+
   private moveAimTo(x: number): void {
-    this.aimX = clampSpawnX(x, radiusForTier(this.queue.peek()), 0, Layout.WIDTH);
-    this.aimImage.setX(this.aimX);
+    this.aimX = clampSpawnX(x, radiusForTier(this.queue.peek()), this.arena.minX, this.arena.maxX);
+    this.aimImage.setPosition(this.aimX, this.arena.spawnY);
   }
 
   private advanceQueue(): void {
     this.queue.pop();
-    const nextTier = this.queue.peek();
-    const nextDiameter = radiusForTier(nextTier) * 2;
+    this.syncQueueVisuals();
+  }
+
+  /** Point the aim ball + preview at the queue's current/next tiers and re-clamp for the radius. */
+  private syncQueueVisuals(): void {
+    const currentTier = this.queue.peek();
+    const diameter = radiusForTier(currentTier) * 2;
     this.aimImage
-      .setTexture(this.factory.ensureTexture(nextTier))
-      .setDisplaySize(nextDiameter, nextDiameter);
+      .setTexture(this.factory.ensureTexture(currentTier))
+      .setDisplaySize(diameter, diameter);
     this.previewImage
       .setTexture(this.factory.ensureTexture(this.queue.peekNext()))
       .setDisplaySize(PREVIEW_SIZE, PREVIEW_SIZE);
-    this.moveAimTo(this.aimX); // re-clamp for the new tier's radius
+    this.moveAimTo(this.aimX); // re-clamp for the current tier's radius
   }
 }
