@@ -145,7 +145,8 @@
         8
       ],
       "bufferCapacity": 7,
-      "scoreBarTarget": 2400
+      "scoreBarTarget": 2400,
+      "tightness": 0.92
     },
     {
       "fromLevel": 60,
@@ -190,7 +191,8 @@
         12
       ],
       "bufferCapacity": 8,
-      "scoreBarTarget": 200000
+      "scoreBarTarget": 200000,
+      "tightness": 1.05
     },
     {
       "fromLevel": 120,
@@ -217,7 +219,8 @@
         16
       ],
       "bufferCapacity": 9,
-      "scoreBarTarget": 8000000
+      "scoreBarTarget": 8000000,
+      "tightness": 0.85
     },
     {
       "fromLevel": 160,
@@ -244,7 +247,8 @@
         20
       ],
       "bufferCapacity": 10,
-      "scoreBarTarget": 1300000000
+      "scoreBarTarget": 1300000000,
+      "tightness": 1.05
     }
   ]
 }

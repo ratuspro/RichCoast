@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { GameSystem } from '../core/contracts';
+import { Theme } from '../core/Theme';
 import type { CollectorDef } from './zoneLayout';
 import { getBallData, getBallImage, CAT_COLLECTOR, CAT_BALL } from './ZoneBBall';
 
@@ -34,15 +35,15 @@ export class CollectorSystem implements GameSystem {
       });
       this.collectorBodies.set(body, def);
 
-      // Visual: a semi-transparent filled rect with ×N label
+      // Visual: the mouth of a toy collection crate — shadowed wood fill, brass rim.
       scene.add
-        .rectangle(cx, cy, def.width, def.height, 0x44ff88, 0.25)
-        .setStrokeStyle(1, 0x44ff88)
+        .rectangle(cx, cy, def.width, def.height, Theme.pineDark, 0.4)
+        .setStrokeStyle(2, Theme.brass)
         .setDepth(4);
       if (def.scoreMultiplier !== 1) {
         scene.add
           .text(cx, cy, `×${def.scoreMultiplier}`, {
-            fontFamily: 'monospace', fontSize: '11px', color: '#44ff88',
+            fontFamily: 'monospace', fontSize: '11px', color: '#3f3428', // Theme.ink
           })
           .setOrigin(0.5)
           .setDepth(5);

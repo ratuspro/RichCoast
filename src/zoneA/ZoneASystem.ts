@@ -2,10 +2,13 @@ import Phaser from 'phaser';
 import { GameEvent, tierToValue, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
+import { hexColor } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
+import { Theme } from '../core/Theme';
 import { getStage, type ProgressionStage } from '../core/Progression';
 import { AimController } from './AimController';
 import { ArenaView } from './ArenaView';
+import { neutralGrowth } from './ballMath';
 import { BallFactory } from './BallFactory';
 import { BallQueue } from './BallQueue';
 import { Board } from './Board';
@@ -97,11 +100,23 @@ export class ZoneASystem implements GameSystem {
         bufferCapacity: stage.bufferCapacity,
         scoreBarTarget: stage.scoreBarTarget,
       });
-      // Every MILESTONE_EVERY levels the arena zooms out (input frozen during the tween) and
-      // the draw window jumps up, blacklisting the lowest tiers; otherwise just lift the
-      // buffer-empty drop lock as before. The new window's floor is the blacklist threshold.
-      if (this.internalLevel % MILESTONE_EVERY === 0) this.beginMilestoneZoom(stage.ballWindow[0]);
-      else this.aim?.setDropLocked(false);
+      // Every MILESTONE_EVERY levels the draw window jumps up, blacklisting the lowest
+      // tiers, and the arena zooms out (input frozen during the tween) by the neutral
+      // ball-growth match × the stage's authored tightness — so apparent ball size holds
+      // constant at tightness 1 and the arena-to-ball headroom is exactly the tightness
+      // rhythm authored in progression.json. Past the last authored window shift the stage
+      // stops moving, so milestones become plain levels (no growth — the tail self-heals).
+      // Otherwise just lift the buffer-empty drop lock as before.
+      const prev = getStage(this.internalLevel - 1);
+      const shifted =
+        stage.ballWindow[0] !== prev.ballWindow[0] || stage.ballWindow[1] !== prev.ballWindow[1];
+      if (this.internalLevel % MILESTONE_EVERY === 0 && shifted) {
+        const factor =
+          neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
+        this.beginMilestoneZoom(factor, stage.ballWindow[0]);
+      } else {
+        this.aim?.setDropLocked(false);
+      }
     });
 
     this.bus.on(GameEvent.ZoneBBusy,  () => { this.zoneBEmpty = false; });
@@ -129,14 +144,14 @@ export class ZoneASystem implements GameSystem {
    * tiers into Zone B and only restore input/Zone C when that finishes. The death line and aim
    * ball are re-seated to the grown arena up front so they animate with the camera.
    */
-  private beginMilestoneZoom(newMinTier: number): void {
+  private beginMilestoneZoom(factor: number, newMinTier: number): void {
     this.aim?.setFrozen(true);
     // The window already shifted up (applyStage); re-roll the in-hand + Next pieces off any
     // now-blacklisted tiers and refresh the queue row so it shows valid tiers when input returns.
     this.queue?.reroll();
     this.aim?.refreshQueue();
     this.bus.emit(GameEvent.ArenaZoom, { active: true });
-    this.arena?.grow(() => {
+    this.arena?.grow(factor, () => {
       this.drainBlacklisted(newMinTier, () => {
         this.aim?.setFrozen(false);
         this.aim?.setDropLocked(false);
@@ -252,14 +267,14 @@ export class ZoneASystem implements GameSystem {
     const cy = Layout.HEIGHT / 2;
 
     scene.add
-      .rectangle(cx, cy, Layout.WIDTH, Layout.HEIGHT, 0x0b0d12, 0.82)
+      .rectangle(cx, cy, Layout.WIDTH, Layout.HEIGHT, Theme.scrim, 0.85)
       .setDepth(2000);
 
     scene.add
       .text(cx, cy - 80, 'GAME OVER', {
         fontFamily: 'monospace',
         fontSize: '40px',
-        color: '#ff6d6d',
+        color: hexColor(Theme.brassBright),
         fontStyle: 'bold',
         align: 'center',
       })
@@ -270,7 +285,7 @@ export class ZoneASystem implements GameSystem {
       .text(cx, cy - 20, `Score: ${this.score}`, {
         fontFamily: 'monospace',
         fontSize: '24px',
-        color: '#ffffff',
+        color: hexColor(Theme.cream),
         align: 'center',
       })
       .setOrigin(0.5)
@@ -283,8 +298,8 @@ export class ZoneASystem implements GameSystem {
     const width = 200;
     const height = 56;
     const button = scene.add
-      .rectangle(cx, cy, width, height, 0x2a3346)
-      .setStrokeStyle(2, 0x4cc9f0)
+      .rectangle(cx, cy, width, height, Theme.pineDark)
+      .setStrokeStyle(2, Theme.brassBright)
       .setDepth(2001)
       .setInteractive({ useHandCursor: true });
 
@@ -292,7 +307,7 @@ export class ZoneASystem implements GameSystem {
       .text(cx, cy, 'RESTART', {
         fontFamily: 'monospace',
         fontSize: '22px',
-        color: '#ffffff',
+        color: hexColor(Theme.cream),
         fontStyle: 'bold',
       })
       .setOrigin(0.5)

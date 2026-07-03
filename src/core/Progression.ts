@@ -6,6 +6,12 @@ export interface ProgressionStage {
   bufferCapacity: number;
   scoreBarTarget: number;
   bufferBalls?: number[];
+  /**
+   * Milestone difficulty knob (default 1): multiplies the neutral arena-growth factor that
+   * would keep apparent ball size constant. <1 = arena grows less than the balls = tighter/
+   * harder; >1 = roomier breather. Only meaningful on stages whose ballWindow shifts.
+   */
+  tightness?: number;
 }
 
 const stages: ProgressionStage[] = (data.stages as ProgressionStage[])

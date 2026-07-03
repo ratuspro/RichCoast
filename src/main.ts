@@ -5,7 +5,7 @@ import { GameScene, parseZoneMode, ZONE_MODE_KEY } from './GameScene';
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  backgroundColor: '#0b0d12',
+  backgroundColor: '#f2e7d5', // Theme.paper (config wants a string, so not imported)
   // Render at the design resolution and letterbox-fit it to any device, centered.
   scale: {
     mode: Phaser.Scale.FIT,

@@ -1,4 +1,5 @@
 import { TIER_COUNT } from '../core/contracts';
+import { materialForTier } from '../core/Materials';
 import { FRICTION_BASE, FRICTION_MAX, FRICTION_STEP, RADII, RADIUS_GROWTH } from './tuning';
 
 /**
@@ -30,10 +31,22 @@ export function radiusForTier(tier: number): number {
   return RADII[RADII.length - 1] * RADIUS_GROWTH ** (tier - RADII.length);
 }
 
-/** Surface friction for a tier — grows with tier, clamped to FRICTION_MAX. */
+/**
+ * Arena growth factor for a milestone whose draw window's *max* tier moved
+ * `oldMaxTier → newMaxTier`. Growing the arena by exactly this keeps the window-max ball's
+ * apparent on-screen size constant (the camera zoom is 1/scale), so a per-milestone
+ * `tightness` multiplier applied on top is the precise change in worst-case headroom
+ * (<1 = tighter/harder, >1 = roomier). An unshifted window yields 1 — no growth.
+ */
+export function neutralGrowth(oldMaxTier: number, newMaxTier: number): number {
+  return radiusForTier(newMaxTier) / radiusForTier(oldMaxTier);
+}
+
+/** Surface friction for a tier: the size ramp (grows with tier, clamped to
+ *  FRICTION_MAX) shaped by the tier's material feel — metals slide, gems slip. */
 export function frictionForTier(tier: number): number {
   const raw = FRICTION_BASE + FRICTION_STEP * (clampTier(tier) - 1);
-  return Math.min(raw, FRICTION_MAX);
+  return Math.min(raw, FRICTION_MAX) * materialForTier(tier).def.physics.frictionMult;
 }
 
 /** Clamp a spawn X so a ball of `radius` stays fully within [minX, maxX]. */

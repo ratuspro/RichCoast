@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TIER_COUNT } from '../core/contracts';
 import { WIDTH } from '../core/Layout';
+import { getStage } from '../core/Progression';
+import { MATERIAL_COUNT, materialForTier } from '../core/Materials';
 import {
   BLAST_RADIUS,
   BLAST_STRENGTH,
@@ -8,7 +10,6 @@ import {
   FRICTION_MAX,
   RADII,
   SPAWN_Y,
-  TIER_COLORS,
   WARN_BAND,
 } from './tuning';
 import {
@@ -19,6 +20,7 @@ import {
   isOverflow,
   isRestingAbove,
   midpoint,
+  neutralGrowth,
   nextRestMs,
   radiusForTier,
 } from './ballMath';
@@ -26,7 +28,8 @@ import {
 describe('tuning tables', () => {
   it('have exactly one entry per tier', () => {
     expect(RADII).toHaveLength(TIER_COUNT);
-    expect(TIER_COLORS).toHaveLength(TIER_COUNT);
+    // The look ladder is longer than the radius table; it must at least cover it.
+    expect(MATERIAL_COUNT).toBeGreaterThanOrEqual(TIER_COUNT);
   });
 
   it('place the spawn row above the death line', () => {
@@ -59,14 +62,65 @@ describe('radiusForTier', () => {
   });
 });
 
-describe('frictionForTier', () => {
-  it('is non-decreasing and bounded by [0, FRICTION_MAX]', () => {
-    for (let t = 1; t <= TIER_COUNT; t++) {
-      const f = frictionForTier(t);
-      expect(f).toBeGreaterThanOrEqual(0);
-      expect(f).toBeLessThanOrEqual(FRICTION_MAX);
-      if (t > 1) expect(f).toBeGreaterThanOrEqual(frictionForTier(t - 1));
+describe('neutralGrowth', () => {
+  it('matches the window-max radius ratio in the hand-table region ([1,4] → [5,8])', () => {
+    expect(neutralGrowth(4, 8)).toBeCloseTo(56 / 26, 10);
+  });
+
+  it('converges to RADIUS_GROWTH^4 past the table ([9,12] → [13,16])', () => {
+    expect(neutralGrowth(12, 16)).toBeCloseTo(1.18 ** 4, 10);
+  });
+
+  it('is exactly 1 when the window does not shift (post-tail milestones)', () => {
+    expect(neutralGrowth(20, 20)).toBe(1);
+  });
+});
+
+describe('progression milestone wiring', () => {
+  // Mirrors ZoneASystem.MILESTONE_EVERY (not importable here — it pulls in Phaser).
+  const MILESTONE_EVERY = 50;
+
+  it('only shifts the window floor on milestone levels (the blacklist/zoom coupling)', () => {
+    for (let level = 2; level <= 400; level++) {
+      const prev = getStage(level - 1);
+      const stage = getStage(level);
+      if (stage.ballWindow[0] !== prev.ballWindow[0]) {
+        expect(level % MILESTONE_EVERY, `floor shift at level ${level}`).toBe(0);
+      }
     }
+  });
+
+  it('grows the level-50 milestone by the neutral ball match × its authored tightness', () => {
+    const prev = getStage(49);
+    const stage = getStage(50);
+    const factor = neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
+    expect(factor).toBeCloseTo((56 / 26) * 0.92, 10);
+  });
+
+  it('self-heals past the last authored shift: window stops moving, growth is 1', () => {
+    const prev = getStage(249);
+    const stage = getStage(250);
+    expect(stage.ballWindow).toEqual(prev.ballWindow);
+    expect(neutralGrowth(prev.ballWindow[1], stage.ballWindow[1])).toBe(1);
+  });
+});
+
+describe('frictionForTier', () => {
+  it('is the clamped size ramp shaped by the material feel multiplier', () => {
+    for (let t = 1; t <= MATERIAL_COUNT; t++) {
+      const mult = materialForTier(t).def.physics.frictionMult;
+      const f = frictionForTier(t);
+      expect(f).toBeGreaterThan(0);
+      // The band stays subtle: never past the ramp cap × the largest material factor.
+      expect(f).toBeLessThanOrEqual(FRICTION_MAX * 1.2);
+      expect(f / mult).toBeLessThanOrEqual(FRICTION_MAX + 1e-12);
+    }
+  });
+
+  it('grows with tier within one material family (the size ramp survives)', () => {
+    // Tiers 1–4 are all primitives with the same multiplier except wood (tier 1).
+    expect(frictionForTier(3)).toBeGreaterThan(frictionForTier(2));
+    expect(frictionForTier(4)).toBeGreaterThan(frictionForTier(3));
   });
 });
 

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import * as Layout from '../core/Layout';
+import { Theme } from '../core/Theme';
 import { DEATH_LINE_Y, SPAWN_Y } from './tuning';
 
 /**
@@ -7,20 +8,17 @@ import { DEATH_LINE_Y, SPAWN_Y } from './tuning';
  *
  * Zone A is a power-of-three merge board with no tier ceiling, so balls grow without
  * bound. To make room, the arena GROWS at recurring milestones: its scale `s` multiplies
- * by GROW (geometrically: 1, 1.18, 1.39, …), the boundary walls/floor move outward, and a dedicated Zone-A camera zooms out
- * (zoom = 1/s) so balls keep their real physics size yet appear smaller and keep their
- * relative positions. The funnel apex stays pinned at the Zone A/C boundary so it still
- * feeds Zone C, and the arena only ever grows UP (ceiling into negative y) and OUT (walls
- * past the screen edges) — never down into Zone B.
+ * by a per-milestone factor the caller computes (ZoneASystem: the neutral ball-growth
+ * match × the stage's authored `tightness` — see ballMath.neutralGrowth), the boundary
+ * walls/floor move outward, and a dedicated Zone-A camera zooms out (zoom = 1/s) so balls
+ * keep their real physics size yet appear smaller and keep their relative positions. The
+ * funnel apex stays pinned at the Zone A/C boundary so it still feeds Zone C, and the
+ * arena only ever grows UP (ceiling into negative y) and OUT (walls past the screen
+ * edges) — never down into Zone B.
  *
  * Owned by Zone A (ZoneASystem). Other zones never touch the camera; Zone C reacts to the
  * `ArenaZoom` bus event for its input lock.
  */
-
-/** Multiplier applied to the arena scale at each milestone (geometric growth: `s` ramps
- *  1, 1.18, 1.39, 1.64, …). The camera zoom is 1/s, so each milestone shrinks balls by the
- *  same 1/GROW ratio. */
-export const GROW = 1.6;
 
 /** Camera tween duration for one zoom-out, in ms. */
 const ZOOM_MS = 1200;
@@ -65,7 +63,7 @@ export class ArenaView {
 
     this.camera = this.scene.cameras.add(0, ARENA_VIEW_TOP, Layout.WIDTH, VIEW_H);
     this.camera.setName('arena');
-    this.camera.setBackgroundColor(0x141925); // the Zone A band fill (replaces the backdrop's)
+    this.camera.setBackgroundColor(Theme.paperZoneA); // the Zone A band fill (replaces the backdrop's)
 
     // The main camera draws everything EXCEPT Zone A gameplay (one call, covers future balls).
     this.scene.cameras.main.ignore(this.layer);
@@ -131,13 +129,13 @@ export class ArenaView {
   get viewScale(): number { return this.camera.zoom; }
 
   /**
-   * Grow the arena one milestone step: scale up, move the walls/floor outward (always away
-   * from the balls, so no static-into-dynamic overlap), and tween the camera zoom-out.
-   * `onComplete` fires when the tween lands (the caller re-enables input there).
+   * Grow the arena one milestone step by `factor`: scale up, move the walls/floor outward
+   * (always away from the balls, so no static-into-dynamic overlap), and tween the camera
+   * zoom-out. `onComplete` fires when the tween lands (the caller re-enables input there).
    */
-  grow(onComplete: () => void): void {
+  grow(factor: number, onComplete: () => void): void {
     this.animating = true;
-    this.s *= GROW;
+    this.s *= factor;
     this.buildBodies();
 
     const from = { z: this.camera.zoom };
@@ -228,15 +226,22 @@ export class ArenaView {
     );
   }
 
-  /** Visible arena boundary: side walls + funnel V (on the layer, so it zooms with the balls). */
+  /** Visible arena boundary: side walls + funnel V (on the layer, so it zooms with the balls).
+   *  Drawn as pine rails: a thick wood stroke with a dark seam down its centre — the tray
+   *  the balls sit in. Widths scale with `s` so the rails hold their apparent size zoomed. */
   private redrawWalls(l: Point, apex: Point, r: Point, top: number): void {
-    const g = this.wallGfx.clear().lineStyle(2, 0x2a3346, 1);
-    g.lineBetween(this.minX, top, l.x, l.y);
-    g.lineBetween(this.maxX, top, r.x, r.y);
-    g.beginPath();
-    g.moveTo(l.x, l.y);
-    g.lineTo(apex.x, apex.y);
-    g.lineTo(r.x, r.y);
-    g.strokePath();
+    const g = this.wallGfx.clear();
+    const rail = (width: number, color: number): void => {
+      g.lineStyle(width, color, 1);
+      g.lineBetween(this.minX, top, l.x, l.y);
+      g.lineBetween(this.maxX, top, r.x, r.y);
+      g.beginPath();
+      g.moveTo(l.x, l.y);
+      g.lineTo(apex.x, apex.y);
+      g.lineTo(r.x, r.y);
+      g.strokePath();
+    };
+    rail(10 * this.s, Theme.pine);
+    rail(2.5 * this.s, Theme.pineShadow);
   }
 }

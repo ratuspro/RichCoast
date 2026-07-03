@@ -48,15 +48,18 @@ export const RESTITUTION = 0.2;
 
 // --- Merge blast ----------------------------------------------------------
 
-/** Neighbours within this radius of a merge get nudged outward. */
+/** Neighbours within this radius of a merge get nudged outward. Base value at arena
+ *  scale 1 — Board multiplies it by the live scale so the reach tracks ball sizes. */
 export const BLAST_RADIUS = 90;
 
-/** Peak outward velocity kick at the merge point (linear falloff to 0 at the radius). */
+/** Peak outward velocity kick at the merge point (linear falloff to 0 at the radius).
+ *  Base value at arena scale 1, scaled like BLAST_RADIUS. */
 export const BLAST_STRENGTH = 3.0;
 
 // --- Overflow / game over -------------------------------------------------
 
-/** A body whose `speed` is below this counts as "at rest". */
+/** A body whose `speed` is below this counts as "at rest". Base value at arena scale 1 —
+ *  Board scales it by the live scale (normalized gravity makes world speeds grow with it). */
 export const REST_SPEED = 0.8;
 
 /** How long a ball must rest above the death line before the run ends (ms). */
@@ -72,7 +75,6 @@ export const DROP_COOLDOWN_MS = 250;
 
 // --- Colour ---------------------------------------------------------------
 
-/** Tier palette lives in the shared `core/BallColors` so Zone A and Zone B stay
- *  pixel-identical (a transferred ball keeps its colour). Re-exported here so the
- *  rest of Zone A keeps importing it from `tuning` unchanged. */
-export { TIER_COLORS } from '../core/BallColors';
+// The tier look now lives in the shared `core/Materials` ladder (name + colours +
+// physics feel per tier), so Zone A and Zone B stay pixel-identical — a transferred
+// ball keeps its material. Import `materialForTier`/`colorForTier` from there.

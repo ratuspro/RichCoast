@@ -23,6 +23,12 @@ export interface DrainedBall {
  * Merges are detected in the collision callback but resolved in `update()`, so all
  * world mutation happens at one safe point and a body can't be claimed by two merges
  * in the same step (the `consumed` flag dedupes).
+ *
+ * Physics feel is normalized to the arena scale `s`: the camera zoom is 1/s, so any fixed
+ * world-space constant would drift on screen as milestones grow the arena. Gravity gets a
+ * per-ball supplemental force of (s−1) extra gravities (world gravity itself is shared
+ * with Zone B and must stay untouched), and the blast radius/strength and rest-speed
+ * thresholds scale by s — so falls, shoves, and settling look identical at every milestone.
  */
 export class Board {
   private readonly registry = new Map<MatterJS.BodyType, Ball>();
@@ -39,6 +45,7 @@ export class Board {
     private readonly onDanger?: (near: boolean) => void,
   ) {
     scene.matter.world.on(Phaser.Physics.Matter.Events.COLLISION_START, this.onCollisionStart);
+    scene.matter.world.on(Phaser.Physics.Matter.Events.BEFORE_UPDATE, this.onBeforePhysics);
   }
 
   /** Drop a fresh ball into the board at the (scale-aware) spawn row. */
@@ -62,6 +69,7 @@ export class Board {
     const world = this.scene.matter.world;
     if (world) {
       world.off(Phaser.Physics.Matter.Events.COLLISION_START, this.onCollisionStart);
+      world.off(Phaser.Physics.Matter.Events.BEFORE_UPDATE, this.onBeforePhysics);
       for (const ball of [...this.registry.values()]) ball.image.destroy();
     }
     this.registry.clear();
@@ -105,6 +113,25 @@ export class Board {
     });
   }
 
+  /**
+   * Supplemental gravity, applied before each physics step. Zone A balls should feel
+   * gravity × arena scale `s` (the camera zoom is 1/s, so this keeps on-screen fall speed
+   * milestone-invariant), but world gravity is shared with Zone B and must stay put. So we
+   * add the missing (s−1) gravities to our own balls only, mirroring Matter's gravity
+   * formula (force += mass × g × g.scale); forces are cleared by the engine each step.
+   */
+  private onBeforePhysics = (): void => {
+    const extra = this.arena.scale - 1;
+    if (extra === 0) return;
+    const g = this.scene.matter.world.localWorld.gravity;
+    for (const ball of this.registry.values()) {
+      const body = ball.body;
+      if (body.isSleeping) continue; // Matter skips gravity for sleepers; so do we
+      body.force.x += body.mass * g.x * g.scale * extra;
+      body.force.y += body.mass * g.y * g.scale * extra;
+    }
+  };
+
   /** Flag mergeable new contacts; defer the actual world mutation to `update()`. */
   private onCollisionStart = (event: Phaser.Physics.Matter.Events.CollisionStartEvent): void => {
     if (this.over) return;
@@ -137,11 +164,13 @@ export class Board {
     if (this.registry.size === 0) this.onEmpty?.();
   }
 
-  /** Push nearby balls outward from a merge point (additive velocity kick). */
+  /** Push nearby balls outward from a merge point (additive velocity kick). Radius and
+   *  strength scale with the arena so the shove stays constant relative to ball sizes. */
   private applyBlast(origin: { x: number; y: number }, exclude: MatterJS.BodyType): void {
+    const s = this.arena.scale;
     for (const ball of this.registry.values()) {
       if (ball.body === exclude) continue;
-      const dv = blastImpulse(ball.body.position, origin, BLAST_RADIUS, BLAST_STRENGTH);
+      const dv = blastImpulse(ball.body.position, origin, BLAST_RADIUS * s, BLAST_STRENGTH * s);
       if (dv.x === 0 && dv.y === 0) continue;
       const v = ball.body.velocity;
       ball.image.setVelocity(v.x + dv.x, v.y + dv.y);
@@ -153,16 +182,18 @@ export class Board {
    * flag the death-line warning when any resting ball is close (but not yet over).
    */
   private scanOverflow(delta: number): void {
-    // The death line scales with the arena, so a milestone zoom-out moves it up as headroom grows.
+    // The death line scales with the arena, so a milestone zoom-out moves it up as headroom
+    // grows; the rest-speed threshold scales too (world speeds are ×s under normalized gravity).
     const lineY = this.arena.deathLineY;
     const band = WARN_BAND * this.arena.scale;
+    const restSpeed = REST_SPEED * this.arena.scale;
     let near = false;
     for (const ball of this.registry.values()) {
       const resting = isRestingAbove(
         ball.body.position.y,
         ball.body.speed,
         lineY,
-        REST_SPEED,
+        restSpeed,
       );
       ball.restMs = nextRestMs(ball.restMs, delta, resting);
       if (isOverflow(ball.restMs, REST_MS)) {
@@ -170,7 +201,7 @@ export class Board {
         this.onGameOver();
         return;
       }
-      near ||= isNearDeath(ball.body.position.y, ball.body.speed, lineY, band, REST_SPEED);
+      near ||= isNearDeath(ball.body.position.y, ball.body.speed, lineY, band, restSpeed);
     }
     this.setDanger(near);
   }

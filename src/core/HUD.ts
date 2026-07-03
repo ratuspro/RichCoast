@@ -1,6 +1,8 @@
 import type Phaser from 'phaser';
 import { GameEvent, type GameSystem } from './contracts';
 import type { EventBus } from './EventBus';
+import { hexColor } from './Materials';
+import { Theme } from './Theme';
 import { WIDTH } from './Layout';
 
 /** Header band geometry: a solid chrome bar across the top that the HUD text sits on. */
@@ -24,24 +26,24 @@ export class HUD implements GameSystem {
     // Chrome bar: above gameplay (depth 0) but below every HUD element (queue row 20,
     // text 1000), so it gives the numbers a surface without occluding them.
     scene.add
-      .rectangle(WIDTH / 2, BAND_CY, WIDTH, BAND_H, 0x141a26, 1)
+      .rectangle(WIDTH / 2, BAND_CY, WIDTH, BAND_H, Theme.cream, 1)
       .setOrigin(0.5)
       .setDepth(5);
 
-    // Bottom edge: a 2px base rule with a thin cyan accent above it (the signature touch).
+    // Bottom edge: a 2px wood base rule with a thin brass accent above it (the signature touch).
     scene.add
       .graphics()
       .setDepth(6)
-      .fillStyle(0x2a3346, 1)
+      .fillStyle(Theme.pineDark, 1)
       .fillRect(0, BAND_H - 2, WIDTH, 2)
-      .fillStyle(0x4cc9f0, 0.6)
+      .fillStyle(Theme.brass, 0.8)
       .fillRect(0, BAND_H - 3, WIDTH, 1);
 
     this.scoreText = scene.add
       .text(WIDTH / 2, BAND_CY, '0', {
         fontFamily: 'monospace',
         fontSize: '28px',
-        color: '#ffffff',
+        color: hexColor(Theme.ink),
       })
       .setOrigin(0.5, 0.5)
       .setDepth(1000);
@@ -50,7 +52,7 @@ export class HUD implements GameSystem {
       .text(14, BAND_CY, 'Lvl 1', {
         fontFamily: 'monospace',
         fontSize: '18px',
-        color: '#e6ebf5',
+        color: hexColor(Theme.inkSoft),
       })
       .setOrigin(0, 0.5)
       .setDepth(1000);

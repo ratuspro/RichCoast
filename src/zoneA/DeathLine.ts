@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { ArenaView } from './ArenaView';
 
-const LINE_COLOR = 0xff4d4d;
+const LINE_COLOR = 0xd64545; // Theme.danger — deep enough to read on the light paper
 const LINE_THICKNESS = 2;
 const PULSE_MIN_ALPHA = 0.25;
 const PULSE_MAX_ALPHA = 0.9;

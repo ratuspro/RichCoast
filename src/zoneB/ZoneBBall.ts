@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { colorForTier, hexColor } from '../core/BallColors';
+import { materialForTier } from '../core/Materials';
+import { paintBall } from '../core/MaterialPainter';
 import type { BallSpec } from '../core/contracts';
 
 export const BALL_RADIUS = 10;
@@ -22,21 +23,12 @@ export function createZoneBBall(
 ): Phaser.Physics.Matter.Image {
   const key = `zb-ball-t${tier}`;
   if (!scene.textures.exists(key)) {
-    // Same shared palette as Zone A, so a transferred ball keeps its exact colour.
-    const color = colorForTier(tier);
     const size = BALL_RADIUS * 2;
     const canvas = scene.textures.createCanvas(key, size, size);
     if (canvas) {
-      const ctx = canvas.getContext();
-      // Match Zone A's thin dark rim so balls read as the same family across zones.
-      const lineW = Math.max(2, BALL_RADIUS * 0.08);
-      ctx.beginPath();
-      ctx.arc(BALL_RADIUS, BALL_RADIUS, BALL_RADIUS - lineW / 2, 0, Math.PI * 2);
-      ctx.fillStyle = hexColor(color);
-      ctx.fill();
-      ctx.lineWidth = lineW;
-      ctx.strokeStyle = 'rgba(11, 13, 18, 0.35)';
-      ctx.stroke();
+      // Same shared material recipe as Zone A (small LOD: base shading only — at 10px
+      // colour is the identity), so a transferred ball keeps its exact look.
+      paintBall(canvas.getContext(), BALL_RADIUS, tier, 'small');
       canvas.refresh();
     }
   }
@@ -45,10 +37,14 @@ export function createZoneBBall(
     ? { category: CAT_BALL, mask: CAT_BALL | CAT_WALL | CAT_COLLECTOR }          // skip gates during grace, but still bump other balls
     : { category: CAT_BALL, mask: CAT_BALL | CAT_GATE | CAT_WALL | CAT_COLLECTOR };
 
+  // Material feel: same shared multipliers as Zone A, on Zone B's own constants.
+  // Restitution is capped so exotic tiers stay lively without ping-ponging the cascade;
+  // mass is left alone — the fixed 10px radius already fixes it.
+  const feel = materialForTier(tier).def.physics;
   const img = scene.matter.add.image(x, y, key, undefined, {
     shape: { type: 'circle', radius: BALL_RADIUS },
-    restitution: 0.35,
-    friction: 0.05,
+    restitution: Math.min(0.5, 0.35 * feel.restitutionMult),
+    friction: 0.05 * feel.frictionMult,
     frictionAir: 0.008,
     label: 'zoneB-ball',
     collisionFilter,

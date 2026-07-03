@@ -3,6 +3,7 @@ import type { GameSystem } from '../core/contracts';
 import type { GateDef, TranslatingGate, RotatingGate } from './zoneLayout';
 import { getBallData, getBallImage, CAT_GATE, CAT_BALL } from './ZoneBBall';
 import { isDebug } from '../core/DebugMode';
+import { Theme } from '../core/Theme';
 
 export interface GateCallbacks {
   /** Called when a ball body hits a gate; system should handle inFlight bookkeeping + spawning copies. */
@@ -90,12 +91,15 @@ export class GateSystem implements GameSystem {
     const rect = scene.matter.add.rectangle(cx, cy, def.length, GATE_THICKNESS, opts);
     scene.matter.body.setAngle(rect, angle);
 
-    // Visual: a tier-coloured bar (green for high multipliers, gold for low) with a bold
-    // white "X N" label centred on the bar.
-    const color = def.multiplier >= 4 ? 0x5ec24a : 0xc9a227;
-    const g = scene.add.rectangle(cx, cy, def.length, GATE_THICKNESS, color).setDepth(5);
+    // Visual: a painted wooden sign — green paint for high multipliers, brass for low —
+    // with a dark stencilled "X N" and a wood-shadow edge so it sits on the light paper.
+    const color = def.multiplier >= 4 ? 0x6aa84f : Theme.brass;
+    const g = scene.add
+      .rectangle(cx, cy, def.length, GATE_THICKNESS, color)
+      .setStrokeStyle(2, Theme.pineShadow)
+      .setDepth(5);
     const labelText = scene.add.text(cx, cy, `X${def.multiplier}`, {
-      fontFamily: 'sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#ffffff',
+      fontFamily: 'sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#3f3428', // Theme.ink
     }).setOrigin(0.5).setDepth(6);
 
     // Track the visual rect alongside the body so we can move it in update()

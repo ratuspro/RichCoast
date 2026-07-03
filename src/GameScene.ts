@@ -12,6 +12,7 @@ import { Harness } from './dev/harness';
 import { DebugHarness } from './dev/DebugHarness';
 import { isDebug, toggleDebug } from './core/DebugMode';
 import { Sfx } from './core/Sfx';
+import { Theme } from './core/Theme';
 
 /**
  * Which slice of the game is wired up:
@@ -93,7 +94,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Dark zone backdrops + dividers, straight from Layout, so all three regions
+   * Warm-paper zone backdrops + dividers, straight from Layout, so all three regions
    * are visible even while every zone is still a skeleton.
    */
   private drawBackdrop(): void {
@@ -102,13 +103,13 @@ export class GameScene extends Phaser.Scene {
     // fills the band and draws the funnel on the zooming layer), so the backdrop only paints
     // the static Zone C/B bands and their divider.
     const bands: Array<[Layout.Rect, number]> = [
-      [Layout.zoneC, 0x0e1119],
-      [Layout.zoneB, 0x10141d],
+      [Layout.zoneC, Theme.paperZoneC],
+      [Layout.zoneB, Theme.paper],
     ];
     for (const [rect, color] of bands) {
       g.fillStyle(color, 1).fillRect(rect.x, rect.y, rect.width, rect.height);
     }
-    g.lineStyle(2, 0x2a3346, 1);
+    g.lineStyle(2, Theme.pineDark, 1);
     g.lineBetween(0, Layout.zoneB.y, Layout.WIDTH, Layout.zoneB.y);
   }
 

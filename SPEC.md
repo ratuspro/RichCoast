@@ -77,7 +77,33 @@ A wall is a static line segment — no gate behavior, no score — used purely a
 
 ## Visual Theme
 
-Abstract / geometric. Bold shapes, flat colors, no figurative metaphors. Dark background with high-contrast elements. Exact palette TBD.
+**"Bright Workshop" — industrial materials in a warm toy workshop.** Aimed between
+hyper-casual and casual for UA-driven mobile: bright, readable, friendly.
+
+**Balls are materials.** Each tier IS a physical material — the higher the tier, the more
+valuable the stuff. The ladder is 20 materials in 5 families of 4, each family aligned
+with one 4-tier draw window (so a 50-level window shift reads as advancing a material age):
+
+1. **Primitives** [1–4]: Wood, Stone, Turquoise, Clay
+2. **Metals** [5–8]: Copper, Iron, Steel, Silver
+3. **Precious** [9–12]: Gold, Rose gold, Obsidian, Glass
+4. **Gems** [13–16]: Sapphire, Emerald, Ruby, Diamond
+5. **Exotic** [17–20]: Plasma, Magma, Void, Antimatter
+
+Tiers past 20 wrap around the ladder with one gold ring per completed cycle. Textures are
+procedural (no asset files): a soft top-lit sphere base plus a per-material detail pass
+(wood grain, speckle, brushed sheen, gem facets, emissive glow…). Zone B's 10px balls use
+a simplified recipe — there, colour is the identity, so any 4 consecutive tiers keep
+strong mutual hue contrast. Materials also carry a **subtle physics feel** (narrow
+restitution/friction/density multipliers: wood bounces, metal thuds and slides, gems
+slip) — flavour, not balance.
+
+**Environment**: warm-paper backdrop (`#f2e7d5`), light-pine structure (Zone A tray,
+guide rails, gate signs), brass accents (HUD rule, trap-door hinges and markers, score
+bar fill), warm-brown ink text. Danger stays red. The single source for ball look/feel is
+`src/core/Materials.ts` (+ `MaterialPainter.ts`); the environment palette is
+`src/core/Theme.ts`. A dev proof sheet of the full ladder renders at
+`/material-preview.html`.
 
 ---
 

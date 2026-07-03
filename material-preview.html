@@ -1,0 +1,61 @@
+<!doctype html>
+<!-- Dev-only material ladder proof sheet: http://localhost:5173/material-preview.html
+     Renders every material at Zone A size (full LOD), Zone B size (small LOD, 10px),
+     and one wrapped-cycle example, over the Bright Workshop background — so palette
+     tuning happens here instead of grinding a live run to tier 20. Not part of the
+     game bundle (only index.html is built). -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Material ladder preview</title>
+    <style>
+      body { background: #f2e7d5; font: 12px monospace; color: #3f3428; margin: 16px; }
+      .row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+      .name { width: 110px; }
+      .fam { width: 70px; opacity: 0.6; }
+    </style>
+  </head>
+  <body>
+    <div id="sheet"></div>
+    <script type="module">
+      import { MATERIALS, compactValue } from '/src/core/Materials.ts';
+      import { paintBall } from '/src/core/MaterialPainter.ts';
+
+      const sheet = document.getElementById('sheet');
+      const R_FULL = 32; // ~tier 5 Zone A size
+      const R_SMALL = 10; // Zone B size
+
+      MATERIALS.forEach((m, i) => {
+        const tier = i + 1;
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `<span class="name">${tier}. ${m.name}</span><span class="fam">${m.family}</span>`;
+        for (const [radius, lod, t] of [
+          [R_FULL, 'full', tier],
+          [R_SMALL, 'small', tier],
+          [R_FULL, 'full', tier + 20], // wrapped cycle: same material + gold ring
+        ]) {
+          const cv = document.createElement('canvas');
+          cv.width = cv.height = radius * 2;
+          const ctx = cv.getContext('2d');
+          paintBall(ctx, radius, t, lod);
+          if (lod === 'full') {
+            const digits = compactValue(3 ** (t - 1));
+            const scale = digits.length <= 1 ? 1.05 : digits.length === 2 ? 0.82 : digits.length === 3 ? 0.62 : 0.5;
+            const px = Math.round(radius * scale);
+            ctx.font = `bold ${px}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.lineWidth = Math.max(2, Math.round(px * 0.14));
+            ctx.strokeStyle = '#0b0d12';
+            ctx.strokeText(digits, radius, radius);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(digits, radius, radius);
+          }
+          row.appendChild(cv);
+        }
+        sheet.appendChild(row);
+      });
+    </script>
+  </body>
+</html>

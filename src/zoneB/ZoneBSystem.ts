@@ -15,8 +15,8 @@ import {
 } from './ZoneBBall';
 
 const BAR_HEIGHT = 10;
-const BAR_COLOR_BG = 0x1a2535;
-const BAR_COLOR_FILL = 0x4488ff;
+const BAR_COLOR_BG = 0xe0d2b8; // a groove pressed into the paper (between paper and pine)
+const BAR_COLOR_FILL = 0xc9973f; // Theme.brass — the bar fills with brass
 
 export class ZoneBSystem implements GameSystem {
   private scene?: Phaser.Scene;
@@ -172,7 +172,7 @@ export class ZoneBSystem implements GameSystem {
       .text(x + width / 2, barY - 4, '', {
         fontFamily: 'monospace',
         fontSize: '11px',
-        color: '#8899bb',
+        color: '#8a7a64', // Theme.inkSoft
       })
       .setOrigin(0.5, 1)
       .setDepth(12);

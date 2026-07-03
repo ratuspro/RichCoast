@@ -13,8 +13,8 @@ const LABEL_X = Layout.WIDTH - 152;
 const PREVIEW_X = Layout.WIDTH - 100;
 const PREVIEW_SIZE = 36;
 const COUNT_X = Layout.WIDTH - 14;
-const LABEL_COLOR = '#7c8aa6'; // muted slate for the "NEXT" / unit text
-const COUNT_COLOR = '#e6ebf5'; // brighter for the live number
+const LABEL_COLOR = '#8a7a64'; // Theme.inkSoft — muted for the "NEXT" / unit text
+const COUNT_COLOR = '#3f3428'; // Theme.ink — stronger for the live number
 
 /**
  * Drag-to-aim input for Zone A. The current ball is a body-less sprite that tracks

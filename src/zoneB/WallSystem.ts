@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { GameSystem } from '../core/contracts';
 import * as Layout from '../core/Layout';
+import { Theme } from '../core/Theme';
 import type { WallDef } from './zoneLayout';
 import { CAT_WALL, CAT_BALL } from './ZoneBBall';
 
@@ -33,9 +34,12 @@ export class WallSystem implements GameSystem {
       });
       scene.matter.body.setAngle(body, angle);
 
-      // Visual: dim line
+      // Visual: a pine guide rail — light wood over a darker shadow edge, matching
+      // Zone A's tray so the whole machine reads as one piece of joinery.
       const g = scene.add.graphics().setDepth(3);
-      g.lineStyle(thickness, 0x8899bb, 0.8);
+      g.lineStyle(thickness + 2, Theme.pineShadow, 1);
+      g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
+      g.lineStyle(thickness, Theme.pine, 1);
       g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
     }
   }

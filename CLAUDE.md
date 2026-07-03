@@ -41,8 +41,10 @@ section when the work touches it:
 - **Dev 1:** Zone A (merge), Zone C (trap-door), HUD, scene bootstrap (`src/zoneA/`,
   `src/zoneC/`, `src/core/HUD.ts`, `main.ts`, `GameScene.ts`).
 - **Dev 2:** Zone B (split arena, gates, funnel, scoring) — `src/zoneB/`.
-- **Shared:** `src/core/` (`contracts.ts`, `EventBus.ts`, `Layout.ts`, `BallColors.ts`) —
-  changes need both. `BallColors.ts` is the single tier palette both zones draw from.
+- **Shared:** `src/core/` (`contracts.ts`, `EventBus.ts`, `Layout.ts`, `Materials.ts`,
+  `MaterialPainter.ts`, `Theme.ts`) — changes need both. `Materials.ts` is the single
+  tier ladder (name/colours/physics feel) both zones draw from; `MaterialPainter.ts`
+  renders it; `Theme.ts` is the environment palette.
 
 When a task lands in one owner's area, stay within those files; reach the other half only
 through the contract events above.
@@ -66,7 +68,7 @@ through the contract events above.
 
 ## Status
 
-**All three zones play.** The shared shell is complete
+**All three zones play, fully art-directed.** The shared shell is complete
 and runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD (score
 + buffer count), the thin `GameScene` + `?zone=` routing, the Matter world bottom wall (Zone A's
 own boundary + funnel floor now live in `ArenaView`), and the isolation layer (`src/dev/` stubs
@@ -74,8 +76,23 @@ own boundary + funnel floor now live in `ArenaView`), and the isolation layer (`
 debug overlay (`src/core/DebugMode.ts` + `src/dev/DebugHarness.ts`, toggled by `?debug=2` or
 the **D** key) adds a DROP button (also SPACE) that fires `BALL_DROPPED` straight onto the
 bus plus a live event log. Tooling is Phaser 4 + Vite + TypeScript (strict) + Vitest; pure
-logic is unit-tested (`npm run test`) — the seam, Zone A's `ballMath`/`MergeLogic`, and Zone
-B's `BallBuffer`.
+logic is unit-tested (`npm run test`) — the seam, Zone A's `ballMath`/`MergeLogic`, Zone
+B's `BallBuffer`, and the material ladder (`Materials.test.ts`).
+
+**Visual identity — "Bright Workshop"** (see SPEC.md Visual Theme for the design): the
+whole game is a warm toy workshop — warm-paper backdrop, light-pine structure (Zone A
+tray, Zone B rails and gate signs, the trap-door chute), brass accents, warm-brown ink.
+Balls are **industrial materials**: `src/core/Materials.ts` holds the 20-material ladder
+(5 families of 4, aligned with the 4-tier draw windows; wraps past 20 with a gold ring
+per cycle) with per-material colours + **subtle physics multipliers**
+(restitution/friction/density — wood bounces, metal slides, gems slip) that both zones
+apply on top of their own tuned constants. `src/core/MaterialPainter.ts` draws the
+procedural canvas recipes (shared base sphere + per-material detail pass; `'full'` LOD
+for Zone A, `'small'` for Zone B's 10px balls where colour is the identity), and
+`src/core/Theme.ts` names every environment colour (no hex literals in zone code). Ball
+faces show `compactValue()` (531441 → "531K"). `/material-preview.html` is a dev-only
+proof sheet of the whole ladder — tune palette/recipes there, not in a live run. The old
+`BallColors.ts` is deleted.
 
 **Zone A** (`src/zoneA/`) plays: drag along the top to aim, release to drop; balls are
 procedurally-textured Matter circles (colour + value) that grow heavier and grippier by
@@ -83,14 +100,21 @@ tier, same-**value** collisions merge into the next tier with a neighbour-shovin
 Merging is **uncapped** — tiers climb forever — and each merge **triples** the value
 (`tierToValue` is now `3^(tier-1)`, since merging two equal balls yields `1.5×(V+V)=3V`).
 Ball radius reads the `RADII` table for tiers 1–10 and keeps growing geometrically past it
-(`RADIUS_GROWTH` in `tuning.ts`); colours come from the shared `src/core/BallColors.ts`
-"Jewel Tones" palette and **cycle** (modulo) past tier 10 (one source for both zones, so a
-transferred ball keeps its colour). Because balls grow without bound, the **arena expands at
+(`RADIUS_GROWTH` in `tuning.ts`); look + physics feel come from the shared
+`src/core/Materials.ts` ladder (one source for both zones, so a transferred ball keeps its
+material). Because balls grow without bound, the **arena expands at
 recurring milestones**: every 50 levels Zone A input freezes, `ArenaView` grows the playfield
-(scale `s ×= GROW=1.18`, so `s` ramps **geometrically** 1,1.18,1.39,…: ceiling rises, walls move
-out, funnel widens — always *outward*, never into Zone B) and a **dedicated Zone-A camera** zooms
-out (`zoom = 1/s`) so balls keep their real size yet appear ~1/GROW smaller each milestone with
-relative positions intact. Each
+by a **per-milestone factor** = the *neutral ball-growth match* (`neutralGrowth` in
+`ballMath.ts`: the window-max radius ratio, so apparent ball size holds constant) × the
+stage's authored **`tightness`** in `progression.json` (<1 = tighter/harder, >1 = roomier
+breather; current rhythm 0.92/1.05/0.85/1.05 — squeeze→breathe with deepening squeezes).
+Ceiling rises, walls move out, funnel widens — always *outward*, never into Zone B — and a
+**dedicated Zone-A camera** zooms out (`zoom = 1/s`) with relative positions intact. Past the
+last authored window shift, milestones self-heal into plain levels (no growth). **Physics
+feel is normalized to `s`** (`Board.ts`): each Zone A ball gets a supplemental
+`(s−1)`-gravities force before every physics step (world gravity is shared with Zone B and
+stays untouched), and the merge-blast radius/strength + rest-speed threshold scale by `s`,
+so on-screen falls, shoves, and settling look identical at every milestone. Each
 milestone also **shifts the draw window up by 4 tiers** (hand-authored in `progression.json`:
 `[1,4]→[5,8]→[9,12]→…`), so the lowest 4 tiers are **blacklisted** from future spawns — the
 in-hand and Next pieces are **re-rolled** off any blacklisted tier (`BallQueue.reroll` +
@@ -118,9 +142,10 @@ event. Every dropped ball stamps `body.ballData` so Zone C can find it. The zone
 `ArenaView.ts`, plus the existing `BallQueue`/`MergeLogic`. The boundary walls + funnel floor
 now live in `ArenaView` (movable), not `GameScene` (which keeps only the off-screen bottom
 wall). `progression.json` is now **milestone-structured**: `ballWindow` holds at `[1,4]` through
-level 49, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 50-level milestone, and the
-`scoreBarTarget`s are rescaled to track the (powers-of-three, now much larger) per-window value
-magnitudes — both are starting numbers to tune by playtest.
+level 49, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 50-level milestone (each
+shift stage also carries its `tightness`), and the `scoreBarTarget`s are rescaled to track
+the (powers-of-three, now much larger) per-window value magnitudes — the targets and the
+tightness rhythm are starting numbers to tune by playtest.
 
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,
@@ -130,16 +155,18 @@ The playfield is now one of **two layouts** (`LAYOUT_1`, `LAYOUT_2` in `zoneLayo
 chosen at random per run via `pickRandomLayout()` in `ZoneBSystem`'s constructor (so each
 boot/`scene.restart()` re-rolls). Both are static "shelf cascade" layouts modelled on the
 reference art: stacked horizontal multiplier gates split by vertical/diagonal guide rails,
-funnelling into one bottom collector. Gate bars are tier-coloured (green for multiplier ≥4,
-gold below) with a bold white `X#` label; multipliers are tuned (≤4) so cascades stay
-balanced. Gate visuals live in `GateSystem.buildBody()`. A `BallBuffer` tracks a finite
-supply that
+funnelling into one bottom collector. Gates are painted wooden signs (green paint for
+multiplier ≥4, brass below) with a dark stencilled `X#` label; multipliers are tuned (≤4)
+so cascades stay balanced. Gate visuals live in `GateSystem.buildBody()`. A `BallBuffer`
+tracks a finite supply that
 refills when Zone B score crosses escalating milestones — exhausting the buffer while Zone B
 is empty triggers a local game-over overlay. The `BUFFER_CHANGED` / `BUFFER_EXHAUSTED` events
 feed Zone A's queue-row balls-left count (the HUD itself is now score-only). Balls are small
 (10px radius) and **collide with each other** (the `CAT_BALL` mask includes itself), so they
-pile and nudge in the cascade. Ball textures use
-the same shared `src/core/BallColors.ts` palette as Zone A. The zone splits into `ZoneBSystem` plus
+pile and nudge in the cascade. Ball textures use the same shared
+`src/core/Materials.ts` + `MaterialPainter.ts` recipes as Zone A (small LOD), with the
+material physics multipliers applied to Zone B's own constants (restitution capped at
+0.5). The zone splits into `ZoneBSystem` plus
 `GateSystem`, `CollectorSystem`, `WallSystem`, `ZoneBBall`, `BallBuffer`, and `zoneLayout.ts`;
 the old `Funnel.ts` skeleton is **superseded by `CollectorSystem` and is now dead code**.
 

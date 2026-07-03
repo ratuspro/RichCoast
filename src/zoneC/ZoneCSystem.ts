@@ -3,6 +3,7 @@ import { GameEvent, type BallBodyData, type GameSystem } from '../core/contracts
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { Sfx } from '../core/Sfx';
+import { Theme } from '../core/Theme';
 
 /** How long the suck tween runs before the ball pops into Zone B, in ms. */
 const SUCK_MS = 150;
@@ -53,8 +54,8 @@ export class ZoneCSystem implements GameSystem {
   private zoomLocked = false;
   private scene?: Phaser.Scene;
   private door?: Phaser.GameObjects.Rectangle;
-  /** The nine dim position markers; the active one glows. */
-  private dots: Phaser.GameObjects.Rectangle[] = [];
+  /** The nine dim brass position markers; the active one glows polished-bright. */
+  private dots: Phaser.GameObjects.Arc[] = [];
   /** Precomputed x of each position, indexed the same as `dots`. */
   private positionsX: number[] = [];
   /** Which position is currently lit (read by onTap to freeze the column). */
@@ -83,11 +84,18 @@ export class ZoneCSystem implements GameSystem {
       this.refreshDoor();
     });
 
+    // The door band is a wooden chute mouth with a brass hinge cap at each end.
     const r = Layout.zoneC;
     this.door = scene.add
-      .rectangle(r.x + r.width / 2, r.y + r.height / 2, r.width, r.height, 0x1d2740)
+      .rectangle(r.x + r.width / 2, r.y + r.height / 2, r.width, r.height, Theme.pine)
       .setInteractive({ useHandCursor: true });
     this.door.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
+    for (const capX of [r.x + 7, r.x + r.width - 7]) {
+      scene.add
+        .rectangle(capX, r.y + r.height / 2, 10, r.height - 6, Theme.brass)
+        .setStrokeStyle(1, Theme.pineShadow)
+        .setDepth(40);
+    }
 
     // Nine evenly-spaced markers along the door band. The lit one is where a tap drops
     // the ball, so the span is inset by one ball radius from each edge — a ball can never
@@ -98,7 +106,7 @@ export class ZoneCSystem implements GameSystem {
     for (let i = 0; i < SWEEP_POSITIONS; i++) {
       const x = this.sweepMinX + ((this.sweepMaxX - this.sweepMinX) * i) / (SWEEP_POSITIONS - 1);
       this.positionsX.push(x);
-      const dot = scene.add.rectangle(x, mouthY, 12, 12, 0x6cf0c2).setDepth(50);
+      const dot = scene.add.circle(x, mouthY, 6, Theme.brass).setDepth(50);
       this.dots.push(dot);
       this.styleDot(i, false);
     }
@@ -106,14 +114,14 @@ export class ZoneCSystem implements GameSystem {
     this.refreshDoor();
   }
 
-  /** Bright + outlined when active, dim and small when not. One place for both looks. */
+  /** Polished-brass glow when active, dim brass stud when not. One place for both looks. */
   private styleDot(i: number, active: boolean): void {
     const dot = this.dots[i];
     if (!dot) return;
     if (active) {
-      dot.setFillStyle(0x6cf0c2, 1).setStrokeStyle(2, 0xffffff).setScale(1.25);
+      dot.setFillStyle(Theme.brassBright, 1).setStrokeStyle(2, Theme.cream).setScale(1.3);
     } else {
-      dot.setFillStyle(0x2f5d51, 0.45).setStrokeStyle(0).setScale(1);
+      dot.setFillStyle(Theme.brass, 0.45).setStrokeStyle(0).setScale(1);
     }
   }
 
@@ -298,9 +306,9 @@ export class ZoneCSystem implements GameSystem {
   }
 
   private refreshDoor(): void {
-    // Armed = blue, locked = dim red.
+    // Armed = light pine with a brass edge (inviting); locked = desaturated, shadowed wood.
     const locked = this.isLocked();
-    this.door?.setFillStyle(locked ? 0x3a1d1d : 0x1d2740);
-    this.door?.setStrokeStyle(2, locked ? 0xd55a5a : 0x3a7bd5);
+    this.door?.setFillStyle(locked ? 0x8a7a64 : Theme.pine);
+    this.door?.setStrokeStyle(2, locked ? Theme.pineShadow : Theme.brass);
   }
 }

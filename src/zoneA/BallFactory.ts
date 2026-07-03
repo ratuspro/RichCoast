@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
-import { colorForTier, hexColor } from '../core/BallColors';
+import { compactValue, materialForTier } from '../core/Materials';
+import { paintBall } from '../core/MaterialPainter';
 import { tierToValue, type BallBodyData } from '../core/contracts';
 import { frictionForTier, radiusForTier } from './ballMath';
 import { DENSITY, FRICTION_AIR, FRICTION_STATIC, RESTITUTION } from './tuning';
@@ -56,17 +57,11 @@ export class BallFactory {
     if (!canvas) return key;
     const ctx = canvas.getContext();
 
-    const lineW = Math.max(2, radius * 0.08);
-    ctx.beginPath();
-    ctx.arc(radius, radius, radius - lineW / 2, 0, Math.PI * 2);
-    ctx.fillStyle = hexColor(colorForTier(tier));
-    ctx.fill();
-    ctx.lineWidth = lineW;
-    ctx.strokeStyle = 'rgba(11, 13, 18, 0.35)';
-    ctx.stroke();
+    paintBall(ctx, radius, tier, 'full');
 
-    const digits = String(tierToValue(tier));
-    const fontScale = digits.length <= 1 ? 1.05 : digits.length === 2 ? 0.82 : 0.62;
+    const digits = compactValue(tierToValue(tier));
+    const scaleSteps = [1.05, 0.82, 0.62, 0.5, 0.42]; // by character count, 1..5
+    const fontScale = scaleSteps[Math.min(digits.length, scaleSteps.length) - 1];
     const fontPx = Math.round(radius * fontScale);
     ctx.font = `bold ${fontPx}px monospace`;
     ctx.textAlign = 'center';
@@ -89,10 +84,13 @@ export class BallFactory {
     const image = this.scene.matter.add.image(x, y, key, undefined, {
       shape: { type: 'circle', radius },
     });
+    // Material feel: the shared multipliers are a narrow band on top of Zone A's tuned
+    // constants — wood bounces a touch, gold is dense, gems slip — no balance rework.
+    const feel = materialForTier(tier).def.physics;
     image
       .setFriction(frictionForTier(tier), FRICTION_AIR, FRICTION_STATIC)
-      .setBounce(RESTITUTION)
-      .setDensity(DENSITY);
+      .setBounce(RESTITUTION * feel.restitutionMult)
+      .setDensity(DENSITY * feel.densityMult);
 
     const body = image.body as MatterJS.BodyType;
     (body as TaggedBody).ballData = { value: tierToValue(tier), tier };
