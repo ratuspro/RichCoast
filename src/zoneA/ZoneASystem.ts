@@ -92,6 +92,10 @@ export class ZoneASystem implements GameSystem {
       this.internalLevel += 1;
       const stage = getStage(this.internalLevel);
       this.applyStage(stage, queue);
+      // applyStage may have re-seeded the queue's current/next (stages with bufferBalls),
+      // so re-sync the in-hand ball + Next preview — otherwise the player aims one tier
+      // and drops another. The milestone path below re-rolls and refreshes again on top.
+      this.aim?.refreshQueue();
       this.emitBuffer();
       this.bus.emit(GameEvent.ProgressionChanged, {
         level: this.internalLevel,
