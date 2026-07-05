@@ -56,6 +56,11 @@ export class ZoneASystem implements GameSystem {
    *  cash-in window regardless of how long it takes. A buffer refill is guaranteed once
    *  this clears, so it must not read as a stalemate in the meantime. */
   private scoreBarCashingIn = false;
+  /** True from the instant ScoreBarFilled arrives until the buffer's first tick actually
+   *  lands (ballBuffer > 0) — closes the gap between scoreBarCashingIn clearing (at
+   *  cash-in completion) and the buffer refill's first slot landing ~BUFFER_TICK_MS later,
+   *  during which isStalemate() must not read true even though ballBuffer is still 0. */
+  private cashInPending = false;
   private score = 0;
   private lossPending = false;
 
@@ -103,6 +108,7 @@ export class ZoneASystem implements GameSystem {
     });
 
     this.bus.on(GameEvent.ScoreBarFilled, () => {
+      this.cashInPending = true;
       this.internalLevel += 1;
       const stage = getStage(this.internalLevel);
       this.applyStage(stage, queue);
@@ -151,6 +157,7 @@ export class ZoneASystem implements GameSystem {
   }
 
   destroy(): void {
+    this.bufferTickTimer?.remove();
     this.aim?.destroy();
     this.board?.destroy();
     this.deathLine?.destroy();
@@ -270,7 +277,10 @@ export class ZoneASystem implements GameSystem {
   /** Unlock dropping only once the buffer actually has a slot — safe to call from both the
    *  ticked refill and the milestone-zoom completion regardless of which finishes first. */
   private maybeUnlockDrop(): void {
-    if (this.ballBuffer > 0) this.aim?.setDropLocked(false);
+    if (this.ballBuffer > 0) {
+      this.aim?.setDropLocked(false);
+      this.cashInPending = false;
+    }
   }
 
   private onBallDropped(): void {
@@ -289,7 +299,8 @@ export class ZoneASystem implements GameSystem {
       this.ballBuffer === 0 &&
       this.zoneBEmpty &&
       (this.board?.getBallCount() ?? 0) === 0 &&
-      !this.scoreBarCashingIn
+      !this.scoreBarCashingIn &&
+      !this.cashInPending
     );
   }
 
