@@ -49,6 +49,7 @@ export class ZoneASystem implements GameSystem {
 
   private internalLevel = 1;
   private ballBuffer = 0;
+  private bufferTickTimer?: Phaser.Time.TimerEvent;
   private zoneBEmpty = true;
   /** True whenever the score bar is holding full mid cash-in (dwell/wait-for-empty/drain) —
    *  derived from SCORE_BAR_CHANGED's filled/target, which stays >= target for the entire
@@ -244,6 +245,7 @@ export class ZoneASystem implements GameSystem {
    * step instead.
    */
   private animateBufferTo(newCapacity: number): void {
+    this.bufferTickTimer?.remove();
     if (newCapacity <= this.ballBuffer) {
       this.ballBuffer = newCapacity;
       this.emitBuffer();
@@ -252,7 +254,7 @@ export class ZoneASystem implements GameSystem {
     }
     const ticksNeeded = newCapacity - this.ballBuffer;
     let ticksDone = 0;
-    this.scene?.time.addEvent({
+    this.bufferTickTimer = this.scene?.time.addEvent({
       delay: BUFFER_TICK_MS,
       repeat: ticksNeeded - 1,
       callback: () => {
