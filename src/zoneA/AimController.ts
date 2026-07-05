@@ -144,6 +144,7 @@ export class AimController {
   private frozen = false;
 
   destroy(): void {
+    this.scene.tweens.killTweensOf(this.countText);
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown);
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove);
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.onPointerUp);
