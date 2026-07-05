@@ -11,6 +11,8 @@ import { StubZoneAC } from './dev/stubZoneAC';
 import { Harness } from './dev/harness';
 import { DebugHarness } from './dev/DebugHarness';
 import { isDebug, toggleDebug } from './core/DebugMode';
+import { PhaseDirector } from './core/PhaseDirector';
+import { PAN_DISTANCE } from './core/phaseGeometry';
 import { Sfx } from './core/Sfx';
 import { Theme } from './core/Theme';
 
@@ -72,9 +74,20 @@ export class GameScene extends Phaser.Scene {
 
     switch (mode) {
       case 'ac':
-        return [hud, new ZoneASystem(this.bus), new ZoneCSystem(this.bus), new StubZoneB(this.bus)];
+        // PhaseDirector goes LAST so its initial PHASE_CHANGED('A') lands after every
+        // system has subscribed in its own create().
+        return [
+          hud,
+          new ZoneASystem(this.bus),
+          new ZoneCSystem(this.bus),
+          new StubZoneB(this.bus),
+          new PhaseDirector(this.bus),
+        ];
 
       case 'b': {
+        // No Zone A / director in this slice: park the camera in the B-phase framing so
+        // the whole (taller-than-screen) Zone B band and its score bar are on screen.
+        this.cameras.main.setScroll(0, PAN_DISTANCE);
         const driver = new StubZoneAC(this.bus);
         return [hud, new ZoneBSystem(this.bus), driver, new Harness(this.bus, driver)];
       }
@@ -88,6 +101,7 @@ export class GameScene extends Phaser.Scene {
           new ZoneCSystem(this.bus),
           new ZoneBSystem(this.bus),
           this.debugHarness,
+          new PhaseDirector(this.bus),
         ];
       }
     }
@@ -120,8 +134,12 @@ export class GameScene extends Phaser.Scene {
    */
   private buildWorldGeometry(): void {
     const t = 40; // wall thickness, kept off-screen
-    const { WIDTH: w, HEIGHT: h } = Layout;
-    this.matter.add.rectangle(w / 2, h + t / 2, w, t, { isStatic: true }); // bottom
+    const w = Layout.WIDTH;
+    // The world is taller than the screen (Zone B's band ends below y=HEIGHT and is only
+    // fully framed in the B-phase camera scroll), so the safety wall sits under the WORLD
+    // bottom, not the screen bottom — otherwise balls would rest on an invisible mid-arena floor.
+    const worldBottom = Layout.zoneB.y + Layout.zoneB.height;
+    this.matter.add.rectangle(w / 2, worldBottom + t / 2, w, t, { isStatic: true }); // bottom
   }
 
   private applyDebug(on: boolean): void {

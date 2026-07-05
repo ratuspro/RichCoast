@@ -71,6 +71,12 @@ export const GameEvent = {
   ProgressionChanged: 'PROGRESSION_CHANGED',
   /** Zone A → Zone C: arena zoom-out (milestone) is animating; lock input while `active`. */
   ArenaZoom: 'ARENA_ZOOM',
+  /** PhaseDirector → all: the gameplay phase (or pan transition) changed. Zone A aims only
+   *  in 'A', Zone C's trap-door arms only in 'B'; both stay locked through the pan states. */
+  PhaseChanged: 'PHASE_CHANGED',
+  /** Zone A → PhaseDirector: ball buffer empty AND the board has settled — begin the pan
+   *  down into the Zone B phase. */
+  ZoneADepleted: 'ZONE_A_DEPLETED',
 } as const;
 
 export type GameEventName = (typeof GameEvent)[keyof typeof GameEvent];
@@ -114,6 +120,17 @@ export interface ArenaZoomPayload {
   active: boolean;
 }
 
+/**
+ * The two exclusive play phases and the pan transitions between them.
+ * 'A' = drop balls in Zone A; 'B' = tap Zone C's trap-door to feed Zone B;
+ * 'A_TO_B' / 'B_TO_A' = the camera pan is animating and ALL input is locked.
+ */
+export type GamePhase = 'A' | 'A_TO_B' | 'B' | 'B_TO_A';
+
+export interface PhaseChangedPayload {
+  phase: GamePhase;
+}
+
 /** Event name → payload type. `void` = a signal with no data. */
 export interface GameEventMap {
   [GameEvent.BallDropped]: BallDroppedPayload;
@@ -125,6 +142,8 @@ export interface GameEventMap {
   [GameEvent.BallBufferChanged]: BallBufferChangedPayload;
   [GameEvent.ProgressionChanged]: ProgressionChangedPayload;
   [GameEvent.ArenaZoom]: ArenaZoomPayload;
+  [GameEvent.PhaseChanged]: PhaseChangedPayload;
+  [GameEvent.ZoneADepleted]: void;
 }
 
 // ---------------------------------------------------------------------------

@@ -52,6 +52,9 @@ export class ZoneCSystem implements GameSystem {
   private locked = false;
   /** Separate lock raised while Zone A's milestone zoom-out animates (ArenaZoom event). */
   private zoomLocked = false;
+  /** Phase lock: the trap-door only arms in the 'B' phase (PhaseChanged event). Defaults
+   *  to locked — the run boots in the 'A' phase — so it's robust to create() ordering. */
+  private phaseLocked = true;
   private scene?: Phaser.Scene;
   private door?: Phaser.GameObjects.Rectangle;
   /** The nine dim brass position markers; the active one glows polished-bright. */
@@ -81,6 +84,14 @@ export class ZoneCSystem implements GameSystem {
     this.bus.on(GameEvent.ArenaZoom, ({ active }) => {
       this.zoomLocked = active;
       if (!active) this.sweepT = 0; // restart the sweep from the edge when the zoom lands
+      this.refreshDoor();
+    });
+
+    // Phase lock: armed only while the game is in the Zone-B phase (composes with the
+    // other two locks). Reset the sweep on arming so it always restarts from the edge.
+    this.bus.on(GameEvent.PhaseChanged, ({ phase }) => {
+      this.phaseLocked = phase !== 'B';
+      if (!this.phaseLocked) this.sweepT = 0;
       this.refreshDoor();
     });
 
@@ -132,9 +143,10 @@ export class ZoneCSystem implements GameSystem {
    * sweep always reappears the instant Zone B clears (`locked` → false), self-healing
    * regardless of how the busy/empty events interleave.
    */
-  /** True when the door is held — by Zone B activity OR an in-progress arena zoom-out. */
+  /** True when the door is held — by Zone B activity, an in-progress arena zoom-out,
+   *  or the game not being in the Zone-B phase. */
   private isLocked(): boolean {
-    return this.locked || this.zoomLocked;
+    return this.locked || this.zoomLocked || this.phaseLocked;
   }
 
   update(_time: number, delta: number): void {
@@ -233,7 +245,12 @@ export class ZoneCSystem implements GameSystem {
     }
 
     const mouthY = Layout.zoneC.y + Layout.zoneC.height / 2;
-    const sprite = scene.add.image(start.x, start.y, texKey).setDepth(800);
+    // `start` is in SCREEN coords (toApparent), but the sprite lives in world space on the
+    // scrolled main camera — sucks happen in the B-phase, where scrollY is parked at
+    // PAN_DISTANCE. Offset the spawn point; the tween targets (mouthY, zoneBEntry.y) are
+    // already world coords.
+    const startWorldY = start.y + scene.cameras.main.scrollY;
+    const sprite = scene.add.image(start.x, startWorldY, texKey).setDepth(800);
     sprite.setDisplaySize(start.size, start.size); // start at the ball's true on-screen size
     // The sprite rides the main camera into Zone B; keep the arena camera from double-drawing it.
     scene.cameras.getCamera('arena')?.ignore(sprite);

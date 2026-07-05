@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HEIGHT, WIDTH, zoneA, zoneB, zoneBEntry, zoneC } from './Layout';
+import { ARENA_VIEW_H_B, HUD_H, PAN_DISTANCE } from './phaseGeometry';
 
 describe('Layout', () => {
   it('stacks the zones top-to-bottom, each starting where the previous ends', () => {
@@ -8,9 +9,15 @@ describe('Layout', () => {
     expect(zoneB.y).toBe(zoneC.y + zoneC.height);
   });
 
-  it('tiles the full screen height with no gap or overlap', () => {
-    expect(zoneA.height + zoneC.height + zoneB.height).toBe(HEIGHT);
-    expect(zoneB.y + zoneB.height).toBe(HEIGHT);
+  it('overhangs the screen bottom by exactly the phase-pan distance', () => {
+    // The world is taller than the screen: the B-phase camera scrolls down PAN_DISTANCE
+    // to bring Zone B's bottom edge flush with the screen bottom.
+    expect(zoneB.y + zoneB.height - HEIGHT).toBe(PAN_DISTANCE);
+  });
+
+  it('sizes Zone B to exactly fill the B-phase frame', () => {
+    // Screen = HUD + top-cropped Zone A band + Zone C + all of Zone B.
+    expect(HEIGHT - HUD_H - ARENA_VIEW_H_B - zoneC.height).toBe(zoneB.height);
   });
 
   it('spans the full width in every zone', () => {

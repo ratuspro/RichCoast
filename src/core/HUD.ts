@@ -25,15 +25,19 @@ export class HUD implements GameSystem {
   create(scene: Phaser.Scene): void {
     // Chrome bar: above gameplay (depth 0) but below every HUD element (queue row 20,
     // text 1000), so it gives the numbers a surface without occluding them.
+    // Everything here is scrollFactor(0): the main camera scrolls between the two phase
+    // framings (see core/phaseGeometry.ts), and the HUD must stay pinned to the screen top.
     scene.add
       .rectangle(WIDTH / 2, BAND_CY, WIDTH, BAND_H, Theme.cream, 1)
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(5);
 
     // Bottom edge: a 2px wood base rule with a thin brass accent above it (the signature touch).
     scene.add
       .graphics()
       .setDepth(6)
+      .setScrollFactor(0)
       .fillStyle(Theme.pineDark, 1)
       .fillRect(0, BAND_H - 2, WIDTH, 2)
       .fillStyle(Theme.brass, 0.8)
@@ -46,6 +50,7 @@ export class HUD implements GameSystem {
         color: hexColor(Theme.ink),
       })
       .setOrigin(0.5, 0.5)
+      .setScrollFactor(0)
       .setDepth(1000);
 
     this.levelText = scene.add
@@ -55,6 +60,7 @@ export class HUD implements GameSystem {
         color: hexColor(Theme.inkSoft),
       })
       .setOrigin(0, 0.5)
+      .setScrollFactor(0)
       .setDepth(1000);
 
     this.bus.on(GameEvent.ScoreChanged, ({ total }) => {

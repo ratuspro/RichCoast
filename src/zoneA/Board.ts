@@ -79,6 +79,20 @@ export class Board {
   getBallCount(): number { return this.registry.size; }
 
   /**
+   * True when nothing on the board is still in motion: no merges waiting to resolve, and
+   * every body either sleeping or below the (scale-normalized) rest speed — the same
+   * threshold scanOverflow uses. Drives the settle gate that arms the A→B phase pan.
+   */
+  isSettled(): boolean {
+    if (this.pending.length > 0) return false;
+    const restSpeed = REST_SPEED * this.arena.scale;
+    for (const ball of this.registry.values()) {
+      if (!ball.body.isSleeping && ball.body.speed >= restSpeed) return false;
+    }
+    return true;
+  }
+
+  /**
    * Remove every board ball whose tier is below `minTier` — the tiers blacklisted when a
    * milestone shifts the draw window up — and return a snapshot of each so the caller can
    * animate them draining into Zone B. Destroying each image self-prunes the registry via its

@@ -49,6 +49,8 @@ export class AimController {
       .setDepth(10);
     arena.claim(this.aimImage); // zooms with the arena via the dedicated camera
 
+    // The queue row is screen-space chrome pinned to the HUD bar: scrollFactor(0) keeps it
+    // put while the main camera pans between the phase framings.
     this.previewLabel = scene.add
       .text(LABEL_X, ROW_Y, 'NEXT', {
         fontFamily: 'monospace',
@@ -56,10 +58,12 @@ export class AimController {
         color: LABEL_COLOR,
       })
       .setOrigin(0, 0.5)
+      .setScrollFactor(0)
       .setDepth(20);
     this.previewImage = scene.add
       .image(PREVIEW_X, ROW_Y, factory.ensureTexture(this.queue.peekNext()))
       .setDisplaySize(PREVIEW_SIZE, PREVIEW_SIZE)
+      .setScrollFactor(0)
       .setDepth(20);
     // Balls-left-to-drop count, on the same row. Hidden until the first value arrives.
     this.countText = scene.add
@@ -69,6 +73,7 @@ export class AimController {
         color: COUNT_COLOR,
       })
       .setOrigin(1, 0.5)
+      .setScrollFactor(0)
       .setDepth(20)
       .setVisible(false);
 
@@ -99,6 +104,12 @@ export class AimController {
       duration: 160,
       ease: 'Back.easeOut',
     });
+  }
+
+  /** Screen-space centre of the balls-left count — the landing point for the score-bar
+   *  cash-in particles (ZoneASystem flies one brass mote here per refilled slot). */
+  countAnchor(): { x: number; y: number } {
+    return { x: this.countText.x - this.countText.displayWidth / 2, y: this.countText.y };
   }
 
   /** Freeze input and hide the aim ball (called on game over). */

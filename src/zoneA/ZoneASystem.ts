@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameEvent, tierToValue, type GameSystem } from '../core/contracts';
+import { GameEvent, tierToValue, type GamePhase, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { hexColor } from '../core/Materials';
@@ -13,6 +13,7 @@ import { BallFactory } from './BallFactory';
 import { BallQueue } from './BallQueue';
 import { Board } from './Board';
 import { DeathLine } from './DeathLine';
+import { advanceSettleGate, initialSettleGate, type SettleGateState } from './settleGate';
 
 /** Levels between arena zoom-out milestones (50, 100, 150, …). The draw-window *shift-ups* in
  *  `progression.json` MUST land on these same levels — the milestone reads the new window's floor
@@ -38,6 +39,22 @@ const STALEMATE_GRACE_MS = 250;
 /** Ball-buffer refill cadence during a score-bar cash-in: one slot every this many ms. */
 const BUFFER_TICK_MS = 130;
 
+/** Cash-in particle: flight time from the score bar up to the queue-row count (ms). Each
+ *  refilled buffer slot only lands (count pop + blip) when its particle arrives. */
+const PARTICLE_FLIGHT_MS = 500;
+/** Cash-in particle: horizontal jitter on the flight path's bezier control point (px). */
+const PARTICLE_BOW_JITTER = 60;
+/** Cash-in particle: trail motes fade out over this long (ms). */
+const TRAIL_FADE_MS = 220;
+
+/** One in-flight cash-in particle — tracked so a re-triggered refill or destroy() can
+ *  settle or discard it deterministically. */
+interface BufferParticle {
+  tween: Phaser.Tweens.Tween;
+  dot: Phaser.GameObjects.Arc;
+  index: number;
+}
+
 export class ZoneASystem implements GameSystem {
   private scene?: Phaser.Scene;
   private arena?: ArenaView;
@@ -50,6 +67,7 @@ export class ZoneASystem implements GameSystem {
   private internalLevel = 1;
   private ballBuffer = 0;
   private bufferTickTimer?: Phaser.Time.TimerEvent;
+  private readonly bufferParticles = new Set<BufferParticle>();
   private zoneBEmpty = true;
   /** True whenever the score bar is holding full mid cash-in (dwell/wait-for-empty/drain) —
    *  derived from SCORE_BAR_CHANGED's filled/target, which stays >= target for the entire
@@ -64,6 +82,16 @@ export class ZoneASystem implements GameSystem {
   private cashInPending = false;
   private score = 0;
   private lossPending = false;
+
+  /** Current gameplay phase (PhaseChanged event). Aiming is live only in 'A'. */
+  private phase: GamePhase = 'A';
+  /** True while the milestone zoom-out tween runs — one of the two freeze sources. */
+  private milestoneZoomActive = false;
+  /** Armed when the buffer empties: the settle gate that fires ZONE_A_DEPLETED. */
+  private settleGate?: SettleGateState;
+  /** A cash-in that arrived outside the 'A' phase — its visible reward sequence
+   *  (milestone zoom / buffer refill) is deferred until the pan lands back in A. */
+  private pendingCashIn?: { stage: ProgressionStage; prev: ProgressionStage };
 
   constructor(private readonly bus: EventBus) {}
 
@@ -109,6 +137,8 @@ export class ZoneASystem implements GameSystem {
     });
 
     this.bus.on(GameEvent.ScoreBarFilled, () => {
+      // Immediate half (any phase): advance the stage and broadcast it — Zone B reads the
+      // new scoreBarTarget synchronously for its cascade math, so this ordering is frozen.
       this.cashInPending = true;
       this.internalLevel += 1;
       const stage = getStage(this.internalLevel);
@@ -117,7 +147,6 @@ export class ZoneASystem implements GameSystem {
       // so re-sync the in-hand ball + Next preview — otherwise the player aims one tier
       // and drops another. The milestone path below re-rolls and refreshes again on top.
       this.aim?.refreshQueue();
-      this.animateBufferTo(stage.bufferCapacity);
       this.bus.emit(GameEvent.ProgressionChanged, {
         level: this.internalLevel,
         minTier: stage.ballWindow[0],
@@ -125,23 +154,26 @@ export class ZoneASystem implements GameSystem {
         bufferCapacity: stage.bufferCapacity,
         scoreBarTarget: stage.scoreBarTarget,
       });
-      // Every MILESTONE_EVERY levels the draw window jumps up, blacklisting the lowest
-      // tiers, and the arena zooms out (input frozen during the tween) by the neutral
-      // ball-growth match × the stage's authored tightness — so apparent ball size holds
-      // constant at tightness 1 and the arena-to-ball headroom is exactly the tightness
-      // rhythm authored in progression.json. Past the last authored window shift the stage
-      // stops moving, so milestones become plain levels (no growth — the tail self-heals).
-      // Otherwise just lift the buffer-empty drop lock as before (guarded: the ticked
-      // buffer refill above may not have delivered its first slot yet).
+      // Deferred half: the visible reward (milestone zoom / drain / ticked buffer refill)
+      // runs only in the 'A' phase. A cash-in normally arrives in the 'B' phase and the
+      // PhaseDirector pans back up on this same event — the sequence then runs when
+      // PHASE_CHANGED('A') lands, so the milestone zoom never overlaps the pan. A cash-in
+      // while already in 'A' (e.g. milestone-drain balls filled the bar) runs immediately.
       const prev = getStage(this.internalLevel - 1);
-      const shifted =
-        stage.ballWindow[0] !== prev.ballWindow[0] || stage.ballWindow[1] !== prev.ballWindow[1];
-      if (this.internalLevel % MILESTONE_EVERY === 0 && shifted) {
-        const factor =
-          neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
-        this.beginMilestoneZoom(factor, stage.ballWindow[0]);
+      if (this.phase === 'A') {
+        this.runCashInSequence(stage, prev);
       } else {
-        this.maybeUnlockDrop();
+        this.pendingCashIn = { stage, prev };
+      }
+    });
+
+    this.bus.on(GameEvent.PhaseChanged, ({ phase }) => {
+      this.phase = phase;
+      this.applyFreeze();
+      if (phase === 'A' && this.pendingCashIn) {
+        const { stage, prev } = this.pendingCashIn;
+        this.pendingCashIn = undefined;
+        this.runCashInSequence(stage, prev);
       }
     });
 
@@ -152,13 +184,64 @@ export class ZoneASystem implements GameSystem {
     });
   }
 
+  /**
+   * The visible reward sequence for one score-bar cash-in. Every MILESTONE_EVERY levels the
+   * draw window jumps up, blacklisting the lowest tiers, and the arena zooms out (input
+   * frozen during the tween) by the neutral ball-growth match × the stage's authored
+   * tightness — so apparent ball size holds constant at tightness 1 and the arena-to-ball
+   * headroom is exactly the tightness rhythm authored in progression.json. Past the last
+   * authored window shift the stage stops moving, so milestones become plain levels (no
+   * growth — the tail self-heals). Otherwise just lift the buffer-empty drop lock (guarded:
+   * the ticked buffer refill may not have delivered its first slot yet).
+   */
+  private runCashInSequence(stage: ProgressionStage, prev: ProgressionStage): void {
+    this.animateBufferTo(stage.bufferCapacity);
+    const shifted =
+      stage.ballWindow[0] !== prev.ballWindow[0] || stage.ballWindow[1] !== prev.ballWindow[1];
+    if (this.internalLevel % MILESTONE_EVERY === 0 && shifted) {
+      const factor =
+        neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
+      this.beginMilestoneZoom(factor, stage.ballWindow[0]);
+    } else {
+      this.maybeUnlockDrop();
+    }
+  }
+
   update(_time: number, delta: number): void {
     if (this.over) return;
     this.board?.update(delta);
+    this.advanceDepletionGate(delta);
+  }
+
+  /**
+   * While the buffer sits at 0, wait for the last drop to settle (with a hard timeout so a
+   * trembling board can't wedge the flow), then hand control to the Zone-B phase via
+   * ZONE_A_DEPLETED — unless the run is over, or the board+Zone B are empty (that shape is
+   * the stalemate, already ending the run through checkLoss). Refills disarm the gate.
+   */
+  private advanceDepletionGate(delta: number): void {
+    if (!this.settleGate || !this.board) return;
+    const step = advanceSettleGate(this.settleGate, delta, this.board.isSettled());
+    this.settleGate = step.state;
+    if (!step.fire) return;
+    this.settleGate = undefined;
+    if (this.over || this.phase !== 'A') return;
+    // A ticked refill is still landing slots (the player spent the first one back to 0):
+    // more balls are seconds away, so don't pan — maybeUnlockDrop re-opens play shortly.
+    if (this.cashInPending) return;
+    if (this.board.getBallCount() === 0 && this.zoneBEmpty) return; // stalemate path owns this
+    this.bus.emit(GameEvent.ZoneADepleted);
+  }
+
+  /** One sink for the reversible aim freeze, composing its two sources: the milestone
+   *  zoom-out and the game not being in the 'A' phase. */
+  private applyFreeze(): void {
+    this.aim?.setFrozen(this.milestoneZoomActive || this.phase !== 'A');
   }
 
   destroy(): void {
     this.bufferTickTimer?.remove();
+    this.discardBufferParticles();
     this.aim?.destroy();
     this.board?.destroy();
     this.deathLine?.destroy();
@@ -172,7 +255,8 @@ export class ZoneASystem implements GameSystem {
    * ball are re-seated to the grown arena up front so they animate with the camera.
    */
   private beginMilestoneZoom(factor: number, newMinTier: number): void {
-    this.aim?.setFrozen(true);
+    this.milestoneZoomActive = true;
+    this.applyFreeze();
     // The window already shifted up (applyStage); re-roll the in-hand + Next pieces off any
     // now-blacklisted tiers and refresh the queue row so it shows valid tiers when input returns.
     this.queue?.reroll();
@@ -180,7 +264,8 @@ export class ZoneASystem implements GameSystem {
     this.bus.emit(GameEvent.ArenaZoom, { active: true });
     this.arena?.grow(factor, () => {
       this.drainBlacklisted(newMinTier, () => {
-        this.aim?.setFrozen(false);
+        this.milestoneZoomActive = false;
+        this.applyFreeze();
         this.maybeUnlockDrop();
         this.bus.emit(GameEvent.ArenaZoom, { active: false });
       });
@@ -247,13 +332,20 @@ export class ZoneASystem implements GameSystem {
   /**
    * Refill the ball buffer to `newCapacity`, one slot at a time, so the HUD's queue-row
    * count visibly ticks up instead of instantly jumping — this is what makes filling the
-   * score bar read as a reward. Drop unlocks the moment the first tick lands, via
+   * score bar read as a reward. Each tick launches a brass particle from the (just-drained)
+   * score bar at the bottom of Zone B; the slot only lands — count pop + blip — when the
+   * particle arrives at the queue-row count, so the refill reads as the bar's energy flying
+   * up into the ball supply. Drop unlocks the moment the first slot lands, via
    * maybeUnlockDrop(). If the buffer is already at or above the new capacity (shouldn't
    * normally happen, since capacity is non-decreasing across stages), applies it in one
    * step instead.
    */
   private animateBufferTo(newCapacity: number): void {
     this.bufferTickTimer?.remove();
+    // A back-to-back cash-in (overflow cascade) can restart the refill while particles from
+    // the previous one are still in flight. Settle them instantly — their slots are already
+    // spoken for — so the ticksNeeded arithmetic below starts from an honest ballBuffer.
+    this.settleBufferParticles();
     if (newCapacity <= this.ballBuffer) {
       this.ballBuffer = newCapacity;
       this.emitBuffer();
@@ -261,18 +353,111 @@ export class ZoneASystem implements GameSystem {
       return;
     }
     const ticksNeeded = newCapacity - this.ballBuffer;
-    let ticksDone = 0;
+    let launched = 0;
     this.bufferTickTimer = this.scene?.time.addEvent({
       delay: BUFFER_TICK_MS,
       repeat: ticksNeeded - 1,
-      callback: () => {
-        this.ballBuffer += 1;
-        this.emitBuffer();
-        Sfx.bufferTick(ticksDone);
-        ticksDone += 1;
-        this.maybeUnlockDrop();
+      callback: () => this.launchBufferParticle(launched++),
+    });
+  }
+
+  /**
+   * Fly one brass mote from a random point along the score bar (bottom edge of Zone B) up
+   * to the queue-row balls-left count, bowing sideways along a quadratic bezier and shedding
+   * a short fading trail. The buffer slot lands on arrival. Screen-space chrome: kept off
+   * the arena camera so a milestone zoom can't shrink or double-draw it.
+   */
+  private launchBufferParticle(index: number): void {
+    const scene = this.scene;
+    const anchor = this.aim?.countAnchor();
+    if (!scene || !anchor) { this.landBufferSlot(index); return; }
+
+    // Launch from the bottom of the SCREEN, not the world: this runs in the A-phase
+    // (scroll 0), where Zone B's band bottom (world 952) is off-screen below y=844.
+    const start = {
+      x: Layout.zoneB.x + Math.random() * Layout.zoneB.width,
+      y: Layout.HEIGHT - 5,
+    };
+    const control = new Phaser.Math.Vector2(
+      (start.x + anchor.x) / 2 + Phaser.Math.FloatBetween(-PARTICLE_BOW_JITTER, PARTICLE_BOW_JITTER),
+      Phaser.Math.Linear(start.y, anchor.y, 0.45),
+    );
+    const curve = new Phaser.Curves.QuadraticBezier(
+      new Phaser.Math.Vector2(start.x, start.y),
+      control,
+      new Phaser.Math.Vector2(anchor.x, anchor.y),
+    );
+
+    const dot = scene.add
+      .circle(start.x, start.y, 4, Theme.brassBright)
+      .setStrokeStyle(2, Theme.brass, 0.6)
+      .setDepth(950);
+    this.arena?.ignoreOnArenaCamera(dot);
+
+    const proxy = { t: 0 };
+    let frame = 0;
+    const particle: BufferParticle = { dot, index, tween: undefined as unknown as Phaser.Tweens.Tween };
+    particle.tween = scene.tweens.add({
+      targets: proxy,
+      t: 1,
+      duration: PARTICLE_FLIGHT_MS,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        const p = curve.getPoint(proxy.t);
+        dot.setPosition(p.x, p.y);
+        if (frame++ % 3 === 0) this.shedTrailMote(scene, p.x, p.y);
+      },
+      onComplete: () => {
+        this.bufferParticles.delete(particle);
+        dot.destroy();
+        this.landBufferSlot(index);
       },
     });
+    this.bufferParticles.add(particle);
+  }
+
+  /** A tiny fading mote left behind by an in-flight cash-in particle. Self-destroys. */
+  private shedTrailMote(scene: Phaser.Scene, x: number, y: number): void {
+    const mote = scene.add.circle(x, y, 2, Theme.brassBright, 0.55).setDepth(949);
+    this.arena?.ignoreOnArenaCamera(mote);
+    scene.tweens.add({
+      targets: mote,
+      alpha: 0,
+      scale: 0.3,
+      duration: TRAIL_FADE_MS,
+      onComplete: () => mote.destroy(),
+    });
+  }
+
+  /** One refilled buffer slot arrives: count up, pop the queue-row number, blip. */
+  private landBufferSlot(index: number): void {
+    this.ballBuffer += 1;
+    this.emitBuffer();
+    Sfx.bufferTick(index);
+    this.maybeUnlockDrop();
+  }
+
+  /** Land every in-flight particle's slot immediately (no per-slot blip spam) and clear
+   *  the visuals — used when a new refill starts while the previous one is still flying. */
+  private settleBufferParticles(): void {
+    if (this.bufferParticles.size === 0) return;
+    for (const p of this.bufferParticles) {
+      p.tween.remove();
+      p.dot.destroy();
+      this.ballBuffer += 1;
+    }
+    this.bufferParticles.clear();
+    this.emitBuffer();
+    this.maybeUnlockDrop();
+  }
+
+  /** Teardown-only: kill particle tweens and visuals without landing slots or emitting. */
+  private discardBufferParticles(): void {
+    for (const p of this.bufferParticles) {
+      p.tween.remove();
+      p.dot.destroy();
+    }
+    this.bufferParticles.clear();
   }
 
   /** Unlock dropping only once the buffer actually has a slot — safe to call from both the
@@ -281,6 +466,7 @@ export class ZoneASystem implements GameSystem {
     if (this.ballBuffer > 0) {
       this.aim?.setDropLocked(false);
       this.cashInPending = false;
+      this.settleGate = undefined; // a refill landed — the buffer is no longer depleted
     }
   }
 
@@ -291,6 +477,9 @@ export class ZoneASystem implements GameSystem {
     if (this.ballBuffer === 0) {
       this.aim?.setDropLocked(true);
       this.checkLoss();
+      // Last ball released: arm the settle gate — once the board comes to rest (or the
+      // timeout hits) the A→B phase pan begins. A refill in the meantime disarms it.
+      this.settleGate = initialSettleGate();
     }
   }
 
@@ -338,30 +527,47 @@ export class ZoneASystem implements GameSystem {
     const cx = Layout.WIDTH / 2;
     const cy = Layout.HEIGHT / 2;
 
-    scene.add
-      .rectangle(cx, cy, Layout.WIDTH, Layout.HEIGHT, Theme.scrim, 0.85)
-      .setDepth(2000);
+    // Pinned + arena-ignored: game over can fire in either phase framing (main camera may
+    // be scrolled down), so everything is scrollFactor(0) to cover the actual screen, and
+    // kept off the arena camera so the zoomed band can't double-draw it.
+    const pin = <T extends Phaser.GameObjects.GameObject & { setScrollFactor(v: number): T }>(
+      obj: T,
+    ): T => {
+      obj.setScrollFactor(0);
+      this.arena?.ignoreOnArenaCamera(obj);
+      return obj;
+    };
 
-    scene.add
-      .text(cx, cy - 80, 'GAME OVER', {
-        fontFamily: 'monospace',
-        fontSize: '40px',
-        color: hexColor(Theme.brassBright),
-        fontStyle: 'bold',
-        align: 'center',
-      })
-      .setOrigin(0.5)
-      .setDepth(2001);
+    pin(
+      scene.add
+        .rectangle(cx, cy, Layout.WIDTH, Layout.HEIGHT, Theme.scrim, 0.85)
+        .setDepth(2000),
+    );
 
-    scene.add
-      .text(cx, cy - 20, `Score: ${this.score}`, {
-        fontFamily: 'monospace',
-        fontSize: '24px',
-        color: hexColor(Theme.cream),
-        align: 'center',
-      })
-      .setOrigin(0.5)
-      .setDepth(2001);
+    pin(
+      scene.add
+        .text(cx, cy - 80, 'GAME OVER', {
+          fontFamily: 'monospace',
+          fontSize: '40px',
+          color: hexColor(Theme.brassBright),
+          fontStyle: 'bold',
+          align: 'center',
+        })
+        .setOrigin(0.5)
+        .setDepth(2001),
+    );
+
+    pin(
+      scene.add
+        .text(cx, cy - 20, `Score: ${this.score}`, {
+          fontFamily: 'monospace',
+          fontSize: '24px',
+          color: hexColor(Theme.cream),
+          align: 'center',
+        })
+        .setOrigin(0.5)
+        .setDepth(2001),
+    );
 
     this.drawRestartButton(scene, cx, cy + 60);
   }
@@ -372,10 +578,11 @@ export class ZoneASystem implements GameSystem {
     const button = scene.add
       .rectangle(cx, cy, width, height, Theme.pineDark)
       .setStrokeStyle(2, Theme.brassBright)
+      .setScrollFactor(0)
       .setDepth(2001)
       .setInteractive({ useHandCursor: true });
 
-    scene.add
+    const label = scene.add
       .text(cx, cy, 'RESTART', {
         fontFamily: 'monospace',
         fontSize: '22px',
@@ -383,7 +590,9 @@ export class ZoneASystem implements GameSystem {
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(2002);
+    this.arena?.ignoreOnArenaCamera([button, label]);
 
     button.on('pointerup', () => scene.scene.restart());
   }

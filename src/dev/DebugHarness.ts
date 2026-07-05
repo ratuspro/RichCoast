@@ -55,11 +55,14 @@ export class DebugHarness implements GameSystem {
   }
 
   private buildUI(scene: Phaser.Scene): void {
-    const btnY = Layout.zoneB.y + Layout.zoneB.height - 28;
+    // Screen-space overlay: pinned (scrollFactor 0) so the phase pan can't move it, and
+    // positioned from the SCREEN bottom — Zone B's world bottom sits below the screen now.
+    const btnY = Layout.HEIGHT - 28;
 
     this.btn = scene.add
       .rectangle(Layout.WIDTH / 2, btnY, 160, 40, 0x2d7d46)
       .setStrokeStyle(2, 0x6ee7a0)
+      .setScrollFactor(0)
       .setInteractive({ useHandCursor: true })
       .setDepth(2000);
     this.btn.on(Phaser.Input.Events.POINTER_DOWN, () => {
@@ -73,6 +76,7 @@ export class DebugHarness implements GameSystem {
         color: '#ffffff',
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(2001);
 
     this.logText = scene.add
@@ -82,6 +86,7 @@ export class DebugHarness implements GameSystem {
         color: '#8fd0ff',
         lineSpacing: 2,
       })
+      .setScrollFactor(0)
       .setDepth(2000);
   }
 

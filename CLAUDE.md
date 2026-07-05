@@ -149,11 +149,13 @@ tightness rhythm are starting numbers to tune by playtest. Filling the score bar
 **cash-in reward beat** rather than an instant refill: once `filled` crosses `target` the bar
 pins full and `ZoneASystem` holds a `scoreBarCashingIn`/`cashInPending` pair of flags so the
 stalemate check can't misfire while Zone B finishes draining any balls still in flight, then
-(driven from Zone B) a brief dwell and a visual drain-out tween play before the level-up and
-buffer refill actually land; the ball buffer then ticks up to the new stage's capacity one
-slot at a time (`animateBufferTo`, `BUFFER_TICK_MS` apart) with a pop and an audio blip per
-slot, and drop only unlocks once the first slot lands, so the refill reads as an earned
-reward instead of a jump-cut.
+(driven from Zone B) a brief dwell plays before the level-up and buffer refill land — the bar
+itself never animates downward, it snaps to its carried-over value the moment the cash-in
+resolves; the refill then launches one **brass particle per new slot** (`animateBufferTo`,
+`BUFFER_TICK_MS` apart) that arcs from the score bar up to the queue-row balls-left count
+along a jittered bezier with a fading trail, and each slot only lands (count pop + audio
+blip) when its particle arrives; drop unlocks on the first landing, so the refill reads as
+the bar's energy flying up into the ball supply instead of a jump-cut.
 
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,

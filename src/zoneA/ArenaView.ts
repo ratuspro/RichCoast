@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import * as Layout from '../core/Layout';
+import { ARENA_VIEW_H_A, HUD_H, arenaCenterY } from '../core/phaseGeometry';
 import { Theme } from '../core/Theme';
 import { DEATH_LINE_Y, SPAWN_Y } from './tuning';
 
@@ -34,13 +35,14 @@ const WALL_T = 40;
  * (HUD.BAND_H = 42), so the bar (drawn by the main camera) is never overdrawn by the
  * zoomed balls and the framing at s=1 matches the original single-camera view exactly.
  */
-const ARENA_VIEW_TOP = 42;
+const ARENA_VIEW_TOP = HUD_H;
 
 /** Funnel apex y — the Zone A/C boundary. Constant: it always feeds Zone C. */
 const FLOOR_Y = Layout.zoneA.y + Layout.zoneA.height;
 
-/** Visible arena viewport height (Zone A band minus the HUD bar). */
-const VIEW_H = Layout.zoneA.height - ARENA_VIEW_TOP;
+// The viewport HEIGHT is phase-dependent: full board band in the A-phase, top-cropped
+// in the B-phase. PhaseDirector animates `camera.height` during the pan, so everything
+// here reads the LIVE camera height instead of a constant (see core/phaseGeometry.ts).
 
 interface Point {
   x: number;
@@ -61,7 +63,7 @@ export class ArenaView {
   create(): void {
     this.layer = this.scene.add.layer();
 
-    this.camera = this.scene.cameras.add(0, ARENA_VIEW_TOP, Layout.WIDTH, VIEW_H);
+    this.camera = this.scene.cameras.add(0, ARENA_VIEW_TOP, Layout.WIDTH, ARENA_VIEW_H_A);
     this.camera.setName('arena');
     this.camera.setBackgroundColor(Theme.paperZoneA); // the Zone A band fill (replaces the backdrop's)
 
@@ -172,8 +174,10 @@ export class ArenaView {
   private applyCameraZoom(zoom: number): void {
     const s = 1 / zoom;
     this.camera.setZoom(zoom);
-    // Visible world spans VIEW_H*s tall ending at FLOOR_Y, and WIDTH*s wide centred on WIDTH/2.
-    this.camera.centerOn(Layout.WIDTH / 2, FLOOR_Y - (VIEW_H / 2) * s);
+    // Visible world spans (live viewport height)*s tall ending at FLOOR_Y, and WIDTH*s wide
+    // centred on WIDTH/2. Reading the live height keeps this correct mid-phase-pan, when
+    // PhaseDirector is shrinking/growing the viewport (floor stays pinned → the TOP crops).
+    this.camera.centerOn(Layout.WIDTH / 2, arenaCenterY(this.camera.height, s));
   }
 
   /** Destroy + rebuild the boundary walls + funnel floor at the current scale, and redraw them. */
