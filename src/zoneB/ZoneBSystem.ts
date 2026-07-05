@@ -40,6 +40,9 @@ export class ZoneBSystem implements GameSystem {
    *  immediately overwritten by a same-tick emitScoreBar() (e.g. from a ProgressionChanged
    *  listener firing inside the ScoreBarFilled emit below). */
   private draining = false;
+  /** True once the bar has crossed target but Zone B still has balls in flight — the dwell
+   *  timer doesn't start until onBallDrained() sees inFlight reach 0 and clears this. */
+  private pendingCashIn = false;
 
   private barFill?: Phaser.GameObjects.Rectangle;
   private barLabel?: Phaser.GameObjects.Text;
@@ -135,6 +138,10 @@ export class ZoneBSystem implements GameSystem {
     this.inFlight -= 1;
     if (this.inFlight === 0) {
       this.bus.emit(GameEvent.ZoneBEmpty);
+      if (this.pendingCashIn) {
+        this.pendingCashIn = false;
+        this.armCashInTimer();
+      }
     }
   }
 
@@ -148,17 +155,28 @@ export class ZoneBSystem implements GameSystem {
 
     const filled = this.scoreBar.add(points);
     this.emitScoreBar();
-    if (filled) this.beginCashIn();
+    if (filled) this.onBarFilled();
   }
 
   /**
-   * The bar just crossed its target. Play the reward cue immediately, then hold the bar
-   * full for a dwell beat before draining it out — the buffer refill (ScoreBarFilled) only
-   * fires once the drain-out visual finishes, so filling the bar reads as an event instead
-   * of an instant, invisible jump.
+   * The bar just crossed its target. Play the reward cue immediately — that always happens
+   * on the instant of crossing, whether or not Zone B is still busy. If Zone B has no balls
+   * in flight right now, arm the dwell timer immediately; otherwise wait — onBallDrained()
+   * will arm it the moment Zone B actually empties, so the bar stays pinned full and static
+   * for as long as balls are still cascading through gates and collectors.
    */
-  private beginCashIn(): void {
+  private onBarFilled(): void {
     Sfx.goal();
+    if (this.inFlight === 0) {
+      this.armCashInTimer();
+    } else {
+      this.pendingCashIn = true;
+    }
+  }
+
+  /** Hold the bar full for a dwell beat, then drain it out. Only ever called once Zone B is
+   *  confirmed empty (either immediately in onBarFilled, or deferred via pendingCashIn). */
+  private armCashInTimer(): void {
     this.scene?.time.delayedCall(CASH_IN_DWELL_MS, () => this.beginDrainOut());
   }
 
@@ -184,7 +202,7 @@ export class ZoneBSystem implements GameSystem {
         this.bus.emit(GameEvent.ScoreBarFilled);
         const cascade = this.scoreBar.completeCashIn();
         this.emitScoreBar();
-        if (cascade) this.beginCashIn();
+        if (cascade) this.onBarFilled();
       },
     });
   }
