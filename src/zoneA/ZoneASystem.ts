@@ -35,6 +35,9 @@ const DRAIN_MARGIN = 12;
  */
 const STALEMATE_GRACE_MS = 250;
 
+/** Ball-buffer refill cadence during a score-bar cash-in: one slot every this many ms. */
+const BUFFER_TICK_MS = 130;
+
 export class ZoneASystem implements GameSystem {
   private scene?: Phaser.Scene;
   private arena?: ArenaView;
@@ -66,6 +69,7 @@ export class ZoneASystem implements GameSystem {
     this.queue = queue;
     const initialStage = getStage(this.internalLevel);
     this.applyStage(initialStage, queue);
+    this.ballBuffer = initialStage.bufferCapacity;
 
     const board = new Board(
       scene,
@@ -96,7 +100,7 @@ export class ZoneASystem implements GameSystem {
       // so re-sync the in-hand ball + Next preview — otherwise the player aims one tier
       // and drops another. The milestone path below re-rolls and refreshes again on top.
       this.aim?.refreshQueue();
-      this.emitBuffer();
+      this.animateBufferTo(stage.bufferCapacity);
       this.bus.emit(GameEvent.ProgressionChanged, {
         level: this.internalLevel,
         minTier: stage.ballWindow[0],
@@ -110,7 +114,8 @@ export class ZoneASystem implements GameSystem {
       // constant at tightness 1 and the arena-to-ball headroom is exactly the tightness
       // rhythm authored in progression.json. Past the last authored window shift the stage
       // stops moving, so milestones become plain levels (no growth — the tail self-heals).
-      // Otherwise just lift the buffer-empty drop lock as before.
+      // Otherwise just lift the buffer-empty drop lock as before (guarded: the ticked
+      // buffer refill above may not have delivered its first slot yet).
       const prev = getStage(this.internalLevel - 1);
       const shifted =
         stage.ballWindow[0] !== prev.ballWindow[0] || stage.ballWindow[1] !== prev.ballWindow[1];
@@ -119,7 +124,7 @@ export class ZoneASystem implements GameSystem {
           neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
         this.beginMilestoneZoom(factor, stage.ballWindow[0]);
       } else {
-        this.aim?.setDropLocked(false);
+        this.maybeUnlockDrop();
       }
     });
 
@@ -158,7 +163,7 @@ export class ZoneASystem implements GameSystem {
     this.arena?.grow(factor, () => {
       this.drainBlacklisted(newMinTier, () => {
         this.aim?.setFrozen(false);
-        this.aim?.setDropLocked(false);
+        this.maybeUnlockDrop();
         this.bus.emit(GameEvent.ArenaZoom, { active: false });
       });
     });
@@ -219,7 +224,42 @@ export class ZoneASystem implements GameSystem {
   private applyStage(stage: ProgressionStage, queue: BallQueue): void {
     queue.setWindow(stage.ballWindow[0], stage.ballWindow[1]);
     if (stage.bufferBalls) queue.seed(stage.bufferBalls);
-    this.ballBuffer = stage.bufferCapacity;
+  }
+
+  /**
+   * Refill the ball buffer to `newCapacity`, one slot at a time, so the HUD's queue-row
+   * count visibly ticks up instead of instantly jumping — this is what makes filling the
+   * score bar read as a reward. Drop unlocks the moment the first tick lands, via
+   * maybeUnlockDrop(). If the buffer is already at or above the new capacity (shouldn't
+   * normally happen, since capacity is non-decreasing across stages), applies it in one
+   * step instead.
+   */
+  private animateBufferTo(newCapacity: number): void {
+    if (newCapacity <= this.ballBuffer) {
+      this.ballBuffer = newCapacity;
+      this.emitBuffer();
+      this.maybeUnlockDrop();
+      return;
+    }
+    const ticksNeeded = newCapacity - this.ballBuffer;
+    let ticksDone = 0;
+    this.scene?.time.addEvent({
+      delay: BUFFER_TICK_MS,
+      repeat: ticksNeeded - 1,
+      callback: () => {
+        this.ballBuffer += 1;
+        this.emitBuffer();
+        Sfx.bufferTick(ticksDone);
+        ticksDone += 1;
+        this.maybeUnlockDrop();
+      },
+    });
+  }
+
+  /** Unlock dropping only once the buffer actually has a slot — safe to call from both the
+   *  ticked refill and the milestone-zoom completion regardless of which finishes first. */
+  private maybeUnlockDrop(): void {
+    if (this.ballBuffer > 0) this.aim?.setDropLocked(false);
   }
 
   private onBallDropped(): void {
