@@ -100,6 +100,16 @@ class SfxEngine {
     this.tone({ freq: 880 * 2 ** (semis / 12), type: 'sine', attack: 0.002, decay: 0.07, gain: 0.09 });
   }
 
+  /** Zone A: one ball buffer slot arrives during a score-bar cash-in refill. Ascending
+   *  blip, `index`-th in the refill sequence (0-based) — climbs a semitone per step like
+   *  the merge/multiply combo chains, but driven directly by the caller's own counter since
+   *  buffer ticks already run on a fixed cadence rather than player-timed hits. */
+  bufferTick(index: number): void {
+    const base = 784.0; // G5
+    const mult = 2 ** (Math.min(index, 8) / 12);
+    this.tone({ freq: base * mult, type: 'sine', attack: 0.003, decay: 0.1, gain: 0.16 });
+  }
+
   /** Score bar filled. Rising major-triad arpeggio — the loudest, rarest cue. */
   goal(): void {
     const notes = [659.25, 830.61, 987.77]; // E5, G#5, B5
