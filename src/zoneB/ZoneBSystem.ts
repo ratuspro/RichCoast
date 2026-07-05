@@ -18,6 +18,11 @@ const BAR_HEIGHT = 10;
 const BAR_COLOR_BG = 0xe0d2b8; // a groove pressed into the paper (between paper and pine)
 const BAR_COLOR_FILL = 0xc9973f; // Theme.brass — the bar fills with brass
 
+/** How long the bar sits pinned full before it starts draining out. Tune by playtest. */
+const CASH_IN_DWELL_MS = 600;
+/** How long the drain-out tween (full -> 0) takes. Tune by playtest. */
+const CASH_IN_DRAIN_MS = 400;
+
 export class ZoneBSystem implements GameSystem {
   private scene?: Phaser.Scene;
   private readonly scoreBar = new ScoreBar();
@@ -30,6 +35,11 @@ export class ZoneBSystem implements GameSystem {
 
   private inFlight = 0;
   private total = 0;
+  /** True only during the drain-out tween — see beginDrainOut(). Suppresses the normal
+   *  fill-width recompute in updateBarVisual() so the tween's own width writes aren't
+   *  immediately overwritten by a same-tick emitScoreBar() (e.g. from a ProgressionChanged
+   *  listener firing inside the ScoreBarFilled emit below). */
+  private draining = false;
 
   private barFill?: Phaser.GameObjects.Rectangle;
   private barLabel?: Phaser.GameObjects.Text;
@@ -138,10 +148,45 @@ export class ZoneBSystem implements GameSystem {
 
     const filled = this.scoreBar.add(points);
     this.emitScoreBar();
-    if (filled) {
-      this.bus.emit(GameEvent.ScoreBarFilled);
-      Sfx.goal();
-    }
+    if (filled) this.beginCashIn();
+  }
+
+  /**
+   * The bar just crossed its target. Play the reward cue immediately, then hold the bar
+   * full for a dwell beat before draining it out — the buffer refill (ScoreBarFilled) only
+   * fires once the drain-out visual finishes, so filling the bar reads as an event instead
+   * of an instant, invisible jump.
+   */
+  private beginCashIn(): void {
+    Sfx.goal();
+    this.scene?.time.delayedCall(CASH_IN_DWELL_MS, () => this.beginDrainOut());
+  }
+
+  /** Tween the bar's fill width from full to 0, then resolve the cash-in and hand off to Zone A. */
+  private beginDrainOut(): void {
+    if (!this.scene || !this.barFill) return;
+    this.draining = true;
+    const proxy = { w: Layout.zoneB.width };
+    this.scene.tweens.add({
+      targets: proxy,
+      w: 0,
+      duration: CASH_IN_DRAIN_MS,
+      ease: 'Cubic.easeIn',
+      onUpdate: () => {
+        if (this.barFill) this.barFill.width = proxy.w;
+      },
+      onComplete: () => {
+        this.draining = false;
+        // Emit first: Zone A's ScoreBarFilled handler bumps the level and (synchronously,
+        // via the ProgressionChanged listener below) may update this.scoreBar's target
+        // before we resolve the cash-in — so a cascade check compares the banked overflow
+        // against the new target, not the one that was current when the bar filled.
+        this.bus.emit(GameEvent.ScoreBarFilled);
+        const cascade = this.scoreBar.completeCashIn();
+        this.emitScoreBar();
+        if (cascade) this.beginCashIn();
+      },
+    });
   }
 
   private emitScoreBar(): void {
@@ -179,9 +224,9 @@ export class ZoneBSystem implements GameSystem {
   }
 
   private updateBarVisual(): void {
-    if (!this.barFill) return;
+    if (!this.barFill || this.draining) return;
     const { x, width } = Layout.zoneB;
-    this.barFill.width = width * this.scoreBar.getProgress();
+    this.barFill.width = width * Math.min(1, this.scoreBar.getProgress());
     this.barFill.x = x;
     this.barLabel?.setText(
       `${this.scoreBar.getFilled()} / ${this.scoreBar.getTarget()}`,
