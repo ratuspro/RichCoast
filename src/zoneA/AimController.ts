@@ -84,9 +84,21 @@ export class AimController {
     this.moveAimTo(this.aimX);
   }
 
-  /** Update the balls-left-to-drop count in the queue row (revealed on first call). */
+  /**
+   * Update the balls-left-to-drop count in the queue row (revealed on first call). Pops the
+   * number briefly on every change — called once per tick during a score-bar cash-in refill,
+   * this is what makes the buffer visibly "arrive" one slot at a time instead of snapping.
+   */
   setBallsLeft(count: number): void {
     this.countText.setText(`${count} left`).setVisible(true);
+    this.scene.tweens.killTweensOf(this.countText);
+    this.countText.setScale(1.35);
+    this.scene.tweens.add({
+      targets: this.countText,
+      scale: 1,
+      duration: 160,
+      ease: 'Back.easeOut',
+    });
   }
 
   /** Freeze input and hide the aim ball (called on game over). */
