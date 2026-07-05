@@ -50,6 +50,11 @@ export class ZoneASystem implements GameSystem {
   private internalLevel = 1;
   private ballBuffer = 0;
   private zoneBEmpty = true;
+  /** True whenever the score bar is holding full mid cash-in (dwell/wait-for-empty/drain) —
+   *  derived from SCORE_BAR_CHANGED's filled/target, which stays >= target for the entire
+   *  cash-in window regardless of how long it takes. A buffer refill is guaranteed once
+   *  this clears, so it must not read as a stalemate in the meantime. */
+  private scoreBarCashingIn = false;
   private score = 0;
   private lossPending = false;
 
@@ -91,6 +96,10 @@ export class ZoneASystem implements GameSystem {
     this.emitBuffer();
 
     this.bus.on(GameEvent.ScoreChanged, ({ total }) => { this.score = total; });
+
+    this.bus.on(GameEvent.ScoreBarChanged, ({ filled, target }) => {
+      this.scoreBarCashingIn = filled >= target;
+    });
 
     this.bus.on(GameEvent.ScoreBarFilled, () => {
       this.internalLevel += 1;
@@ -274,7 +283,12 @@ export class ZoneASystem implements GameSystem {
 
   /** True when the player has no path forward: no drops left, Zone A empty, Zone B idle. */
   private isStalemate(): boolean {
-    return this.ballBuffer === 0 && this.zoneBEmpty && (this.board?.getBallCount() ?? 0) === 0;
+    return (
+      this.ballBuffer === 0 &&
+      this.zoneBEmpty &&
+      (this.board?.getBallCount() ?? 0) === 0 &&
+      !this.scoreBarCashingIn
+    );
   }
 
   /**
