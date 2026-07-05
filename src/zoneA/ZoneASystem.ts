@@ -56,10 +56,11 @@ export class ZoneASystem implements GameSystem {
    *  cash-in window regardless of how long it takes. A buffer refill is guaranteed once
    *  this clears, so it must not read as a stalemate in the meantime. */
   private scoreBarCashingIn = false;
-  /** True from the instant ScoreBarFilled arrives until the buffer's first tick actually
-   *  lands (ballBuffer > 0) — closes the gap between scoreBarCashingIn clearing (at
-   *  cash-in completion) and the buffer refill's first slot landing ~BUFFER_TICK_MS later,
-   *  during which isStalemate() must not read true even though ballBuffer is still 0. */
+  /** True from the instant ScoreBarFilled arrives until the ENTIRE ticked buffer refill has
+   *  landed (the last tick, or immediately in the no-animation skip case) — not merely once
+   *  the buffer becomes non-zero. Drop unlocks at the first tick (see maybeUnlockDrop), but a
+   *  fast player can spend that first slot before the remaining ticks land, so isStalemate()
+   *  must keep reading false for the refill's entire duration, not just its first slot. */
   private cashInPending = false;
   private score = 0;
   private lossPending = false;
