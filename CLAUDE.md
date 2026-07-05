@@ -145,7 +145,15 @@ wall). `progression.json` is now **milestone-structured**: `ballWindow` holds at
 level 49, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 50-level milestone (each
 shift stage also carries its `tightness`), and the `scoreBarTarget`s are rescaled to track
 the (powers-of-three, now much larger) per-window value magnitudes — the targets and the
-tightness rhythm are starting numbers to tune by playtest.
+tightness rhythm are starting numbers to tune by playtest. Filling the score bar is now a
+**cash-in reward beat** rather than an instant refill: once `filled` crosses `target` the bar
+pins full and `ZoneASystem` holds a `scoreBarCashingIn`/`cashInPending` pair of flags so the
+stalemate check can't misfire while Zone B finishes draining any balls still in flight, then
+(driven from Zone B) a brief dwell and a visual drain-out tween play before the level-up and
+buffer refill actually land; the ball buffer then ticks up to the new stage's capacity one
+slot at a time (`animateBufferTo`, `BUFFER_TICK_MS` apart) with a pop and an audio blip per
+slot, and drop only unlocks once the first slot lands, so the refill reads as an earned
+reward instead of a jump-cut.
 
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,

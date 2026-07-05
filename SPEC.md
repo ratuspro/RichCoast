@@ -310,6 +310,9 @@ the live queue.
   drain), the run ends — game over (the stalemate condition, see Zone A).
 - A last-chance window exists: with buffer at 0, if a ball still in Zone B triggers a score
   refill before Zone B fully empties, the buffer is restored and the run continues.
+- A refill does not land all at once: slots fill in one at a time, each with its own pop
+  and sound, so the buffer visibly climbs back to capacity rather than jumping. Dropping
+  unlocks again the moment the first slot lands, without waiting for the rest.
 - At a window-shift milestone, any buffer slots holding a now-blacklisted tier are re-rolled
   to the new window, same as the live queue.
 
@@ -329,13 +332,18 @@ horizontally at the bottom of Zone B.
 
 - Every ball that drains into a Zone B collector adds its scored value (`value × collector
   multiplier`) to the bar.
-- When the bar reaches its target, it resets to zero and the ball buffer is immediately
-  refilled to its full capacity.
+- Reaching the target no longer resets the bar immediately. Instead it triggers a short
+  **cash-in sequence**: the bar pins full and holds while Zone B finishes draining any
+  balls still in flight (so nothing scored after the target is crossed is lost), then
+  dwells briefly at full before draining back down to zero. Only once the drain-out
+  finishes does the level advance and the ball buffer begin its refill.
+- The buffer refill itself is no longer instant — it fills one slot at a time rather than
+  jumping straight to capacity (see Ball Buffer below).
 - The bar's target escalates over time, per the authored stages in `progression.json` (see
   Score Bar Target above) — it is not fixed for the whole run.
 - The bar and the ball buffer are independent systems; they communicate through a single
-  event (bar full → refill buffer). Neither system has direct knowledge of the other's
-  internal state.
+  event (bar full → cash-in → refill buffer). Neither system has direct knowledge of the
+  other's internal state.
 
 **Overall score:**
 
@@ -347,7 +355,9 @@ performance.
 
 **Visual:**
 
-The score bar spans the bottom edge of Zone B, filling left to right as balls drain.
+The score bar spans the bottom edge of Zone B, filling left to right as balls drain. On
+reaching target it holds full for a beat, then visibly tweens back down to empty as the
+cash-in resolves, reading as a deliberate payout rather than a snap reset.
 
 ---
 
