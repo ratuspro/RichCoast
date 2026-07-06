@@ -5,11 +5,11 @@
  * game "pans" between two framings instead of ever moving world objects:
  *
  *  - A-phase (pan 0):   main camera scrollY 0; the arena camera's viewport shows Zone A's
- *    full 521px board band (HUD + board = 2/3 of the screen). Zone B pokes in at the
+ *    full 465px board band (HUD + board ≈ 60% of the screen). Zone B pokes in at the
  *    bottom, cropped by PAN_DISTANCE.
- *  - B-phase (pan 394): main camera scrollY 394; the arena viewport shrinks to 127px
- *    (HUD + board = 1/5 of the screen) — the arena camera keeps its floor-anchored centring
- *    (ArenaView), so Zone A is TOP-cropped at unchanged zoom. Zone B's full 631px band
+ *  - B-phase (pan 394): main camera scrollY 394; the arena viewport shrinks to 71px
+ *    (HUD + board = a 113px sliver) — the arena camera keeps its floor-anchored centring
+ *    (ArenaView), so Zone A is TOP-cropped at unchanged zoom. Zone B's full 687px band
  *    exactly fills the screen down to y=844.
  *
  * The single tween proxy `pan ∈ [0, PAN_DISTANCE]` drives BOTH cameras through
@@ -23,17 +23,19 @@ import * as Layout from './Layout';
 export const HUD_H = 42;
 
 /** Arena camera viewport height in the A-phase: the full Zone A board band. */
-export const ARENA_VIEW_H_A = Layout.zoneA.height - HUD_H; // 521
-
-/** Arena camera viewport height in the B-phase: HUD + board = 1/5 of the screen (top-cropped). */
-export const ARENA_VIEW_H_B = Math.round(Layout.HEIGHT / 5) - HUD_H; // 127
+export const ARENA_VIEW_H_A = Layout.zoneA.height - HUD_H; // 465
 
 /**
- * How far the main camera scrolls down between the phases. Three ways to derive it, all
- * equal by construction (asserted in tests): the arena viewport shrink (521−127), Zone B's
- * world overhang below the screen (1238−844), and Zone C's on-screen shift (563−169).
+ * How far the main camera scrolls down between the phases: Zone B's world overhang
+ * below the screen (1238−844), so the B-phase brings Zone B's bottom edge exactly
+ * flush with the screen bottom. The arena viewport shrink equals it by construction
+ * (asserted in tests).
  */
-export const PAN_DISTANCE = ARENA_VIEW_H_A - ARENA_VIEW_H_B; // 394
+export const PAN_DISTANCE = Layout.zoneB.y + Layout.zoneB.height - Layout.HEIGHT; // 394
+
+/** Arena camera viewport height in the B-phase: whatever the pan leaves of Zone A
+ *  on screen (top-cropped) — HUD + this = the B-phase Zone A sliver. */
+export const ARENA_VIEW_H_B = ARENA_VIEW_H_A - PAN_DISTANCE; // 71
 
 export interface PhaseFraming {
   /** Main camera scrollY (Zone C, Zone B and the backdrop ride this). */

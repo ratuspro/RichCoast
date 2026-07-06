@@ -10,9 +10,10 @@ import {
 } from './phaseGeometry';
 
 describe('phaseGeometry', () => {
-  it('derives the phase band heights from the screen fractions (2/3 active, 1/5 inactive)', () => {
-    expect(HUD_H + ARENA_VIEW_H_A).toBe(Math.round(HEIGHT * (2 / 3))); // 563 — A-phase
-    expect(HUD_H + ARENA_VIEW_H_B).toBe(Math.round(HEIGHT / 5)); // 169 — B-phase
+  it('derives the phase band heights from the screen fractions (2/3 × 0.9 active)', () => {
+    expect(HUD_H + ARENA_VIEW_H_A).toBe(42 + 465); // 507 = round(round(844 × 2/3) × 0.9) — A-phase
+    expect(HUD_H + ARENA_VIEW_H_A).toBe(Math.round(Math.round(HEIGHT * (2 / 3)) * 0.9));
+    expect(HUD_H + ARENA_VIEW_H_B).toBe(zoneA.height - PAN_DISTANCE); // 113 — B-phase sliver
   });
 
   it('agrees on PAN_DISTANCE from all three derivations', () => {
