@@ -8,9 +8,14 @@ coupled through one contract module so two devs can build in parallel.
 - **Zone A (top)** — fruit-merge puzzle. Drop balls; equal-value balls merge into the next
   power-of-2 tier. Overflowing the top boundary = game over.
 - **Zone C (boundary)** — manually-tapped trap-door. Sucks the nearest ball from A into B,
-  one at a time. Locked until Zone B is empty.
+  one at a time. Armed only in the B phase, and only while Zone B is empty.
 - **Zone B (bottom)** — no-control physics arena. Gates split a ball into N copies of the
   same value; copies cascade and drain into a funnel. Score = sum of all drained values.
+- **Two mutually exclusive phases**, joined by an input-locked camera pan: in the **A phase**
+  only Zone A drop input works (Zone A shown large, Zone B bottom-cropped); once the ball
+  buffer is spent and the board settles, the view pans down into the **B phase** where only
+  the trap-door works (Zone A top-cropped, Zone B full); filling the score bar pans back up
+  and refills the buffer.
 - Endless run, no levels. Merging scores nothing; value is realised only when balls exit B.
 
 ## Source of truth — read on demand, not preemptively
@@ -32,9 +37,12 @@ section when the work touches it:
   interface live there. Changing it is a both-devs-must-agree action — treat it as frozen
   unless the task is explicitly about the contract.
 - Cross-zone events: `BALL_DROPPED {value,tier,x}` (C→B), `ZONE_B_BUSY`/`ZONE_B_EMPTY`
-  (B→C, drives the trap-door lock), `SCORE_CHANGED {total}` (B→HUD), `BUFFER_CHANGED
-  {count,nextMilestone}` (B→HUD), `BUFFER_EXHAUSTED` (B→scene, triggers Zone B game-over),
-  `ARENA_ZOOM {active}` (A→C, locks the trap-door while Zone A's milestone zoom-out animates).
+  (B→C, drives the trap-door lock), `SCORE_CHANGED {total}` (B→HUD), `SCORE_BAR_CHANGED`/
+  `SCORE_BAR_FILLED` (B→A, the buffer-refill trigger), `BALL_BUFFER_CHANGED {count}`
+  (A→HUD/queue row), `PROGRESSION_CHANGED {level,scoreBarTarget,…}` (A→B),
+  `ARENA_ZOOM {active}` (A→C, locks the trap-door while Zone A's milestone zoom-out animates),
+  `PHASE_CHANGED {phase}` (PhaseDirector→all, drives the two-phase input locks) and
+  `ZONE_A_DEPLETED` (A→PhaseDirector: buffer empty + board settled).
 
 ## Ownership boundaries — don't cross them casually
 
@@ -68,16 +76,36 @@ through the contract events above.
 
 ## Status
 
-**All three zones play, fully art-directed.** The shared shell is complete
-and runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the HUD (score
-+ buffer count), the thin `GameScene` + `?zone=` routing, the Matter world bottom wall (Zone A's
-own boundary + funnel floor now live in `ArenaView`), and the isolation layer (`src/dev/` stubs
-+ harness) all work. A
+**All three zones play, fully art-directed, in a two-phase loop.** The shared shell is
+complete and runnable: the seam (`src/core/contracts.ts`, `EventBus.ts`, `Layout.ts`), the
+HUD (compact score + a numberless milestone progress bar), the thin `GameScene` + `?zone=`
+routing, the Matter world bottom wall (at the Zone B world bottom, y=1238; Zone A's own
+boundary + funnel floor live in `ArenaView`), and the isolation layer (`src/dev/` stubs +
+harness) all work. **The world is taller than the 390×844 screen** (390×1238): Zone A
+`{0,0,390,563}` (42px HUD row + a 521px board band; 563 = round(844 × 2/3)), Zone C
+`{0,563,390,44}`, Zone B `{0,607,390,631}`. `src/core/PhaseDirector.ts` (a scene-level
+`GameSystem`, created last in `ac`/`full` modes) owns the **two-phase camera pan**: one
+650ms Sine tween drives the main camera's `scrollY` (0↔394) and the arena camera's
+viewport height (521↔127) in lockstep from a rounded proxy — `framingForPan` in
+`src/core/phaseGeometry.ts` keeps the arena-bottom/Zone-C seam pixel-locked at every tick,
+and the pure FSM lives in `src/core/phaseMachine.ts` (states `A`/`A_TO_B`/`B`/`B_TO_A`,
+with a `refillQueued` turnaround for a score bar that fills mid-pan). The director listens
+for `ZONE_A_DEPLETED` (pan down) and `SCORE_BAR_FILLED` (pan up) and broadcasts
+`PHASE_CHANGED` — the input-lock signal: Zone A's aim is frozen outside the A phase, Zone
+C's door is locked outside the B phase (it boots locked), and both stay locked during the
+pans. So the A phase gives Zone A (HUD + board) **2/3 of the screen** with Zone B
+bottom-cropped (score bar off-screen), and the B phase top-crops Zone A to **1/5 of the
+screen** while Zone B fills the freed space exactly — a pure pan, no zoom change. All screen-space chrome (HUD, queue row, game-over
+overlay, debug UI) is pinned with `setScrollFactor(0)`. `?zone=b` skips the director and
+statically frames the B phase (`cameras.main.setScroll(0, PAN_DISTANCE)`); `?zone=ac` runs
+the full phase loop against a stub Zone B that fakes the score bar. A
 debug overlay (`src/core/DebugMode.ts` + `src/dev/DebugHarness.ts`, toggled by `?debug=2` or
 the **D** key) adds a DROP button (also SPACE) that fires `BALL_DROPPED` straight onto the
 bus plus a live event log. Tooling is Phaser 4 + Vite + TypeScript (strict) + Vitest; pure
-logic is unit-tested (`npm run test`) — the seam, Zone A's `ballMath`/`MergeLogic`, Zone
-B's `BallBuffer`, and the material ladder (`Materials.test.ts`).
+logic is unit-tested (`npm run test`) — the seam, the phase FSM (`phaseMachine.test.ts`),
+the pan geometry (`phaseGeometry.test.ts`), the depletion settle gate
+(`settleGate.test.ts`), Zone A's `ballMath`/`MergeLogic`, and the material ladder
+(`Materials.test.ts`).
 
 **Visual identity — "Bright Workshop"** (see SPEC.md Visual Theme for the design): the
 whole game is a warm toy workshop — warm-paper backdrop, light-pine structure (Zone A
@@ -90,12 +118,15 @@ apply on top of their own tuned constants. `src/core/MaterialPainter.ts` draws t
 procedural canvas recipes (shared base sphere + per-material detail pass; `'full'` LOD
 for Zone A, `'small'` for Zone B's 10px balls where colour is the identity), and
 `src/core/Theme.ts` names every environment colour (no hex literals in zone code). Ball
-faces show `compactValue()` (531441 → "531K"). `/material-preview.html` is a dev-only
+faces carry **no value digits** — a ball's worth is hidden from the player; material look is
+the only tier signal. Every score number the player *does* see (HUD total, Zone B's score-bar
+label, the game-over final score) is formatted through `compactValue()` (531441 → "531K",
+max 3 significant digits). `/material-preview.html` is a dev-only
 proof sheet of the whole ladder — tune palette/recipes there, not in a live run. The old
 `BallColors.ts` is deleted.
 
 **Zone A** (`src/zoneA/`) plays: drag along the top to aim, release to drop; balls are
-procedurally-textured Matter circles (colour + value) that grow heavier and grippier by
+procedurally-textured Matter circles (material recipe, no value digits) that grow heavier and grippier by
 tier, same-**value** collisions merge into the next tier with a neighbour-shoving blast.
 Merging is **uncapped** — tiers climb forever — and each merge **triples** the value
 (`tierToValue` is now `3^(tier-1)`, since merging two equal balls yields `1.5×(V+V)=3V`).
@@ -145,17 +176,32 @@ wall). `progression.json` is now **milestone-structured**: `ballWindow` holds at
 level 49, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 50-level milestone (each
 shift stage also carries its `tightness`), and the `scoreBarTarget`s are rescaled to track
 the (powers-of-three, now much larger) per-window value magnitudes — the targets and the
-tightness rhythm are starting numbers to tune by playtest. Filling the score bar is now a
+tightness rhythm are starting numbers to tune by playtest. **Zone A also owns the phase
+triggers**: it tracks the finite ball supply (`ZoneASystem.ballBuffer`, refilled per stage
+from `progression.json`, broadcast via `BALL_BUFFER_CHANGED` to the queue row), and when
+the buffer hits 0 a **settle gate** (`src/zoneA/settleGate.ts`: 350ms of contiguous
+`Board.isSettled()` — no pending merges, every body asleep or under the scaled rest speed —
+with a 4s hard timeout) emits `ZONE_A_DEPLETED` so the pan to the B phase waits for the
+last drop's merges to resolve; the gate is skipped when the game is over, when a cash-in is
+pending, or when the board is stalemate-shaped (buffer 0 + board empty + Zone B empty stays
+`checkLoss`'s job). Filling the score bar is a
 **cash-in reward beat** rather than an instant refill: once `filled` crosses `target` the bar
 pins full and `ZoneASystem` holds a `scoreBarCashingIn`/`cashInPending` pair of flags so the
-stalemate check can't misfire while Zone B finishes draining any balls still in flight, then
-(driven from Zone B) a brief dwell plays before the level-up and buffer refill land — the bar
-itself never animates downward, it snaps to its carried-over value the moment the cash-in
-resolves; the refill then launches one **brass particle per new slot** (`animateBufferTo`,
-`BUFFER_TICK_MS` apart) that arcs from the score bar up to the queue-row balls-left count
+stalemate check can't misfire while Zone B finishes draining any balls still in flight. The
+`SCORE_BAR_FILLED` handler is split for the phases: the level-up, stage apply, queue
+re-roll, and `PROGRESSION_CHANGED` emit happen **immediately** in any phase (Zone B reads
+the new target synchronously), but the **visible reward** — milestone zoom + drain, the
+ticked buffer refill, the drop unlock — defers until the pan lands back in the A phase
+(released on `PHASE_CHANGED {phase:'A'}`), so the milestone zoom never overlaps the pan.
+The bar itself never animates downward, it snaps to its carried-over value the moment the
+cash-in resolves; the refill then launches one **brass particle per new slot**
+(`animateBufferTo`, `BUFFER_TICK_MS` apart) that arcs from the score bar up to the
+queue-row balls-left count
 along a jittered bezier with a fading trail, and each slot only lands (count pop + audio
 blip) when its particle arrives; drop unlocks on the first landing, so the refill reads as
-the bar's energy flying up into the ball supply instead of a jump-cut.
+the bar's energy flying up into the ball supply instead of a jump-cut. The game-over
+overlay + RESTART are pinned screen-space (`setScrollFactor(0)`), so they render
+full-screen and clickable in either phase framing.
 
 **Zone B** (`src/zoneB/`) is fully implemented: balls spawn on `BALL_DROPPED`, three gate
 types (static, translating, rotating) split balls into copies via a pending-queue pattern,
@@ -167,11 +213,12 @@ boot/`scene.restart()` re-rolls). Both are static "shelf cascade" layouts modell
 reference art: stacked horizontal multiplier gates split by vertical/diagonal guide rails,
 funnelling into one bottom collector. Gates are painted wooden signs (green paint for
 multiplier ≥4, brass below) with a dark stencilled `X#` label; multipliers are tuned (≤4)
-so cascades stay balanced. Gate visuals live in `GateSystem.buildBody()`. A `BallBuffer`
-tracks a finite supply that
-refills when Zone B score crosses escalating milestones — exhausting the buffer while Zone B
-is empty triggers a local game-over overlay. The `BUFFER_CHANGED` / `BUFFER_EXHAUSTED` events
-feed Zone A's queue-row balls-left count (the HUD itself is now score-only). Balls are small
+so cascades stay balanced. Gate visuals live in `GateSystem.buildBody()`. The Zone B world
+band is `y=607..1238` — taller than what the A phase shows (the bottom 394px, including the
+score bar, are off-screen until the pan) and exactly filling the screen below Zone C in the
+B phase. The ball supply lives in Zone A (`zoneB/BallBuffer.ts` is dead code, kept only by
+its own unit test); Zone B's job is scoring (`SCORE_CHANGED`, `SCORE_BAR_CHANGED`,
+`SCORE_BAR_FILLED`) and the busy/empty door signals. Balls are small
 (10px radius) and **collide with each other** (the `CAT_BALL` mask includes itself), so they
 pile and nudge in the cascade. Ball textures use the same shared
 `src/core/Materials.ts` + `MaterialPainter.ts` recipes as Zone A (small LOD), with the
@@ -180,8 +227,9 @@ material physics multipliers applied to Zone B's own constants (restitution capp
 `GateSystem`, `CollectorSystem`, `WallSystem`, `ZoneBBall`, `BallBuffer`, and `zoneLayout.ts`;
 the old `Funnel.ts` skeleton is **superseded by `CollectorSystem` and is now dead code**.
 
-**Zone C** (`src/zoneC/ZoneCSystem.ts`) plays: the trap-door lock is driven by Zone B's
-busy/empty events. While armed, the door band shows **nine evenly-spaced position markers**
+**Zone C** (`src/zoneC/ZoneCSystem.ts`) plays: the trap-door lock composes three flags —
+`phaseLocked` (armed only in the B phase, boots locked), `zoomLocked` (`ARENA_ZOOM`), and
+`locked` (Zone B's busy/empty events). While armed, the door band shows **nine evenly-spaced position markers**
 (dim dots, inset ~one ball radius from each Zone B edge); the lit one **steps** edge→edge and
 back in a ping-pong (driven each frame in `update()` off the `locked` flag — `STEP_MS` per
 position, tuned so one full pass equals the old `SWEEP_MS` leg, keeping the original cadence;
@@ -197,7 +245,8 @@ size). The snapshot starts at the ball's **apparent on-screen** position + size 
 maps Zone-A world coords through the `'arena'` camera (`worldView` + `zoom`), so after a
 milestone zoom-out the suck begins at the ball's shrunken on-screen size instead of the
 texture's full native size (and the arena camera is told to ignore the snapshot so it isn't
-double-drawn). Only when the pop lands does it emit `BALL_DROPPED` at the frozen `x`, so Zone B
+double-drawn); since sucks only happen in the B-phase framing, the snapshot's spawn y adds
+`cameras.main.scrollY` to convert those screen coords into the scrolled world. Only when the pop lands does it emit `BALL_DROPPED` at the frozen `x`, so Zone B
 spawns a fresh fixed-radius (10px) ball of the same tier **exactly under the lit position**
 — deferring the emit avoids double-ball flicker, and the source ball's Zone-A size never
 carries over. The markers hide on lock and resume on `ZONE_B_EMPTY`. Frozen decisions:

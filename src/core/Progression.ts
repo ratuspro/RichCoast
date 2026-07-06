@@ -14,6 +14,20 @@ export interface ProgressionStage {
   tightness?: number;
 }
 
+/** Levels between arena zoom-out milestones (50, 100, 150, …). The draw-window *shift-ups* in
+ *  `progression.json` MUST land on these same levels — the milestone reads the new window's floor
+ *  (`stage.ballWindow[0]`) as its blacklist threshold, so a window that steps between milestones
+ *  would desync the scale/blacklist from the spawn pool. */
+export const MILESTONE_EVERY = 50;
+
+/**
+ * Fraction of the way from the last milestone to the next one, in [0, 1).
+ * 0 the level a milestone lands (the HUD bar resets), climbing back toward 1 after.
+ */
+export function milestoneProgress(level: number): number {
+  return (level % MILESTONE_EVERY) / MILESTONE_EVERY;
+}
+
 const stages: ProgressionStage[] = (data.stages as ProgressionStage[])
   .slice()
   .sort((a, b) => a.fromLevel - b.fromLevel);

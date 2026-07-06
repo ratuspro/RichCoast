@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { compactValue, materialForTier } from '../core/Materials';
+import { materialForTier } from '../core/Materials';
 import { paintBall } from '../core/MaterialPainter';
 import { tierToValue, type BallBodyData } from '../core/contracts';
 import { frictionForTier, radiusForTier } from './ballMath';
@@ -21,8 +21,8 @@ export interface Ball {
 type TaggedBody = MatterJS.BodyType & { ballData: BallBodyData };
 
 /**
- * Builds Zone A balls. One procedurally-drawn texture per tier (flat colour + the
- * ball's value) is generated once and cached in the Texture Manager; `spawn` then
+ * Builds Zone A balls. One procedurally-drawn texture per tier (the material recipe,
+ * no value digits) is generated once and cached in the Texture Manager; `spawn` then
  * creates the Matter circle, applies per-tier physics, and stamps `body.ballData`
  * so Zone C can discover it on a shared-world query. No image assets.
  */
@@ -52,25 +52,14 @@ export class BallFactory {
 
     // Drawn with the Canvas 2D API rather than Phaser Graphics: Phaser 4's renderer
     // doesn't reliably rasterise Graphics geometry into a texture (the fill is dropped),
-    // but a CanvasTexture uploads like any bitmap, so fill + number both show.
+    // but a CanvasTexture uploads like any bitmap, so the painted sphere shows.
     const canvas = textures.createCanvas(key, size, size);
     if (!canvas) return key;
     const ctx = canvas.getContext();
 
+    // No value digits: the ball's worth stays hidden from the player — material look
+    // (colour family + detail pass) is the only tier signal.
     paintBall(ctx, radius, tier, 'full');
-
-    const digits = compactValue(tierToValue(tier));
-    const scaleSteps = [1.05, 0.82, 0.62, 0.5, 0.42]; // by character count, 1..5
-    const fontScale = scaleSteps[Math.min(digits.length, scaleSteps.length) - 1];
-    const fontPx = Math.round(radius * fontScale);
-    ctx.font = `bold ${fontPx}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.14));
-    ctx.strokeStyle = '#0b0d12';
-    ctx.strokeText(digits, radius, radius);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(digits, radius, radius);
 
     canvas.refresh();
     return key;
