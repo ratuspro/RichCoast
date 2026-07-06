@@ -68,6 +68,11 @@ export class ZoneASystem implements GameSystem {
   private ballBuffer = 0;
   private bufferTickTimer?: Phaser.Time.TimerEvent;
   private readonly bufferParticles = new Set<BufferParticle>();
+  /** Slots from the current cash-in cycle that haven't landed yet — cashInPending only
+   *  clears once this reaches 0 (see landBufferSlot/animateBufferTo), not merely once the
+   *  first slot lands, so a player who spends that first ball back to 0 doesn't reopen the
+   *  stalemate check while later particles are still in flight. */
+  private bufferTicksRemaining = 0;
   private zoneBEmpty = true;
   /** True whenever the score bar is holding full mid cash-in (dwell/wait-for-empty/drain) —
    *  derived from SCORE_BAR_CHANGED's filled/target, which stays >= target for the entire
@@ -336,23 +341,30 @@ export class ZoneASystem implements GameSystem {
    * score bar at the bottom of Zone B; the slot only lands — count pop + blip — when the
    * particle arrives at the queue-row count, so the refill reads as the bar's energy flying
    * up into the ball supply. Drop unlocks the moment the first slot lands, via
-   * maybeUnlockDrop(). If the buffer is already at or above the new capacity (shouldn't
-   * normally happen, since capacity is non-decreasing across stages), applies it in one
-   * step instead.
+   * maybeUnlockDrop(); cashInPending stays true until every slot has landed (not just the
+   * first — see bufferTicksRemaining), since the stalemate check must stay suppressed for
+   * the buffer's ENTIRE arrival, not just its first slot. If the buffer is already at or
+   * above the new capacity (shouldn't normally happen, since capacity is non-decreasing
+   * across stages), applies it in one step and resolves cashInPending immediately.
    */
   private animateBufferTo(newCapacity: number): void {
     this.bufferTickTimer?.remove();
     // A back-to-back cash-in (overflow cascade) can restart the refill while particles from
     // the previous one are still in flight. Settle them instantly — their slots are already
     // spoken for — so the ticksNeeded arithmetic below starts from an honest ballBuffer.
+    // bufferTicksRemaining is unconditionally overwritten below, so settling here doesn't
+    // need to touch it itself.
     this.settleBufferParticles();
     if (newCapacity <= this.ballBuffer) {
       this.ballBuffer = newCapacity;
       this.emitBuffer();
       this.maybeUnlockDrop();
+      this.bufferTicksRemaining = 0;
+      this.cashInPending = false;
       return;
     }
     const ticksNeeded = newCapacity - this.ballBuffer;
+    this.bufferTicksRemaining = ticksNeeded;
     let launched = 0;
     this.bufferTickTimer = this.scene?.time.addEvent({
       delay: BUFFER_TICK_MS,
@@ -429,12 +441,16 @@ export class ZoneASystem implements GameSystem {
     });
   }
 
-  /** One refilled buffer slot arrives: count up, pop the queue-row number, blip. */
+  /** One refilled buffer slot arrives: count up, pop the queue-row number, blip. Only clears
+   *  cashInPending once this is the LAST slot of the current batch — see
+   *  bufferTicksRemaining. */
   private landBufferSlot(index: number): void {
     this.ballBuffer += 1;
     this.emitBuffer();
     Sfx.bufferTick(index);
     this.maybeUnlockDrop();
+    if (this.bufferTicksRemaining > 0) this.bufferTicksRemaining -= 1;
+    if (this.bufferTicksRemaining === 0) this.cashInPending = false;
   }
 
   /** Land every in-flight particle's slot immediately (no per-slot blip spam) and clear
@@ -461,11 +477,12 @@ export class ZoneASystem implements GameSystem {
   }
 
   /** Unlock dropping only once the buffer actually has a slot — safe to call from both the
-   *  ticked refill and the milestone-zoom completion regardless of which finishes first. */
+   *  ticked refill and the milestone-zoom completion regardless of which finishes first.
+   *  Does NOT clear cashInPending: dropping unlocks at the first slot, but the stalemate
+   *  suppression must hold until the whole batch lands (see landBufferSlot). */
   private maybeUnlockDrop(): void {
     if (this.ballBuffer > 0) {
       this.aim?.setDropLocked(false);
-      this.cashInPending = false;
       this.settleGate = undefined; // a refill landed — the buffer is no longer depleted
     }
   }
