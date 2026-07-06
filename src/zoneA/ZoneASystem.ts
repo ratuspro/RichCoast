@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import { GameEvent, tierToValue, type GamePhase, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
-import { hexColor } from '../core/Materials';
+import { compactValue, hexColor } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
 import { Theme } from '../core/Theme';
-import { getStage, type ProgressionStage } from '../core/Progression';
+import { getStage, MILESTONE_EVERY, type ProgressionStage } from '../core/Progression';
 import { AimController } from './AimController';
 import { ArenaView } from './ArenaView';
 import { neutralGrowth } from './ballMath';
@@ -14,12 +14,6 @@ import { BallQueue } from './BallQueue';
 import { Board } from './Board';
 import { DeathLine } from './DeathLine';
 import { advanceSettleGate, initialSettleGate, type SettleGateState } from './settleGate';
-
-/** Levels between arena zoom-out milestones (50, 100, 150, …). The draw-window *shift-ups* in
- *  `progression.json` MUST land on these same levels — the milestone reads the new window's floor
- *  (`stage.ballWindow[0]`) as its blacklist threshold, so a window that steps between milestones
- *  would desync the scale/blacklist from the spawn pool. */
-const MILESTONE_EVERY = 50;
 
 /** Blacklist-drain: how long each snapshot slides from Zone A down into Zone B (ms). */
 const DRAIN_MS = 280;
@@ -373,7 +367,7 @@ export class ZoneASystem implements GameSystem {
     if (!scene || !anchor) { this.landBufferSlot(index); return; }
 
     // Launch from the bottom of the SCREEN, not the world: this runs in the A-phase
-    // (scroll 0), where Zone B's band bottom (world 952) is off-screen below y=844.
+    // (scroll 0), where Zone B's band bottom (world 1238) is off-screen below y=844.
     const start = {
       x: Layout.zoneB.x + Math.random() * Layout.zoneB.width,
       y: Layout.HEIGHT - 5,
@@ -559,7 +553,7 @@ export class ZoneASystem implements GameSystem {
 
     pin(
       scene.add
-        .text(cx, cy - 20, `Score: ${this.score}`, {
+        .text(cx, cy - 20, `Score: ${compactValue(this.score)}`, {
           fontFamily: 'monospace',
           fontSize: '24px',
           color: hexColor(Theme.cream),

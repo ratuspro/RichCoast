@@ -10,9 +10,9 @@ import {
 } from './phaseGeometry';
 
 describe('phaseGeometry', () => {
-  it('derives the phase band heights from the pre-change 272px board band', () => {
-    expect(ARENA_VIEW_H_A).toBe(Math.round(272 * 1.2)); // 326 — A-phase, 20% larger
-    expect(ARENA_VIEW_H_B).toBe(Math.round(272 * 0.8)); // 218 — B-phase, 20% smaller
+  it('derives the phase band heights from the screen fractions (2/3 active, 1/5 inactive)', () => {
+    expect(HUD_H + ARENA_VIEW_H_A).toBe(Math.round(HEIGHT * (2 / 3))); // 563 — A-phase
+    expect(HUD_H + ARENA_VIEW_H_B).toBe(Math.round(HEIGHT / 5)); // 169 — B-phase
   });
 
   it('agrees on PAN_DISTANCE from all three derivations', () => {

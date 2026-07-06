@@ -5,7 +5,10 @@
  * Zone-A feel, tweakable without touching the seam. `ballMath.ts` turns these into
  * the per-tier values the system reads at runtime.
  *
- * Design space is Layout's 390x844; Zone A is the top 390x314 band.
+ * Design space is Layout's 390x1238 world; Zone A is the top 390x563 band (42px HUD +
+ * 521px board — 2/3 of the 844px screen). In the B phase the camera top-crops the board
+ * to 127px on screen (HUD + board = 1/5 of the screen), but these numbers are world-space
+ * and never change with the phase framing.
  */
 
 // --- Geometry (design-space px) -------------------------------------------
@@ -17,7 +20,9 @@
 export const SPAWN_Y = 68;
 
 /** Forgiving death line, just below the spawn row: a ball resting ABOVE this for
- *  REST_MS ends the run (see ballMath.isRestingAbove / isOverflow). */
+ *  REST_MS ends the run (see ballMath.isRestingAbove / isOverflow). In the B-phase
+ *  framing this row is cropped off-screen — benign, since only sucks (removals) touch
+ *  the board then, so it can't newly overflow while invisible. */
 export const DEATH_LINE_Y = 96;
 
 /** Ball radius for the base tier table; index = tier-1. Has TIER_COUNT (10) entries.

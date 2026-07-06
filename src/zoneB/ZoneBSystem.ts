@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
+import { compactValue } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
 import { pickRandomLayout } from './zoneLayout';
 import { GateSystem } from './GateSystem';
@@ -231,7 +232,7 @@ export class ZoneBSystem implements GameSystem {
     this.barFill.width = width * Math.min(1, this.scoreBar.getProgress());
     this.barFill.x = x;
     this.barLabel?.setText(
-      `${this.scoreBar.getFilled()} / ${this.scoreBar.getTarget()}`,
+      `${compactValue(this.scoreBar.getFilled())} / ${compactValue(this.scoreBar.getTarget())}`,
     );
   }
 }
