@@ -22,16 +22,18 @@
       }
       #app {
         width: 100vw;
+        /* dvh tracks the VISIBLE viewport on mobile (100vh includes the area behind
+           the browser chrome, which cut off the bottom of the canvas). */
         height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        height: 100dvh;
+        /* No flex centering here — Phaser's CENTER_BOTH margins the canvas itself;
+           centering it again in CSS double-shifts the canvas off-center. */
       }
       canvas {
         display: block;
       }
     </style>
-    <script type="module" crossorigin src="/assets/index-BStbdz7V.js"></script>
+    <script type="module" crossorigin src="/assets/index-5MIUi14_.js"></script>
   </head>
   <body>
     <div id="app"></div>
