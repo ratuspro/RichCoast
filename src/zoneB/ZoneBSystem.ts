@@ -3,6 +3,7 @@ import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { compactValue } from '../core/Materials';
+import { Theme } from '../core/Theme';
 import { Sfx } from '../core/Sfx';
 import { pickRandomLayout } from './zoneLayout';
 import { GateSystem } from './GateSystem';
@@ -15,9 +16,16 @@ import {
   getBallData,
 } from './ZoneBBall';
 
-const BAR_HEIGHT = 10;
+const BAR_HEIGHT = 16; // tall enough to seat the label inside the groove
 const BAR_COLOR_BG = 0xe0d2b8; // a groove pressed into the paper (between paper and pine)
 const BAR_COLOR_FILL = 0xc9973f; // Theme.brass — the bar fills with brass
+const BAR_STROKE_COLOR = 0x3f3428; // Theme.ink — the bar's dark outline
+const BAR_STROKE_WIDTH = 2;
+const BAR_LABEL_COLOR = '#3f3428'; // Theme.ink — reads on both the groove and the brass fill
+
+/** Per-16ms fraction the shown fill closes toward the logical value, so the bar
+ *  glides up instead of snapping on every drained ball. */
+const FILL_LERP = 0.2;
 
 /** How long the bar sits pinned full before the cash-in resolves. Tune by playtest. */
 const CASH_IN_DWELL_MS = 600;
@@ -38,8 +46,14 @@ export class ZoneBSystem implements GameSystem {
    *  timer doesn't start until onBallDrained() sees inFlight reach 0 and clears this. */
   private pendingCashIn = false;
 
+  private barBg?: Phaser.GameObjects.Rectangle;
   private barFill?: Phaser.GameObjects.Rectangle;
   private barLabel?: Phaser.GameObjects.Text;
+  private barGeom = { x: 0, width: 0, fillX: 0, fillW: 0, midY: 0 };
+  /** The fill value currently shown; eased toward `scoreBar.getFilled()` each frame. */
+  private displayFilled = 0;
+  /** Guards the fill celebration (pulse + sparkle) to once per fill cycle. */
+  private celebrated = false;
 
   constructor(private readonly bus: EventBus) {
     const layout = pickRandomLayout();
@@ -77,6 +91,7 @@ export class ZoneBSystem implements GameSystem {
     this.gates.update(time, delta);
     this.collectors.update(time, delta);
     this.walls.update(time, delta);
+    this.animateBar(delta);
   }
 
   // --- Internal handlers ---------------------------------------------------
@@ -204,35 +219,115 @@ export class ZoneBSystem implements GameSystem {
 
   private buildScoreBar(scene: Phaser.Scene): void {
     const { x, y, width, height } = Layout.zoneB;
-    const barY = y + height - BAR_HEIGHT;
+    // Flush with the bottom of the screen; the label sits centred inside the bar.
+    const barTop = y + height - BAR_HEIGHT;
+    const midY = barTop + BAR_HEIGHT / 2;
+    // The fill sits inside the outlined groove, inset by the stroke on every side.
+    const fillX = x + BAR_STROKE_WIDTH;
+    const fillW = width - 2 * BAR_STROKE_WIDTH;
+    this.barGeom = { x, width, fillX, fillW, midY };
 
-    scene.add
-      .rectangle(x + width / 2, barY + BAR_HEIGHT / 2, width, BAR_HEIGHT, BAR_COLOR_BG)
+    this.barBg = scene.add
+      .rectangle(x + width / 2, midY, width, BAR_HEIGHT, BAR_COLOR_BG)
+      .setStrokeStyle(BAR_STROKE_WIDTH, BAR_STROKE_COLOR)
       .setDepth(10)
       .setOrigin(0.5);
 
     this.barFill = scene.add
-      .rectangle(x, barY + BAR_HEIGHT / 2, 0, BAR_HEIGHT, BAR_COLOR_FILL)
+      .rectangle(fillX, midY, 0, BAR_HEIGHT - 2 * BAR_STROKE_WIDTH, BAR_COLOR_FILL)
       .setDepth(11)
       .setOrigin(0, 0.5);
 
     this.barLabel = scene.add
-      .text(x + width / 2, barY - 4, '', {
+      .text(x + width / 2, midY, '', {
         fontFamily: 'monospace',
         fontSize: '11px',
-        color: '#8a7a64', // Theme.inkSoft
+        fontStyle: 'bold',
+        color: BAR_LABEL_COLOR,
       })
-      .setOrigin(0.5, 1)
+      .setOrigin(0.5, 0.5)
       .setDepth(12);
   }
 
-  private updateBarVisual(): void {
+  /**
+   * Ease the shown fill toward the logical value every frame so both the brass fill and the
+   * X/Y label climb smoothly as balls drain — including right up to a full bar. A cash-in
+   * reset (logical value drops below what's shown) snaps down instantly: the bar only ever
+   * animates upward. The instant the shown fill reaches a full bar, fire the celebration.
+   */
+  private animateBar(delta: number): void {
     if (!this.barFill) return;
-    const { x, width } = Layout.zoneB;
-    this.barFill.width = width * Math.min(1, this.scoreBar.getProgress());
-    this.barFill.x = x;
-    this.barLabel?.setText(
-      `${compactValue(this.scoreBar.getFilled())} / ${compactValue(this.scoreBar.getTarget())}`,
+    const target = this.scoreBar.getFilled();
+    if (target < this.displayFilled - 1e-3) {
+      this.displayFilled = target; // reset — snap, never animate downward
+      this.celebrated = false;
+    } else {
+      const k = 1 - Math.pow(1 - FILL_LERP, delta / 16.67);
+      this.displayFilled += (target - this.displayFilled) * k;
+      if (target - this.displayFilled < 0.02) this.displayFilled = target;
+    }
+    this.renderBar();
+
+    if (!this.celebrated && this.displayFilled >= this.scoreBar.getTarget()) {
+      this.celebrated = true;
+      this.celebrateFull();
+    }
+  }
+
+  /** Paint the bar + label from `displayFilled`. Cheap; safe to call every frame. */
+  private renderBar(): void {
+    if (!this.barFill || !this.barLabel) return;
+    const target = this.scoreBar.getTarget();
+    this.barFill.width = this.barGeom.fillW * Math.min(1, this.displayFilled / target);
+    this.barLabel.setText(
+      `${compactValue(Math.round(this.displayFilled))} / ${compactValue(target)}`,
     );
+  }
+
+  private updateBarVisual(): void {
+    // The per-frame animator owns the fill width + label; this just refreshes on discrete
+    // events (initial build, target change) so the bar isn't blank until the next tick.
+    this.renderBar();
+  }
+
+  /** A full bar throbs and throws off a rising brass sparkle — the "you filled it" beat. */
+  private celebrateFull(): void {
+    const scene = this.scene;
+    if (!scene) return;
+
+    // Vertical throb of the groove + fill (both centred on midY, so it puffs in place).
+    scene.tweens.add({
+      targets: [this.barBg, this.barFill],
+      scaleY: 1.6,
+      duration: 130,
+      yoyo: true,
+      ease: 'Sine.InOut',
+    });
+    scene.tweens.add({
+      targets: this.barLabel,
+      scale: 1.3,
+      duration: 130,
+      yoyo: true,
+      ease: 'Sine.InOut',
+    });
+
+    // Brass sparkle rising off the full bar.
+    const { x, width, midY } = this.barGeom;
+    for (let i = 0; i < 16; i++) {
+      const px = x + Phaser.Math.Between(6, width - 6);
+      const p = scene.add
+        .circle(px, midY, Phaser.Math.Between(2, 4), Theme.brassBright)
+        .setDepth(13);
+      scene.tweens.add({
+        targets: p,
+        y: midY - Phaser.Math.Between(26, 60),
+        x: px + Phaser.Math.Between(-14, 14),
+        alpha: 0,
+        scale: 0,
+        duration: Phaser.Math.Between(420, 720),
+        ease: 'Quad.Out',
+        onComplete: () => p.destroy(),
+      });
+    }
   }
 }

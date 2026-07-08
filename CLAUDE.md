@@ -200,11 +200,18 @@ ticked buffer refill, the drop unlock — defers until the pan lands back in the
 (released on `PHASE_CHANGED {phase:'A'}`), so the milestone zoom never overlaps the pan.
 The bar itself never animates downward, it snaps to its carried-over value the moment the
 cash-in resolves; the refill then launches one **brass particle per new slot**
-(`animateBufferTo`, `BUFFER_TICK_MS` apart) that arcs from the score bar up to the
-queue-row balls-left count
+(`animateBufferTo`, `bufferTickDelay` apart — `BUFFER_TICK_MS`=130 for ≤10 slots, then the
+gap shrinks inversely with the count, floored at 55ms, so a big refill doesn't drag) that
+arcs from the score bar up to the queue-row balls-left count
 along a jittered bezier with a fading trail, and each slot only lands (count pop + audio
 blip) when its particle arrives; drop unlocks on the first landing, so the refill reads as
-the bar's energy flying up into the ball supply instead of a jump-cut. The game-over
+the bar's energy flying up into the ball supply instead of a jump-cut. These particles are
+drawn in a dedicated top-most **`src/core/OverlayScene.ts`** (registered after `GameScene`
+in `main.ts`, transparent, input-disabled) — their path spans the whole screen (Zone B's
+bottom → through Zone A → the HUD count), so they can't live on the main camera (Zone A's
+dedicated camera paints an opaque band over it) nor its own scene camera; the overlay scene
+is full-screen at scroll 0, so its coords are 1:1 with the screen chrome they target and it
+renders above every Zone A ball and is immune to the phase pan. The game-over
 overlay + RESTART are pinned screen-space (`setScrollFactor(0)`), so they render
 full-screen and clickable in either phase framing.
 
@@ -223,7 +230,14 @@ band is `y=607..1238` — taller than what the A phase shows (the bottom 394px, 
 score bar, are off-screen until the pan) and exactly filling the screen below Zone C in the
 B phase. The ball supply lives in Zone A (`zoneB/BallBuffer.ts` is dead code, kept only by
 its own unit test); Zone B's job is scoring (`SCORE_CHANGED`, `SCORE_BAR_CHANGED`,
-`SCORE_BAR_FILLED`) and the busy/empty door signals. Balls are small
+`SCORE_BAR_FILLED`) and the busy/empty door signals. The **score bar** is drawn by
+`ZoneBSystem` along the bottom of the Zone B band (a groove-bg + brass fill rectangle with the
+`X / Y` label centred inside a 16px-tall bar, lifted a small margin off the screen edge). Its
+shown value is **eased upward every frame** (`animateBar`, `FILL_LERP`) so both the fill and the
+counting label glide up as balls drain instead of snapping; a cash-in reset snaps the fill down
+(the bar only ever animates up). The instant the shown fill reaches a full bar it fires a
+one-shot celebration (`celebrateFull`): the groove+fill throb vertically and a brass sparkle
+rises off the bar. Balls are small
 (10px radius) and **collide with each other** (the `CAT_BALL` mask includes itself), so they
 pile and nudge in the cascade. Ball textures use the same shared
 `src/core/Materials.ts` + `MaterialPainter.ts` recipes as Zone A (small LOD), with the

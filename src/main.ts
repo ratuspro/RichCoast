@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { WIDTH, HEIGHT } from './core/Layout';
 import { GameScene, parseZoneMode, ZONE_MODE_KEY } from './GameScene';
+import { OverlayScene } from './core/OverlayScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -22,7 +23,9 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: true,
     },
   },
-  scene: [GameScene],
+  // OverlayScene is listed last so it renders ON TOP of GameScene (a transparent layer for
+  // cross-zone screen-space effects like the cash-in particles).
+  scene: [GameScene, OverlayScene],
 };
 
 const game = new Phaser.Game(config);
