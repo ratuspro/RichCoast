@@ -96,11 +96,18 @@ export class ZoneCSystem implements GameSystem {
     });
 
     // The door band is a wooden chute mouth with a brass hinge cap at each end.
+    // The band itself is only visual — the tap target is the WHOLE screen (scene-level
+    // pointer listener): onTap() no-ops unless the door is armed, and the door is only
+    // armed in the B phase, when no other gameplay input competes for taps.
     const r = Layout.zoneC;
-    this.door = scene.add
-      .rectangle(r.x + r.width / 2, r.y + r.height / 2, r.width, r.height, Theme.pine)
-      .setInteractive({ useHandCursor: true });
-    this.door.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
+    this.door = scene.add.rectangle(
+      r.x + r.width / 2,
+      r.y + r.height / 2,
+      r.width,
+      r.height,
+      Theme.pine,
+    );
+    scene.input.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
     for (const capX of [r.x + 7, r.x + r.width - 7]) {
       scene.add
         .rectangle(capX, r.y + r.height / 2, 10, r.height - 6, Theme.brass)

@@ -82,20 +82,25 @@ HUD (compact score + a numberless milestone progress bar), the thin `GameScene` 
 routing, the Matter world bottom wall (at the Zone B world bottom, y=1238; Zone A's own
 boundary + funnel floor live in `ArenaView`), and the isolation layer (`src/dev/` stubs +
 harness) all work. **The world is taller than the 390×844 screen** (390×1238): Zone A
-`{0,0,390,563}` (42px HUD row + a 521px board band; 563 = round(844 × 2/3)), Zone C
-`{0,563,390,44}`, Zone B `{0,607,390,631}`. `src/core/PhaseDirector.ts` (a scene-level
-`GameSystem`, created last in `ac`/`full` modes) owns the **two-phase camera pan**: one
-650ms Sine tween drives the main camera's `scrollY` (0↔394) and the arena camera's
-viewport height (521↔127) in lockstep from a rounded proxy — `framingForPan` in
+`{0,0,390,507}` (42px HUD row + a 465px board band; 507 = round(844 × 2/3 × 0.9) — the
+old 2/3 split shrunk 10% in Zone B's favour), Zone C `{0,507,390,44}`, Zone B
+`{0,551,390,687}` (the gate layouts are still authored for the old 607..1238 band; the
+extra 56px is free-fall headroom above the first shelf). `src/core/PhaseDirector.ts` (a
+scene-level `GameSystem`, created last in `ac`/`full` modes) owns the **two-phase camera
+pan**: one 650ms Sine tween drives the main camera's `scrollY` (0↔394) and the arena
+camera's viewport height (465↔71) in lockstep from a rounded proxy — `framingForPan` in
 `src/core/phaseGeometry.ts` keeps the arena-bottom/Zone-C seam pixel-locked at every tick,
 and the pure FSM lives in `src/core/phaseMachine.ts` (states `A`/`A_TO_B`/`B`/`B_TO_A`,
 with a `refillQueued` turnaround for a score bar that fills mid-pan). The director listens
 for `ZONE_A_DEPLETED` (pan down) and `SCORE_BAR_FILLED` (pan up) and broadcasts
 `PHASE_CHANGED` — the input-lock signal: Zone A's aim is frozen outside the A phase, Zone
 C's door is locked outside the B phase (it boots locked), and both stay locked during the
-pans. So the A phase gives Zone A (HUD + board) **2/3 of the screen** with Zone B
-bottom-cropped (score bar off-screen), and the B phase top-crops Zone A to **1/5 of the
-screen** while Zone B fills the freed space exactly — a pure pan, no zoom change. All screen-space chrome (HUD, queue row, game-over
+pans. **Both inputs accept the whole screen** — Zone A's drag-to-aim has no y-guard and
+Zone C's door tap is a scene-level pointer listener (the door band is visual only) — safe
+because the phase locks make them mutually exclusive. So the A phase gives Zone A (HUD +
+board) **~60% of the screen** with Zone B bottom-cropped (score bar off-screen), and the
+B phase top-crops Zone A to a **113px sliver** while Zone B fills the freed space exactly
+— a pure pan, no zoom change. All screen-space chrome (HUD, queue row, game-over
 overlay, debug UI) is pinned with `setScrollFactor(0)`. `?zone=b` skips the director and
 statically frames the B phase (`cameras.main.setScroll(0, PAN_DISTANCE)`); `?zone=ac` runs
 the full phase loop against a stub Zone B that fakes the score bar. A

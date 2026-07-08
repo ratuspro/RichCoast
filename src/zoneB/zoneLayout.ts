@@ -32,6 +32,8 @@ export interface WallDef {
   x1: number; y1: number;
   x2: number; y2: number;
   thickness?: number;   // default 6
+  /** Fill the area between this rail and the Zone B bottom with solid wood (funnel ramps). */
+  fillBelow?: boolean;
 }
 export interface ZoneBLayout {
   gates: GateDef[];
@@ -42,15 +44,15 @@ export interface ZoneBLayout {
 // Two layouts modelled on the reference screenshots: stacked horizontal multiplier shelves
 // (static gates) split by vertical/diagonal guide rails (walls), funnelling into a bottom cup
 // (collector). One is chosen at random per run via pickRandomLayout(). All y values are
-// absolute (zone B spans y=607..1238, x=0..390 — the band was re-authored from the previous
-// 412..952 one with the linear remap newY = 607 + (oldY−412)×(631/540), so the cascade fills
-// the taller band; diagonals are ~17% steeper as a result). Multipliers are tuned for
+// absolute (zone B now spans y=551..1238, x=0..390; the cascade is still authored for the
+// previous 607..1238 band — the extra 56px the band gained from Zone A is deliberate
+// free-fall headroom above the first shelf, not a remap). Multipliers are tuned for
 // balance (≤4), so the geometry matches the images while ball cascades stay sane.
 
 // The two funnel ramps that feed the single bottom collector — shared by both layouts.
 const FUNNEL_RAMPS: WallDef[] = [
-  { x1: 0,   y1: 1129, x2: 110, y2: 1233 },
-  { x1: 390, y1: 1129, x2: 280, y2: 1233 },
+  { x1: 0,   y1: 1129, x2: 110, y2: 1233, fillBelow: true },
+  { x1: 390, y1: 1129, x2: 280, y2: 1233, fillBelow: true },
 ];
 const BOTTOM_COLLECTOR: CollectorDef = { x: 110, y: 1194, width: 170, height: 24, scoreMultiplier: 1 };
 

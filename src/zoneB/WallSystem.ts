@@ -37,6 +37,18 @@ export class WallSystem implements GameSystem {
       // Visual: a pine guide rail — light wood over a darker shadow edge, matching
       // Zone A's tray so the whole machine reads as one piece of joinery.
       const g = scene.add.graphics().setDepth(3);
+      if (wall.fillBelow) {
+        // Solid wood between the ramp and the Zone B bottom edge.
+        const bottom = Layout.zoneB.y + Layout.zoneB.height;
+        g.fillStyle(Theme.pine, 1);
+        g.beginPath();
+        g.moveTo(wall.x1, wall.y1);
+        g.lineTo(wall.x2, wall.y2);
+        g.lineTo(wall.x2, bottom);
+        g.lineTo(wall.x1, bottom);
+        g.closePath();
+        g.fillPath();
+      }
       g.lineStyle(thickness + 2, Theme.pineShadow, 1);
       g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
       g.lineStyle(thickness, Theme.pine, 1);

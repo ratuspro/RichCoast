@@ -168,7 +168,8 @@ export class AimController {
 
   private onPointerDown = (pointer: Phaser.Input.Pointer): void => {
     if (this.disabled || this.frozen) return;
-    if (pointer.y > Layout.zoneA.height) return; // a tap on Zone C's door / Zone B, not us
+    // No y-guard: aiming works from anywhere on screen — the phase freeze (`frozen`)
+    // already blocks this handler outside the A phase, when taps belong to Zone C's door.
     if (this.scene.time.now < this.dropReadyAt) return; // brief post-drop cooldown
     this.dragging = true;
     this.moveAimTo(this.aimXFromPointer(pointer));

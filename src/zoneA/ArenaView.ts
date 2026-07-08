@@ -235,6 +235,18 @@ export class ArenaView {
    *  the balls sit in. Widths scale with `s` so the rails hold their apparent size zoomed. */
   private redrawWalls(l: Point, apex: Point, r: Point, top: number): void {
     const g = this.wallGfx.clear();
+    // Solid wood under the funnel V: fill from the ramp edges down past FLOOR_Y (the
+    // camera bottom pins there, so the overshoot is cropped — it just kills seam pixels).
+    const below = FLOOR_Y + WALL_T;
+    g.fillStyle(Theme.pine, 1);
+    g.beginPath();
+    g.moveTo(this.minX, l.y);
+    g.lineTo(apex.x, apex.y);
+    g.lineTo(this.maxX, r.y);
+    g.lineTo(this.maxX, below);
+    g.lineTo(this.minX, below);
+    g.closePath();
+    g.fillPath();
     const rail = (width: number, color: number): void => {
       g.lineStyle(width, color, 1);
       g.lineBetween(this.minX, top, l.x, l.y);
