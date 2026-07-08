@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Locked portrait, no pinch-zoom, draw under the notch. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>RichCoast</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #f2e7d5; /* Theme.paper — letterbox bars match the canvas */
+        overflow: hidden;
+        /* Kill browser touch gestures (scroll/zoom/pull-to-refresh) so the
+           canvas owns every touch. */
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+      #app {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-BStbdz7V.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
