@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { blastImpulse, isNearDeath, isOverflow, isRestingAbove, midpoint, nextRestMs } from './ballMath';
+import { blastImpulse, isNearDeath, isOverflow, isRestingAbove, midpoint, nextRestMs, radiusForTier } from './ballMath';
 import { canMerge, mergedTier } from './MergeLogic';
+import { materialForTier } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
 import type { ArenaView } from './ArenaView';
 import type { Ball, BallFactory } from './BallFactory';
@@ -172,6 +173,7 @@ export class Board {
       const merged = this.factory.spawn(where.x, where.y, tier);
       this.register(merged);
       this.applyBlast(where, merged.body);
+      this.spawnBurst(where, tier);
       Sfx.merge();
     }
     this.merging = false;
@@ -189,6 +191,50 @@ export class Board {
       const v = ball.body.velocity;
       ball.image.setVelocity(v.x + dv.x, v.y + dv.y);
     }
+  }
+
+  private static readonly SPARK_TEX = 'zoneA-spark';
+
+  /** Small debris burst at a merge point, tinted with the new tier's material. Lives on the
+   *  arena layer so it zooms with the balls and the main camera ignores it; speed/size scale
+   *  with the arena so the spray reads the same at every milestone. */
+  private spawnBurst(origin: { x: number; y: number }, tier: number): void {
+    this.ensureSparkTexture();
+    const s = this.arena.scale;
+    // Spawn along the merged ball's rim, not its centre, so the debris flies off the edge.
+    const rim = new Phaser.Geom.Circle(0, 0, radiusForTier(tier) * s);
+    const emitter = this.scene.add.particles(origin.x, origin.y, Board.SPARK_TEX, {
+      lifespan: { min: 220, max: 420 },
+      speed: { min: 30 * s, max: 130 * s },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.8 * s, end: 0 },
+      alpha: { start: 1, end: 0 },
+      tint: materialForTier(tier).def.accentColor,
+      gravityY: 500 * s,
+      emitZone: { type: 'edge', source: rim, quantity: 10 },
+      emitting: false,
+    });
+    this.arena.claim(emitter);
+    emitter.explode(10);
+    this.scene.time.delayedCall(450, () => emitter.destroy());
+  }
+
+  /** A soft white 8px dot, drawn once and reused; tinting colours it per material. */
+  private ensureSparkTexture(): void {
+    const { textures } = this.scene;
+    if (textures.exists(Board.SPARK_TEX)) return;
+    const size = 8;
+    const canvas = textures.createCanvas(Board.SPARK_TEX, size, size);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const r = size / 2;
+    const grad = ctx.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.6, 'rgba(255,255,255,0.9)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    canvas.refresh();
   }
 
   /**

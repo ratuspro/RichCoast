@@ -6,7 +6,6 @@
         1,
         1
       ],
-      "bufferCapacity": 4,
       "scoreBarTarget": 4,
       "bufferBalls": [
         1,
@@ -21,7 +20,6 @@
         1,
         4
       ],
-      "bufferCapacity": 4,
       "scoreBarTarget": 30,
       "bufferBalls": [
         1,
@@ -36,7 +34,6 @@
         1,
         4
       ],
-      "bufferCapacity": 4,
       "scoreBarTarget": 40,
       "bufferBalls": [
         2,
@@ -51,7 +48,6 @@
         1,
         4
       ],
-      "bufferCapacity": 4,
       "scoreBarTarget": 55,
       "bufferBalls": [
         1,
@@ -66,7 +62,6 @@
         1,
         4
       ],
-      "bufferCapacity": 4,
       "scoreBarTarget": 70,
       "bufferBalls": [
         2,
@@ -81,7 +76,6 @@
         1,
         4
       ],
-      "bufferCapacity": 4,
       "scoreBarTarget": 110
     },
     {
@@ -90,7 +84,6 @@
         1,
         4
       ],
-      "bufferCapacity": 5,
       "scoreBarTarget": 150
     },
     {
@@ -99,7 +92,6 @@
         1,
         4
       ],
-      "bufferCapacity": 5,
       "scoreBarTarget": 195
     },
     {
@@ -108,7 +100,6 @@
         1,
         4
       ],
-      "bufferCapacity": 5,
       "scoreBarTarget": 235
     },
     {
@@ -117,7 +108,6 @@
         1,
         4
       ],
-      "bufferCapacity": 6,
       "scoreBarTarget": 275
     },
     {
@@ -126,7 +116,6 @@
         1,
         4
       ],
-      "bufferCapacity": 6,
       "scoreBarTarget": 320
     },
     {
@@ -135,7 +124,6 @@
         1,
         4
       ],
-      "bufferCapacity": 6,
       "scoreBarTarget": 370
     },
     {
@@ -144,7 +132,6 @@
         5,
         8
       ],
-      "bufferCapacity": 7,
       "scoreBarTarget": 2400,
       "tightness": 0.92
     },
@@ -154,7 +141,6 @@
         5,
         8
       ],
-      "bufferCapacity": 7,
       "scoreBarTarget": 5000
     },
     {
@@ -163,7 +149,6 @@
         5,
         8
       ],
-      "bufferCapacity": 7,
       "scoreBarTarget": 9000
     },
     {
@@ -172,7 +157,6 @@
         5,
         8
       ],
-      "bufferCapacity": 8,
       "scoreBarTarget": 16000
     },
     {
@@ -181,7 +165,6 @@
         5,
         8
       ],
-      "bufferCapacity": 8,
       "scoreBarTarget": 26000
     },
     {
@@ -190,7 +173,6 @@
         9,
         12
       ],
-      "bufferCapacity": 8,
       "scoreBarTarget": 200000,
       "tightness": 1.05
     },
@@ -200,7 +182,6 @@
         9,
         12
       ],
-      "bufferCapacity": 9,
       "scoreBarTarget": 600000
     },
     {
@@ -209,7 +190,6 @@
         9,
         12
       ],
-      "bufferCapacity": 9,
       "scoreBarTarget": 1500000
     },
     {
@@ -218,7 +198,6 @@
         13,
         16
       ],
-      "bufferCapacity": 9,
       "scoreBarTarget": 8000000,
       "tightness": 0.85
     },
@@ -228,7 +207,6 @@
         13,
         16
       ],
-      "bufferCapacity": 9,
       "scoreBarTarget": 16000000
     },
     {
@@ -237,7 +215,6 @@
         13,
         16
       ],
-      "bufferCapacity": 10,
       "scoreBarTarget": 40000000
     },
     {
@@ -246,7 +223,6 @@
         17,
         20
       ],
-      "bufferCapacity": 10,
       "scoreBarTarget": 1300000000,
       "tightness": 1.05
     }

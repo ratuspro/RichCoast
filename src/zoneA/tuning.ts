@@ -45,6 +45,11 @@ export const FRICTION_MAX = 0.5;
 export const FRICTION_AIR = 0.01;
 export const FRICTION_STATIC = 0.1;
 
+/** Surface friction of the funnel floor. Matter combines contacts as
+ *  min(ballFriction, floorFriction), so this floor value governs how readily
+ *  balls slide — lower = smaller/lighter balls slide toward the apex more. */
+export const FLOOR_FRICTION = 0.02;
+
 /** Uniform density — Matter derives mass from density*area, so bigger tier = heavier. */
 export const DENSITY = 0.02;
 
@@ -55,11 +60,11 @@ export const RESTITUTION = 0.2;
 
 /** Neighbours within this radius of a merge get nudged outward. Base value at arena
  *  scale 1 — Board multiplies it by the live scale so the reach tracks ball sizes. */
-export const BLAST_RADIUS = 90;
+export const BLAST_RADIUS = 60;
 
 /** Peak outward velocity kick at the merge point (linear falloff to 0 at the radius).
  *  Base value at arena scale 1, scaled like BLAST_RADIUS. */
-export const BLAST_STRENGTH = 3.0;
+export const BLAST_STRENGTH = 1.6;
 
 // --- Overflow / game over -------------------------------------------------
 

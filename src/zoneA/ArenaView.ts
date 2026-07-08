@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import * as Layout from '../core/Layout';
 import { ARENA_VIEW_H_A, HUD_H, arenaCenterY } from '../core/phaseGeometry';
 import { Theme } from '../core/Theme';
-import { DEATH_LINE_Y, SPAWN_Y } from './tuning';
+import { DEATH_LINE_Y, FLOOR_FRICTION, SPAWN_Y } from './tuning';
 
 /**
  * The expanding Zone A arena + its own camera.
@@ -226,7 +226,11 @@ export class ArenaView {
     const cx = (p0.x + p1.x) / 2 + (-dy / len) * (WALL_T / 2);
     const cy = (p0.y + p1.y) / 2 + (dx / len) * (WALL_T / 2);
     this.walls.push(
-      this.scene.matter.add.rectangle(cx, cy, len + 8, WALL_T, { isStatic: true, angle }),
+      this.scene.matter.add.rectangle(cx, cy, len + 8, WALL_T, {
+        isStatic: true,
+        angle,
+        friction: FLOOR_FRICTION,
+      }),
     );
   }
 

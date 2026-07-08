@@ -54,7 +54,9 @@ const FUNNEL_RAMPS: WallDef[] = [
   { x1: 0,   y1: 1129, x2: 110, y2: 1233, fillBelow: true },
   { x1: 390, y1: 1129, x2: 280, y2: 1233, fillBelow: true },
 ];
-const BOTTOM_COLLECTOR: CollectorDef = { x: 110, y: 1194, width: 170, height: 24, scoreMultiplier: 1 };
+// The drain sits right at the score bar (bar top ≈ y=1222): its top is one ball-radius above
+// the bar so a ball vanishes just as its bottom meets the bar, not floating above it.
+const BOTTOM_COLLECTOR: CollectorDef = { x: 110, y: 1212, width: 170, height: 26, scoreMultiplier: 1 };
 
 // LAYOUT_1 — three-segment top row narrowing to a central bottom gate.
 // Row-1 gate extents are chosen so a ~16px gap sits between adjacent segments; a vertical

@@ -5,7 +5,8 @@ import * as Layout from '../core/Layout';
 import { compactValue, hexColor } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
 import { Theme } from '../core/Theme';
-import { getStage, MILESTONE_EVERY, type ProgressionStage } from '../core/Progression';
+import { OVERLAY_SCENE_KEY } from '../core/OverlayScene';
+import { bufferForLevel, getStage, MILESTONE_EVERY, type ProgressionStage } from '../core/Progression';
 import { AimController } from './AimController';
 import { ArenaView } from './ArenaView';
 import { neutralGrowth } from './ballMath';
@@ -30,8 +31,28 @@ const DRAIN_MARGIN = 12;
  */
 const STALEMATE_GRACE_MS = 250;
 
-/** Ball-buffer refill cadence during a score-bar cash-in: one slot every this many ms. */
+/** Ball-buffer refill cadence during a score-bar cash-in: one slot every this many ms, up to
+ *  a full refill of BUFFER_TICK_FULL_COUNT slots. Larger refills tighten the gap (see
+ *  bufferTickDelay) so a big cash-in doesn't drag on. */
 const BUFFER_TICK_MS = 130;
+/** Refill size at (and below) which the launch cadence stays at the full BUFFER_TICK_MS. */
+const BUFFER_TICK_FULL_COUNT = 10;
+/** Floor on the tightened cadence so a very large refill still reads as distinct slots. */
+const BUFFER_TICK_MIN_MS = 55;
+
+/**
+ * Per-slot launch delay for a cash-in refill of `ticks` slots. At or below
+ * BUFFER_TICK_FULL_COUNT it's the full BUFFER_TICK_MS; beyond that the gap shrinks inversely
+ * with the count (keeping ~10 slots' worth of total time), so the more balls there are to fly
+ * up, the less time sits between each — floored at BUFFER_TICK_MIN_MS.
+ */
+export function bufferTickDelay(ticks: number): number {
+  if (ticks <= BUFFER_TICK_FULL_COUNT) return BUFFER_TICK_MS;
+  return Math.max(
+    BUFFER_TICK_MIN_MS,
+    Math.round((BUFFER_TICK_MS * BUFFER_TICK_FULL_COUNT) / ticks),
+  );
+}
 
 /** Cash-in particle: flight time from the score bar up to the queue-row count (ms). Each
  *  refilled buffer slot only lands (count pop + blip) when its particle arrives. */
@@ -108,7 +129,7 @@ export class ZoneASystem implements GameSystem {
     this.queue = queue;
     const initialStage = getStage(this.internalLevel);
     this.applyStage(initialStage, queue);
-    this.ballBuffer = initialStage.bufferCapacity;
+    this.ballBuffer = bufferForLevel(this.internalLevel);
 
     const board = new Board(
       scene,
@@ -150,7 +171,7 @@ export class ZoneASystem implements GameSystem {
         level: this.internalLevel,
         minTier: stage.ballWindow[0],
         maxTier: stage.ballWindow[1],
-        bufferCapacity: stage.bufferCapacity,
+        bufferCapacity: bufferForLevel(this.internalLevel),
         scoreBarTarget: stage.scoreBarTarget,
       });
       // Deferred half: the visible reward (milestone zoom / drain / ticked buffer refill)
@@ -194,7 +215,7 @@ export class ZoneASystem implements GameSystem {
    * the ticked buffer refill may not have delivered its first slot yet).
    */
   private runCashInSequence(stage: ProgressionStage, prev: ProgressionStage): void {
-    this.animateBufferTo(stage.bufferCapacity);
+    this.animateBufferTo(bufferForLevel(this.internalLevel));
     const shifted =
       stage.ballWindow[0] !== prev.ballWindow[0] || stage.ballWindow[1] !== prev.ballWindow[1];
     if (this.internalLevel % MILESTONE_EVERY === 0 && shifted) {
@@ -361,7 +382,7 @@ export class ZoneASystem implements GameSystem {
     this.bufferTicksRemaining = ticksNeeded;
     let launched = 0;
     this.bufferTickTimer = this.scene?.time.addEvent({
-      delay: BUFFER_TICK_MS,
+      delay: bufferTickDelay(ticksNeeded),
       repeat: ticksNeeded - 1,
       callback: () => this.launchBufferParticle(launched++),
     });
@@ -370,16 +391,24 @@ export class ZoneASystem implements GameSystem {
   /**
    * Fly one brass mote from a random point along the score bar (bottom edge of Zone B) up
    * to the queue-row balls-left count, bowing sideways along a quadratic bezier and shedding
-   * a short fading trail. The buffer slot lands on arrival. Screen-space chrome: kept off
-   * the arena camera so a milestone zoom can't shrink or double-draw it.
+   * a short fading trail. The buffer slot lands on arrival.
+   *
+   * The dot lives in the OVERLAY scene, not GameScene: it must ride ON TOP of Zone A (whose
+   * dedicated camera paints an opaque band over the main camera) along a path that spans the
+   * whole screen, and stay pinned to the screen-space count even if a phase pan starts
+   * mid-flight. The overlay scene is full-screen at scroll 0, so its coordinates are 1:1 with
+   * the design screen — the same space the count anchor is reported in. The flight tween stays
+   * on GameScene so destroy()/discardBufferParticles can kill it on a scene restart.
    */
   private launchBufferParticle(index: number): void {
     const scene = this.scene;
+    const overlay = this.overlayScene();
     const anchor = this.aim?.countAnchor();
-    if (!scene || !anchor) { this.landBufferSlot(index); return; }
+    if (!scene || !overlay || !anchor) { this.landBufferSlot(index); return; }
 
-    // Launch from the bottom of the SCREEN, not the world: this runs in the A-phase
-    // (scroll 0), where Zone B's band bottom (world 1238) is off-screen below y=844.
+    // Launch from the bottom of the SCREEN: this runs in the A-phase, where Zone B's band
+    // bottom (world 1238) is off-screen below y=844, so the score bar's on-screen home is
+    // approximated by the screen's bottom edge.
     const start = {
       x: Layout.zoneB.x + Math.random() * Layout.zoneB.width,
       y: Layout.HEIGHT - 5,
@@ -394,11 +423,10 @@ export class ZoneASystem implements GameSystem {
       new Phaser.Math.Vector2(anchor.x, anchor.y),
     );
 
-    const dot = scene.add
+    const dot = overlay.add
       .circle(start.x, start.y, 4, Theme.brassBright)
       .setStrokeStyle(2, Theme.brass, 0.6)
       .setDepth(950);
-    this.arena?.ignoreOnArenaCamera(dot);
 
     const proxy = { t: 0 };
     let frame = 0;
@@ -411,7 +439,7 @@ export class ZoneASystem implements GameSystem {
       onUpdate: () => {
         const p = curve.getPoint(proxy.t);
         dot.setPosition(p.x, p.y);
-        if (frame++ % 3 === 0) this.shedTrailMote(scene, p.x, p.y);
+        if (frame++ % 3 === 0) this.shedTrailMote(overlay, p.x, p.y);
       },
       onComplete: () => {
         this.bufferParticles.delete(particle);
@@ -422,11 +450,18 @@ export class ZoneASystem implements GameSystem {
     this.bufferParticles.add(particle);
   }
 
-  /** A tiny fading mote left behind by an in-flight cash-in particle. Self-destroys. */
-  private shedTrailMote(scene: Phaser.Scene, x: number, y: number): void {
-    const mote = scene.add.circle(x, y, 2, Theme.brassBright, 0.55).setDepth(949);
-    this.arena?.ignoreOnArenaCamera(mote);
-    scene.tweens.add({
+  /** The always-on top-most overlay scene the cash-in particles draw into (undefined only if
+   *  the game hasn't booted it — then particles are skipped and slots land instantly). */
+  private overlayScene(): Phaser.Scene | undefined {
+    return this.scene?.scene.get(OVERLAY_SCENE_KEY);
+  }
+
+  /** A tiny fading mote left behind by an in-flight cash-in particle. Self-destroys. Lives in
+   *  the overlay scene (like its parent dot), with its fade tween on that scene so it still
+   *  cleans up if GameScene restarts mid-flight. */
+  private shedTrailMote(overlay: Phaser.Scene, x: number, y: number): void {
+    const mote = overlay.add.circle(x, y, 2, Theme.brassBright, 0.55).setDepth(949);
+    overlay.tweens.add({
       targets: mote,
       alpha: 0,
       scale: 0.3,

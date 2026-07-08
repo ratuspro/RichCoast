@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import type { GameSystem } from '../core/contracts';
-import { Theme } from '../core/Theme';
 import type { CollectorDef } from './zoneLayout';
 import { getBallData, getBallImage, CAT_COLLECTOR, CAT_BALL } from './ZoneBBall';
 
@@ -35,11 +34,9 @@ export class CollectorSystem implements GameSystem {
       });
       this.collectorBodies.set(body, def);
 
-      // Visual: the mouth of a toy collection crate — shadowed wood fill, brass rim.
-      scene.add
-        .rectangle(cx, cy, def.width, def.height, Theme.pineDark, 0.4)
-        .setStrokeStyle(2, Theme.brass)
-        .setDepth(4);
+      // The collector is an invisible sensor: the funnel ramps already read as the mouth,
+      // and the score bar sits directly below, so a crate rectangle here just clashed with
+      // the bar. A scored collector still labels its multiplier.
       if (def.scoreMultiplier !== 1) {
         scene.add
           .text(cx, cy, `×${def.scoreMultiplier}`, {

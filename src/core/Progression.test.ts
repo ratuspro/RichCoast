@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MILESTONE_EVERY, milestoneProgress } from './Progression';
+import { bufferForLevel, MILESTONE_EVERY, milestoneProgress } from './Progression';
 
 describe('milestoneProgress', () => {
   it('starts near empty on level 1', () => {
@@ -21,5 +21,24 @@ describe('milestoneProgress', () => {
     expect(milestoneProgress(MILESTONE_EVERY * 2 + 10)).toBeCloseTo(
       10 / MILESTONE_EVERY,
     );
+  });
+});
+
+describe('bufferForLevel', () => {
+  it('starts at 5 and holds through the first fill', () => {
+    expect(bufferForLevel(1)).toBe(5);
+    expect(bufferForLevel(2)).toBe(5);
+  });
+
+  it('adds 2 per fill for the next three fills', () => {
+    expect(bufferForLevel(3)).toBe(7);
+    expect(bufferForLevel(4)).toBe(9);
+    expect(bufferForLevel(5)).toBe(11);
+  });
+
+  it('adds 1 per fill thereafter', () => {
+    expect(bufferForLevel(6)).toBe(12);
+    expect(bufferForLevel(7)).toBe(13);
+    expect(bufferForLevel(20)).toBe(26);
   });
 });
