@@ -12,8 +12,8 @@ const BAND_CY = BAND_H / 2; // 21 — vertical midline everything aligns to
 
 /** Milestone progress bar (left slot, where the level counter used to be). */
 const MILESTONE_BAR_X = 14;
-const MILESTONE_BAR_W = 72;
-const MILESTONE_BAR_H = 8;
+const MILESTONE_BAR_W = 113; // 72 + 30%, then +20%
+const MILESTONE_BAR_H = 20; // 8 + 150%
 
 /**
  * Top-of-screen HUD. Draws a solid chrome header bar across the top, on which the
@@ -63,12 +63,13 @@ export class HUD implements GameSystem {
     // Milestone bar: pine track with a brass fill, no numbers — progress toward the
     // next arena zoom-out milestone. Track drawn once; only the fill width changes.
     scene.add
-      .rectangle(MILESTONE_BAR_X, BAND_CY, MILESTONE_BAR_W, MILESTONE_BAR_H, Theme.pineDark, 1)
+      .rectangle(MILESTONE_BAR_X, BAND_CY, MILESTONE_BAR_W, MILESTONE_BAR_H, Theme.pineShadow, 1)
       .setOrigin(0, 0.5)
+      .setStrokeStyle(1, Theme.ink, 1)
       .setScrollFactor(0)
       .setDepth(1000);
     this.milestoneFill = scene.add
-      .rectangle(MILESTONE_BAR_X + 1, BAND_CY, 0, MILESTONE_BAR_H - 2, Theme.brass, 1)
+      .rectangle(MILESTONE_BAR_X + 1, BAND_CY, 0, MILESTONE_BAR_H - 2, Theme.brassBright, 1)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(1001);

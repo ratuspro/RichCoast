@@ -109,6 +109,14 @@ export class ArenaView {
   get maxX(): number { return Layout.WIDTH / 2 + (Layout.WIDTH / 2) * this.s; }
   private get ceilingY(): number { return FLOOR_Y - Layout.zoneA.height * this.s; }
 
+  /** Y of the funnel ramp surface directly under world-x `x` (the V floor's top edge). */
+  rampYAt(x: number): number {
+    const [l, apex, r] = this.floorEdge();
+    const [a, b] = x <= apex.x ? [l, apex] : [apex, r];
+    const t = (x - a.x) / (b.x - a.x);
+    return a.y + t * (b.y - a.y);
+  }
+
   /** Screen→arena-world point, so aiming maps correctly under the zoomed/scrolled camera. */
   worldPoint(screenX: number, screenY: number): Phaser.Math.Vector2 {
     return this.camera.getWorldPoint(screenX, screenY);

@@ -45,7 +45,7 @@ ends on overflow or on a full stalemate (see Failure conditions).
 Because balls grow without bound, the arena itself grows to make room, on a schedule tied to
 the draw-window shifts below.
 
-- Every 50 levels, Zone A input freezes and the arena — ceiling, walls, floor/funnel width —
+- Every 25 levels, Zone A input freezes and the arena — ceiling, walls, floor/funnel width —
   expands outward (never into Zone B). A dedicated camera zooms out to match, so relative
   ball sizes and positions on screen hold steady.
 - The growth factor per milestone is the *neutral match* for the window's new max tier (the
@@ -168,7 +168,7 @@ hyper-casual and casual for UA-driven mobile: bright, readable, friendly.
 
 **Balls are materials.** Each tier IS a physical material — the higher the tier, the more
 valuable the stuff. The ladder is 20 materials in 5 families of 4, each family aligned
-with one 4-tier draw window (so a 50-level window shift reads as advancing a material age):
+with one 4-tier draw window (so a 25-level window shift reads as advancing a material age):
 
 1. **Primitives** [1–4]: Wood, Stone, Turquoise, Clay
 2. **Metals** [5–8]: Copper, Iron, Steel, Silver
@@ -244,7 +244,7 @@ window-shift milestones, which is a deliberate, visible beat — see Zone A abov
 
 Balls queued in Zone A (both the live queue and the ball buffer) are drawn randomly from a
 sliding window of consecutive tiers, always four tiers wide. The window holds at `[1,4]`
-through level 49, then jumps `[5,8]` / `[9,12]` / `[13,16]` / `[17,20]` at each 50-level
+through level 24, then jumps `[5,8]` / `[9,12]` / `[13,16]` / `[17,20]` at each 25-level
 milestone. At each jump, the lowest 4 tiers become **blacklisted**: the in-hand and
 next-preview balls are re-rolled off any blacklisted tier, and any obsolete balls still on
 the board are drained into Zone B in one synchronized slide (see Arena Growth). The window

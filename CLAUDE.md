@@ -139,7 +139,7 @@ Ball radius reads the `RADII` table for tiers 1–10 and keeps growing geometric
 (`RADIUS_GROWTH` in `tuning.ts`); look + physics feel come from the shared
 `src/core/Materials.ts` ladder (one source for both zones, so a transferred ball keeps its
 material). Because balls grow without bound, the **arena expands at
-recurring milestones**: every 50 levels Zone A input freezes, `ArenaView` grows the playfield
+recurring milestones**: every 25 levels Zone A input freezes, `ArenaView` grows the playfield
 by a **per-milestone factor** = the *neutral ball-growth match* (`neutralGrowth` in
 `ballMath.ts`: the window-max radius ratio, so apparent ball size holds constant) × the
 stage's authored **`tightness`** in `progression.json` (<1 = tighter/harder, >1 = roomier
@@ -178,9 +178,10 @@ event. Every dropped ball stamps `body.ballData` so Zone C can find it. The zone
 `ArenaView.ts`, plus the existing `BallQueue`/`MergeLogic`. The boundary walls + funnel floor
 now live in `ArenaView` (movable), not `GameScene` (which keeps only the off-screen bottom
 wall). `progression.json` is now **milestone-structured**: `ballWindow` holds at `[1,4]` through
-level 49, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 50-level milestone (each
+level 24, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 25-level milestone (each
 shift stage also carries its `tightness`), and the `scoreBarTarget`s are rescaled to track
-the (powers-of-three, now much larger) per-window value magnitudes — the targets and the
+the (powers-of-three, now much larger) per-window value magnitudes, scaled down for the
+smaller `bufferForLevel` supply at the halved milestone levels — the targets and the
 tightness rhythm are starting numbers to tune by playtest. **Zone A also owns the phase
 triggers**: it tracks the finite ball supply (`ZoneASystem.ballBuffer`, refilled per stage
 from `progression.json`, broadcast via `BALL_BUFFER_CHANGED` to the queue row), and when

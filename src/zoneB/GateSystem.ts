@@ -18,7 +18,7 @@ interface RuntimeGate {
   labelText: Phaser.GameObjects.Text;
 }
 
-const GATE_THICKNESS = 8;
+const GATE_THICKNESS = 16;
 
 export class GateSystem implements GameSystem {
   private scene?: Phaser.Scene;

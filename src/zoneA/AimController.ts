@@ -5,6 +5,7 @@ import type { ArenaView } from './ArenaView';
 import { BallQueue } from './BallQueue';
 import type { BallFactory } from './BallFactory';
 import { DROP_COOLDOWN_MS } from './tuning';
+import { Theme } from '../core/Theme';
 
 // One coherent top-right queue row: `NEXT (o)  N left`. The preview ball is the icon;
 // the count sits on the far right, clear of the centred score. Shared type treatment.
@@ -32,6 +33,7 @@ export class AimController {
   private dropReadyAt = 0;
 
   private readonly aimImage: Phaser.GameObjects.Image;
+  private readonly guide: Phaser.GameObjects.Graphics;
   private readonly previewImage: Phaser.GameObjects.Image;
   private readonly previewLabel: Phaser.GameObjects.Text;
   private readonly countText: Phaser.GameObjects.Text;
@@ -48,6 +50,12 @@ export class AimController {
       .image(this.aimX, arena.spawnY, factory.ensureTexture(this.queue.peek()))
       .setDepth(10);
     arena.claim(this.aimImage); // zooms with the arena via the dedicated camera
+
+    // Drop guide: a vertical dashed line from the aim ball's centre down to the funnel
+    // ramp beneath it, so the player can read where the ball will fall. On the arena
+    // layer (depth below the ball) so it zooms and scrolls with the playfield.
+    this.guide = scene.add.graphics().setDepth(9);
+    arena.claim(this.guide);
 
     // The queue row is screen-space chrome pinned to the HUD bar: scrollFactor(0) keeps it
     // put while the main camera pans between the phase framings.
@@ -117,6 +125,7 @@ export class AimController {
     this.disabled = true;
     this.dragging = false;
     this.aimImage.setVisible(false);
+    this.guide.setVisible(false);
   }
 
   /**
@@ -127,6 +136,7 @@ export class AimController {
     this.frozen = on;
     this.dragging = false;
     this.aimImage.setVisible(!on);
+    this.guide.setVisible(!on);
   }
 
   /** Re-clamp the aim ball to the (possibly grown) arena and re-seat it on the new spawn row. */
@@ -161,6 +171,7 @@ export class AimController {
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.onPointerUp);
     this.scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onPointerUp);
     this.aimImage.destroy();
+    this.guide.destroy();
     this.previewImage.destroy();
     this.previewLabel.destroy();
     this.countText.destroy();
@@ -197,6 +208,21 @@ export class AimController {
   private moveAimTo(x: number): void {
     this.aimX = clampSpawnX(x, radiusForTier(this.queue.peek()), this.arena.minX, this.arena.maxX);
     this.aimImage.setPosition(this.aimX, this.arena.spawnY);
+    this.drawGuide();
+  }
+
+  /** Redraw the dashed drop guide from the aim ball's centre down to the ramp under it. */
+  private drawGuide(): void {
+    const s = this.arena.scale;
+    const g = this.guide.clear();
+    g.lineStyle(3 * s, Theme.inkSoft, 0.55);
+    const top = this.arena.spawnY;
+    const bottom = this.arena.rampYAt(this.aimX);
+    const dash = 14.4 * s;
+    const gap = 12 * s;
+    for (let y = top; y < bottom; y += dash + gap) {
+      g.lineBetween(this.aimX, y, this.aimX, Math.min(y + dash, bottom));
+    }
   }
 
   private advanceQueue(): void {

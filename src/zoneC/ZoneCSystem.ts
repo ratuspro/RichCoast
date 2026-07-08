@@ -10,7 +10,7 @@ const SUCK_MS = 150;
 /** The quick scale-up "spawn pop" at the entry column after the suck, in ms. */
 const POP_MS = 110;
 /** Duration of one edge→edge sweep leg (the return leg doubles it). Difficulty knob. */
-const SWEEP_MS = 1100;
+const SWEEP_MS = 880;
 /** Inset of the sweep from each Zone B edge (~one ball radius + wall slack), in px. */
 const SWEEP_MARGIN = 18;
 /** Number of evenly-spaced positions the lit marker steps between. */
@@ -56,7 +56,6 @@ export class ZoneCSystem implements GameSystem {
    *  to locked — the run boots in the 'A' phase — so it's robust to create() ordering. */
   private phaseLocked = true;
   private scene?: Phaser.Scene;
-  private door?: Phaser.GameObjects.Rectangle;
   /** The nine dim brass position markers; the active one glows polished-bright. */
   private dots: Phaser.GameObjects.Arc[] = [];
   /** Precomputed x of each position, indexed the same as `dots`. */
@@ -84,7 +83,6 @@ export class ZoneCSystem implements GameSystem {
     this.bus.on(GameEvent.ArenaZoom, ({ active }) => {
       this.zoomLocked = active;
       if (!active) this.sweepT = 0; // restart the sweep from the edge when the zoom lands
-      this.refreshDoor();
     });
 
     // Phase lock: armed only while the game is in the Zone-B phase (composes with the
@@ -92,28 +90,21 @@ export class ZoneCSystem implements GameSystem {
     this.bus.on(GameEvent.PhaseChanged, ({ phase }) => {
       this.phaseLocked = phase !== 'B';
       if (!this.phaseLocked) this.sweepT = 0;
-      this.refreshDoor();
     });
 
-    // The door band is a wooden chute mouth with a brass hinge cap at each end.
-    // The band itself is only visual — the tap target is the WHOLE screen (scene-level
-    // pointer listener): onTap() no-ops unless the door is armed, and the door is only
-    // armed in the B phase, when no other gameplay input competes for taps.
+    // The door band reads as a seamless continuation of Zone A's wooden ramp: same pine
+    // fill, no top border, so the A→C seam disappears. Only the bottom edge carries a
+    // divider, marking the separation from Zone B below. The band itself is purely visual —
+    // the tap target is the WHOLE screen (scene-level pointer listener): onTap() no-ops
+    // unless the door is armed, and the door is only armed in the B phase, when no other
+    // gameplay input competes for taps. The fill never changes with lock state.
     const r = Layout.zoneC;
-    this.door = scene.add.rectangle(
-      r.x + r.width / 2,
-      r.y + r.height / 2,
-      r.width,
-      r.height,
-      Theme.pine,
-    );
+    scene.add.rectangle(r.x + r.width / 2, r.y + r.height / 2, r.width, r.height, Theme.pine);
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
-    for (const capX of [r.x + 7, r.x + r.width - 7]) {
-      scene.add
-        .rectangle(capX, r.y + r.height / 2, 10, r.height - 6, Theme.brass)
-        .setStrokeStyle(1, Theme.pineShadow)
-        .setDepth(40);
-    }
+    // Separation from Zone B only: a thin shadow line along the band's bottom edge.
+    scene.add
+      .rectangle(r.x + r.width / 2, r.y + r.height, r.width, 2, Theme.pineShadow)
+      .setDepth(40);
 
     // Nine evenly-spaced markers along the door band. The lit one is where a tap drops
     // the ball, so the span is inset by one ball radius from each edge — a ball can never
@@ -128,8 +119,6 @@ export class ZoneCSystem implements GameSystem {
       this.dots.push(dot);
       this.styleDot(i, false);
     }
-
-    this.refreshDoor();
   }
 
   /** Polished-brass glow when active, dim brass stud when not. One place for both looks. */
@@ -326,13 +315,5 @@ export class ZoneCSystem implements GameSystem {
     // On re-arm (locked→unlocked) restart the step sequence from the left edge (index 0).
     // update() does the actual showing/hiding each frame, so markers can't get stuck out of sync.
     if (wasLocked && !locked) this.sweepT = 0;
-    this.refreshDoor();
-  }
-
-  private refreshDoor(): void {
-    // Armed = light pine with a brass edge (inviting); locked = desaturated, shadowed wood.
-    const locked = this.isLocked();
-    this.door?.setFillStyle(locked ? 0x8a7a64 : Theme.pine);
-    this.door?.setStrokeStyle(2, locked ? Theme.pineShadow : Theme.brass);
   }
 }

@@ -78,7 +78,7 @@ describe('neutralGrowth', () => {
 
 describe('progression milestone wiring', () => {
   // Mirrors ZoneASystem.MILESTONE_EVERY (not importable here — it pulls in Phaser).
-  const MILESTONE_EVERY = 50;
+  const MILESTONE_EVERY = 25;
 
   it('only shifts the window floor on milestone levels (the blacklist/zoom coupling)', () => {
     for (let level = 2; level <= 400; level++) {
@@ -90,16 +90,16 @@ describe('progression milestone wiring', () => {
     }
   });
 
-  it('grows the level-50 milestone by the neutral ball match × its authored tightness', () => {
-    const prev = getStage(49);
-    const stage = getStage(50);
+  it('grows the level-25 milestone by the neutral ball match × its authored tightness', () => {
+    const prev = getStage(24);
+    const stage = getStage(25);
     const factor = neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
     expect(factor).toBeCloseTo((56 / 26) * 0.92, 10);
   });
 
   it('self-heals past the last authored shift: window stops moving, growth is 1', () => {
-    const prev = getStage(249);
-    const stage = getStage(250);
+    const prev = getStage(124);
+    const stage = getStage(125);
     expect(stage.ballWindow).toEqual(prev.ballWindow);
     expect(neutralGrowth(prev.ballWindow[1], stage.ballWindow[1])).toBe(1);
   });
