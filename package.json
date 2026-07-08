@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "gh-pages -d dist"
+    "deploy": "echo 'richcoast.ratus.pro' > dist/CNAME && gh-pages -d dist"
   },
   "dependencies": {
     "phaser": "^4.1.0"
