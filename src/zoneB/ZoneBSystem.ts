@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
-import { compactValue } from '../core/Materials';
+import { compactValue, hexColor } from '../core/Materials';
 import { Theme } from '../core/Theme';
 import { Sfx } from '../core/Sfx';
 import { pickRandomLayout } from './zoneLayout';
@@ -16,12 +16,10 @@ import {
   getBallData,
 } from './ZoneBBall';
 
-const BAR_HEIGHT = 16; // tall enough to seat the label inside the groove
-const BAR_COLOR_BG = 0xe0d2b8; // a groove pressed into the paper (between paper and pine)
-const BAR_COLOR_FILL = 0xc9973f; // Theme.brass — the bar fills with brass
-const BAR_STROKE_COLOR = 0x3f3428; // Theme.ink — the bar's dark outline
+const BAR_HEIGHT = 32; // tall enough to seat the label inside the groove
 const BAR_STROKE_WIDTH = 2;
-const BAR_LABEL_COLOR = '#3f3428'; // Theme.ink — reads on both the groove and the brass fill
+// Bar colours come from the live Theme: `groove` for the pressed-in bg, `brass` for the
+// fill, `ink` for the outline + label — re-applied in restyleBar() on palette swaps.
 
 /** Per-16ms fraction the shown fill closes toward the logical value, so the bar
  *  glides up instead of snapping on every drained ball. */
@@ -84,6 +82,15 @@ export class ZoneBSystem implements GameSystem {
       const img = createZoneBBall(scene, ball.x, Layout.zoneBEntry.y, ball.value, ball.tier);
       this.onBallSpawned();
       void img;
+    });
+
+    // Milestone palette swap: fan the re-style out to every Zone B surface that baked a
+    // Theme colour. Fired per tween tick during the cross-fade, so each is a cheap re-apply.
+    this.bus.on(GameEvent.ThemeChanged, () => {
+      this.walls.restyle();
+      this.gates.restyle();
+      this.collectors.restyle();
+      this.restyleBar();
     });
   }
 
@@ -228,13 +235,12 @@ export class ZoneBSystem implements GameSystem {
     this.barGeom = { x, width, fillX, fillW, midY };
 
     this.barBg = scene.add
-      .rectangle(x + width / 2, midY, width, BAR_HEIGHT, BAR_COLOR_BG)
-      .setStrokeStyle(BAR_STROKE_WIDTH, BAR_STROKE_COLOR)
+      .rectangle(x + width / 2, midY, width, BAR_HEIGHT, Theme.groove)
       .setDepth(10)
       .setOrigin(0.5);
 
     this.barFill = scene.add
-      .rectangle(fillX, midY, 0, BAR_HEIGHT - 2 * BAR_STROKE_WIDTH, BAR_COLOR_FILL)
+      .rectangle(fillX, midY, 0, BAR_HEIGHT - 2 * BAR_STROKE_WIDTH, Theme.brass)
       .setDepth(11)
       .setOrigin(0, 0.5);
 
@@ -243,10 +249,19 @@ export class ZoneBSystem implements GameSystem {
         fontFamily: 'monospace',
         fontSize: '11px',
         fontStyle: 'bold',
-        color: BAR_LABEL_COLOR,
+        color: hexColor(Theme.ink),
       })
       .setOrigin(0.5, 0.5)
       .setDepth(12);
+
+    this.restyleBar();
+  }
+
+  /** Re-apply the active Theme to the bar's groove/fill/outline/label (milestone swap). */
+  private restyleBar(): void {
+    this.barBg?.setFillStyle(Theme.groove).setStrokeStyle(BAR_STROKE_WIDTH, Theme.ink);
+    this.barFill?.setFillStyle(Theme.brass);
+    this.barLabel?.setColor(hexColor(Theme.ink));
   }
 
   /**

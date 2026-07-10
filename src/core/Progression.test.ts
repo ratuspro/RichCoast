@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { bufferForLevel, MILESTONE_EVERY, milestoneProgress } from './Progression';
+import {
+  bufferForLevel,
+  MILESTONE_EVERY,
+  milestoneProgress,
+  paletteNameForLevel,
+} from './Progression';
 
 describe('milestoneProgress', () => {
   it('starts near empty on level 1', () => {
@@ -21,6 +26,26 @@ describe('milestoneProgress', () => {
     expect(milestoneProgress(MILESTONE_EVERY * 2 + 10)).toBeCloseTo(
       10 / MILESTONE_EVERY,
     );
+  });
+});
+
+describe('paletteNameForLevel', () => {
+  it('starts on the workshop palette', () => {
+    expect(paletteNameForLevel(1)).toBe('workshop');
+    expect(paletteNameForLevel(24)).toBe('workshop');
+  });
+
+  it('swaps at each authored milestone stage', () => {
+    expect(paletteNameForLevel(25)).toBe('dusk');
+    expect(paletteNameForLevel(49)).toBe('dusk');
+    expect(paletteNameForLevel(50)).toBe('night');
+    expect(paletteNameForLevel(75)).toBe('dawn');
+    expect(paletteNameForLevel(100)).toBe('gilded');
+  });
+
+  it('holds the last authored palette forever (author-then-hold)', () => {
+    expect(paletteNameForLevel(101)).toBe('gilded');
+    expect(paletteNameForLevel(500)).toBe('gilded');
   });
 });
 

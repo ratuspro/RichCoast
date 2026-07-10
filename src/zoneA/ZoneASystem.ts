@@ -187,6 +187,14 @@ export class ZoneASystem implements GameSystem {
       }
     });
 
+    // Milestone palette swap: re-apply the live Theme to every colour this zone baked.
+    // Fired per tween tick during the cross-fade, so each handler is a cheap re-style.
+    this.bus.on(GameEvent.ThemeChanged, () => {
+      this.arena?.restyle();
+      this.deathLine?.restyle();
+      this.aim?.restyle();
+    });
+
     this.bus.on(GameEvent.PhaseChanged, ({ phase }) => {
       this.phase = phase;
       this.applyFreeze();

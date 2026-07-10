@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import type { GameSystem } from '../core/contracts';
+import { hexColor } from '../core/Materials';
+import { Theme } from '../core/Theme';
 import type { CollectorDef } from './zoneLayout';
 import { getBallData, getBallImage, CAT_COLLECTOR, CAT_BALL } from './ZoneBBall';
 
@@ -16,6 +18,7 @@ interface PendingDrain {
 export class CollectorSystem implements GameSystem {
   private readonly collectorBodies = new Map<MatterJS.BodyType, CollectorDef>();
   private readonly pending: PendingDrain[] = [];
+  private readonly labels: Phaser.GameObjects.Text[] = [];
 
   constructor(
     private readonly layout: CollectorDef[],
@@ -38,12 +41,14 @@ export class CollectorSystem implements GameSystem {
       // and the score bar sits directly below, so a crate rectangle here just clashed with
       // the bar. A scored collector still labels its multiplier.
       if (def.scoreMultiplier !== 1) {
-        scene.add
-          .text(cx, cy, `×${def.scoreMultiplier}`, {
-            fontFamily: 'monospace', fontSize: '11px', color: '#3f3428', // Theme.ink
-          })
-          .setOrigin(0.5)
-          .setDepth(5);
+        this.labels.push(
+          scene.add
+            .text(cx, cy, `×${def.scoreMultiplier}`, {
+              fontFamily: 'monospace', fontSize: '11px', color: hexColor(Theme.ink),
+            })
+            .setOrigin(0.5)
+            .setDepth(5),
+        );
       }
     }
 
@@ -56,6 +61,11 @@ export class CollectorSystem implements GameSystem {
         }
       },
     );
+  }
+
+  /** Re-apply the active Theme to the multiplier labels (milestone palette swap). */
+  restyle(): void {
+    for (const label of this.labels) label.setColor(hexColor(Theme.ink));
   }
 
   update(_time: number, _delta: number): void {

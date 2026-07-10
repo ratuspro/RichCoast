@@ -10,6 +10,9 @@ const DEFAULT_THICKNESS = 6;
 const BOUND_THICKNESS = 40;
 
 export class WallSystem implements GameSystem {
+  /** Rail graphics kept alongside their defs so a Theme swap can repaint them in place. */
+  private readonly rails: Array<{ g: Phaser.GameObjects.Graphics; wall: WallDef }> = [];
+
   constructor(private readonly layout: WallDef[]) {}
 
   create(scene: Phaser.Scene): void {
@@ -34,29 +37,41 @@ export class WallSystem implements GameSystem {
       });
       scene.matter.body.setAngle(body, angle);
 
-      // Visual: a pine guide rail — light wood over a darker shadow edge, matching
-      // Zone A's tray so the whole machine reads as one piece of joinery.
       const g = scene.add.graphics().setDepth(3);
-      if (wall.fillBelow) {
-        // Solid wood between the ramp and the Zone B bottom edge.
-        const bottom = Layout.zoneB.y + Layout.zoneB.height;
-        g.fillStyle(Theme.pine, 1);
-        g.beginPath();
-        g.moveTo(wall.x1, wall.y1);
-        g.lineTo(wall.x2, wall.y2);
-        g.lineTo(wall.x2, bottom);
-        g.lineTo(wall.x1, bottom);
-        g.closePath();
-        g.fillPath();
-      }
-      g.lineStyle(thickness + 2, Theme.pineShadow, 1);
-      g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
-      g.lineStyle(thickness, Theme.pine, 1);
-      g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
+      this.rails.push({ g, wall });
+      this.drawRail(g, wall);
     }
   }
 
   update(_time: number, _delta: number): void {}
+
+  /** Re-apply the active Theme to every rail (milestone palette swap). */
+  restyle(): void {
+    for (const { g, wall } of this.rails) this.drawRail(g, wall);
+  }
+
+  /** Visual: a pine guide rail — light wood over a darker shadow edge, matching
+   *  Zone A's tray so the whole machine reads as one piece of joinery. */
+  private drawRail(g: Phaser.GameObjects.Graphics, wall: WallDef): void {
+    const thickness = wall.thickness ?? DEFAULT_THICKNESS;
+    g.clear();
+    if (wall.fillBelow) {
+      // Solid wood between the ramp and the Zone B bottom edge.
+      const bottom = Layout.zoneB.y + Layout.zoneB.height;
+      g.fillStyle(Theme.pine, 1);
+      g.beginPath();
+      g.moveTo(wall.x1, wall.y1);
+      g.lineTo(wall.x2, wall.y2);
+      g.lineTo(wall.x2, bottom);
+      g.lineTo(wall.x1, bottom);
+      g.closePath();
+      g.fillPath();
+    }
+    g.lineStyle(thickness + 2, Theme.pineShadow, 1);
+    g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
+    g.lineStyle(thickness, Theme.pine, 1);
+    g.lineBetween(wall.x1, wall.y1, wall.x2, wall.y2);
+  }
 
   /**
    * Invisible left/right/bottom border so balls are always contained within the

@@ -122,7 +122,21 @@ per cycle) with per-material colours + **subtle physics multipliers**
 apply on top of their own tuned constants. `src/core/MaterialPainter.ts` draws the
 procedural canvas recipes (shared base sphere + per-material detail pass; `'full'` LOD
 for Zone A, `'small'` for Zone B's 10px balls where colour is the identity), and
-`src/core/Theme.ts` names every environment colour (no hex literals in zone code). Ball
+`src/core/Theme.ts` names every environment colour (no hex literals in zone code). **The
+environment palette swaps at every milestone**: `Theme` is now the *active* (mutable)
+palette — `PALETTES` in `Theme.ts` holds five authored moods (workshop → dusk → night →
+dawn → gilded; night/gilded flip to dark paper + light ink), each window-shift stage in
+`progression.json` names one (`palette`, author-then-hold via `paletteNameForLevel` in
+`Progression.ts`), and `src/core/ThemeDirector.ts` (a scene-level system in `ac`/`full`)
+cross-fades `Theme` over the 1.2s milestone zoom (`PROGRESSION_CHANGED` picks the target,
+`ARENA_ZOOM {active:true}` starts the fade; pure blend math in `themeMath.ts`,
+unit-tested), emitting the contract's `THEME_CHANGED` (no payload) each tween tick. Every
+surface that bakes a Theme colour at create keeps refs and restyles on that event
+(GameScene backdrop + HTML letterbox, HUD, ArenaView walls/band, AimController queue row,
+DeathLine, Zone C band, Zone B rails/gates/collector labels/score bar); balls/materials
+are deliberately excluded — material look stays the tier signal. `GameScene.create()`
+re-applies the workshop palette first thing, so `scene.restart()` can't leak a late-run
+palette into the fresh bakes. Ball
 faces carry **no value digits** — a ball's worth is hidden from the player; material look is
 the only tier signal. Every score number the player *does* see (HUD total, Zone B's score-bar
 label, the game-over final score) is formatted through `compactValue()` (531441 → "531K",

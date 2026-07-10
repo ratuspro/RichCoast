@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { EventBus } from './core/EventBus';
-import type { GameSystem } from './core/contracts';
+import { GameEvent, type GameSystem } from './core/contracts';
 import * as Layout from './core/Layout';
 import { HUD } from './core/HUD';
 import { ZoneASystem } from './zoneA/ZoneASystem';
@@ -14,7 +14,9 @@ import { isDebug, toggleDebug } from './core/DebugMode';
 import { PhaseDirector } from './core/PhaseDirector';
 import { PAN_DISTANCE } from './core/phaseGeometry';
 import { Sfx } from './core/Sfx';
-import { Theme } from './core/Theme';
+import { PALETTES, Theme, applyPalette } from './core/Theme';
+import { hexColor } from './core/Materials';
+import { ThemeDirector } from './core/ThemeDirector';
 
 /**
  * Which slice of the game is wired up:
@@ -39,12 +41,17 @@ export class GameScene extends Phaser.Scene {
   private readonly bus = new EventBus();
   private systems: GameSystem[] = [];
   private debugHarness?: DebugHarness;
+  private backdrop?: Phaser.GameObjects.Graphics;
 
   constructor() {
     super('GameScene');
   }
 
   create(): void {
+    // Theme is module-global mutable state: a restart would otherwise leak the previous
+    // run's palette into every colour about to be baked below. Reset before ANY drawing.
+    applyPalette(PALETTES.workshop);
+
     const mode = (this.registry.get(ZONE_MODE_KEY) as ZoneMode | undefined) ?? 'full';
 
     this.drawBackdrop();
@@ -81,6 +88,7 @@ export class GameScene extends Phaser.Scene {
           new ZoneASystem(this.bus),
           new ZoneCSystem(this.bus),
           new StubZoneB(this.bus),
+          new ThemeDirector(this.bus),
           new PhaseDirector(this.bus),
         ];
 
@@ -101,6 +109,7 @@ export class GameScene extends Phaser.Scene {
           new ZoneCSystem(this.bus),
           new ZoneBSystem(this.bus),
           this.debugHarness,
+          new ThemeDirector(this.bus),
           new PhaseDirector(this.bus),
         ];
       }
@@ -112,7 +121,19 @@ export class GameScene extends Phaser.Scene {
    * are visible even while every zone is still a skeleton.
    */
   private drawBackdrop(): void {
-    const g = this.add.graphics().setDepth(-1000);
+    this.backdrop = this.add.graphics().setDepth(-1000);
+    this.restyleBackdrop();
+    this.bus.on(GameEvent.ThemeChanged, () => this.restyleBackdrop());
+  }
+
+  private restyleBackdrop(): void {
+    const g = this.backdrop;
+    if (!g) return;
+    this.cameras.main.setBackgroundColor(Theme.paper);
+    // The HTML letterbox bars around the canvas are styled to Theme.paper in index.html —
+    // keep them matched so a palette swap doesn't strand warm-paper bars beside the game.
+    document.body.style.background = hexColor(Theme.paper);
+    g.clear();
     // Zone A's band fill + funnel divider are owned by ArenaView now (its dedicated camera
     // fills the band and draws the funnel on the zooming layer), so the backdrop only paints
     // the static Zone C/B bands and their divider.

@@ -164,6 +164,13 @@ export class ArenaView {
     });
   }
 
+  /** Re-apply the active Theme (milestone palette swap): band fill + wall/funnel repaint. */
+  restyle(): void {
+    this.camera.setBackgroundColor(Theme.paperZoneA);
+    const [l, apex, r] = this.floorEdge();
+    this.redrawWalls(l, apex, r, this.ceilingY);
+  }
+
   destroy(): void {
     this.scene.tweens.killTweensOf(this.camera);
     const world = this.scene.matter.world;

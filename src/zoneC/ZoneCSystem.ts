@@ -99,12 +99,21 @@ export class ZoneCSystem implements GameSystem {
     // unless the door is armed, and the door is only armed in the B phase, when no other
     // gameplay input competes for taps. The fill never changes with lock state.
     const r = Layout.zoneC;
-    scene.add.rectangle(r.x + r.width / 2, r.y + r.height / 2, r.width, r.height, Theme.pine);
+    const band = scene.add.rectangle(
+      r.x + r.width / 2, r.y + r.height / 2, r.width, r.height, Theme.pine,
+    );
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, () => this.onTap());
     // Separation from Zone B only: a thin shadow line along the band's bottom edge.
-    scene.add
+    const divider = scene.add
       .rectangle(r.x + r.width / 2, r.y + r.height, r.width, 2, Theme.pineShadow)
       .setDepth(40);
+
+    // Milestone palette swap: the band + divider bake their fill, so re-apply per tick of
+    // the cross-fade. The dots self-heal (hidden while zoom-locked, restyled on re-arm).
+    this.bus.on(GameEvent.ThemeChanged, () => {
+      band.setFillStyle(Theme.pine);
+      divider.setFillStyle(Theme.pineShadow);
+    });
 
     // Nine evenly-spaced markers along the door band. The lit one is where a tap drops
     // the ball, so the span is inset by one ball radius from each edge — a ball can never

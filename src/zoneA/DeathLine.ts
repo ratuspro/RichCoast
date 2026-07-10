@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
+import { Theme } from '../core/Theme';
 import type { ArenaView } from './ArenaView';
 
-const LINE_COLOR = 0xd64545; // Theme.danger — deep enough to read on the light paper
 const LINE_THICKNESS = 2;
 const PULSE_MIN_ALPHA = 0.25;
 const PULSE_MAX_ALPHA = 0.9;
@@ -24,12 +24,17 @@ export class DeathLine {
     private readonly arena: ArenaView,
   ) {
     this.line = scene.add
-      .rectangle(0, 0, 1, LINE_THICKNESS, LINE_COLOR)
+      .rectangle(0, 0, 1, LINE_THICKNESS, Theme.danger)
       .setOrigin(0.5)
       .setDepth(50)
       .setVisible(false);
     arena.claim(this.line); // zooms with the arena via the dedicated camera
     this.reposition();
+  }
+
+  /** Re-apply the active Theme's danger colour (milestone palette swap). */
+  restyle(): void {
+    this.line.setFillStyle(Theme.danger);
   }
 
   /** Move/resize the line to span the (possibly grown) arena at its scaled death-line y. */

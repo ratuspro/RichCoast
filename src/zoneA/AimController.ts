@@ -6,6 +6,7 @@ import { BallQueue } from './BallQueue';
 import type { BallFactory } from './BallFactory';
 import { DROP_COOLDOWN_MS } from './tuning';
 import { Theme } from '../core/Theme';
+import { hexColor } from '../core/Materials';
 
 // One coherent top-right queue row: `NEXT (o)  N left`. The preview ball is the icon;
 // the count sits on the far right, clear of the centred score. Shared type treatment.
@@ -14,8 +15,8 @@ const LABEL_X = Layout.WIDTH - 152;
 const PREVIEW_X = Layout.WIDTH - 100;
 const PREVIEW_SIZE = 36;
 const COUNT_X = Layout.WIDTH - 14;
-const LABEL_COLOR = '#8a7a64'; // Theme.inkSoft — muted for the "NEXT" / unit text
-const COUNT_COLOR = '#3f3428'; // Theme.ink — stronger for the live number
+// Text colours come from the live Theme: inkSoft (muted) for the "NEXT" label,
+// ink (stronger) for the live count — re-applied in restyle() on palette swaps.
 
 /**
  * Drag-to-aim input for Zone A. The current ball is a body-less sprite that tracks
@@ -63,7 +64,7 @@ export class AimController {
       .text(LABEL_X, ROW_Y, 'NEXT', {
         fontFamily: 'monospace',
         fontSize: '12px',
-        color: LABEL_COLOR,
+        color: hexColor(Theme.inkSoft),
       })
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
@@ -78,7 +79,7 @@ export class AimController {
       .text(COUNT_X, ROW_Y, '', {
         fontFamily: 'monospace',
         fontSize: '14px',
-        color: COUNT_COLOR,
+        color: hexColor(Theme.ink),
       })
       .setOrigin(1, 0.5)
       .setScrollFactor(0)
@@ -142,6 +143,13 @@ export class AimController {
   /** Re-clamp the aim ball to the (possibly grown) arena and re-seat it on the new spawn row. */
   syncToArena(): void {
     this.moveAimTo(this.aimX);
+  }
+
+  /** Re-apply the active Theme's text colours + guide tint (milestone palette swap). */
+  restyle(): void {
+    this.previewLabel.setColor(hexColor(Theme.inkSoft));
+    this.countText.setColor(hexColor(Theme.ink));
+    this.drawGuide(); // guide colour is baked per redraw — refresh it in place
   }
 
   /**

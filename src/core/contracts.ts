@@ -77,6 +77,11 @@ export const GameEvent = {
   /** Zone A → PhaseDirector: ball buffer empty AND the board has settled — begin the pan
    *  down into the Zone B phase. */
   ZoneADepleted: 'ZONE_A_DEPLETED',
+  /** ThemeDirector → all: the active `Theme` palette was mutated — re-read `Theme` and
+   *  restyle any colour baked at create(). Emitted once per tween tick while a milestone
+   *  palette cross-fade runs, so handlers must be cheap re-style calls (setFillStyle /
+   *  setColor / a small Graphics redraw), never rebuilds. No payload: `Theme` IS the data. */
+  ThemeChanged: 'THEME_CHANGED',
 } as const;
 
 export type GameEventName = (typeof GameEvent)[keyof typeof GameEvent];
@@ -144,6 +149,7 @@ export interface GameEventMap {
   [GameEvent.ArenaZoom]: ArenaZoomPayload;
   [GameEvent.PhaseChanged]: PhaseChangedPayload;
   [GameEvent.ZoneADepleted]: void;
+  [GameEvent.ThemeChanged]: void;
 }
 
 // ---------------------------------------------------------------------------

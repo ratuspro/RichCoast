@@ -15,7 +15,7 @@ import { type ComboState, newComboState, nextCombo } from './comboPitch';
 /** Overall output level — one knob for the whole mix (0–1). */
 const MASTER_GAIN = 0.6;
 /** Merges/multiplications closer together than this (ms) climb in pitch. */
-const COMBO_WINDOW_MS = 500;
+const COMBO_WINDOW_MS = 1500;
 
 interface ToneOpts {
   freq: number;

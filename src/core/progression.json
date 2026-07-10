@@ -101,7 +101,8 @@
         8
       ],
       "scoreBarTarget": 1300,
-      "tightness": 0.92
+      "tightness": 0.92,
+      "palette": "dusk"
     },
     {
       "fromLevel": 30,
@@ -142,7 +143,8 @@
         12
       ],
       "scoreBarTarget": 105000,
-      "tightness": 1.05
+      "tightness": 1.05,
+      "palette": "night"
     },
     {
       "fromLevel": 60,
@@ -167,7 +169,8 @@
         16
       ],
       "scoreBarTarget": 4200000,
-      "tightness": 0.85
+      "tightness": 0.85,
+      "palette": "dawn"
     },
     {
       "fromLevel": 80,
@@ -192,7 +195,8 @@
         20
       ],
       "scoreBarTarget": 670000000,
-      "tightness": 1.05
+      "tightness": 1.05,
+      "palette": "gilded"
     }
   ]
 }

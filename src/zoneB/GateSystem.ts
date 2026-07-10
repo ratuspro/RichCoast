@@ -4,6 +4,7 @@ import type { GateDef, TranslatingGate, RotatingGate } from './zoneLayout';
 import { getBallData, getBallImage, CAT_GATE, CAT_BALL } from './ZoneBBall';
 import { isDebug } from '../core/DebugMode';
 import { Theme } from '../core/Theme';
+import { hexColor } from '../core/Materials';
 
 export interface GateCallbacks {
   /** Called when a ball body hits a gate; system should handle inFlight bookkeeping + spawning copies. */
@@ -16,6 +17,9 @@ interface RuntimeGate {
   /** Elapsed ms used for oscillation. */
   elapsed: number;
   labelText: Phaser.GameObjects.Text;
+  /** The painted sign rectangle (also reachable through the body, but kept here so a
+   *  Theme swap can restyle it without the cast). */
+  gfx: Phaser.GameObjects.Rectangle;
 }
 
 const GATE_THICKNESS = 16;
@@ -36,8 +40,8 @@ export class GateSystem implements GameSystem {
     this.scene = scene;
 
     for (const def of this.layout) {
-      const { body, labelText } = this.buildBody(scene, def);
-      const rg: RuntimeGate = { def, body, elapsed: 0, labelText };
+      const { body, labelText, gfx } = this.buildBody(scene, def);
+      const rg: RuntimeGate = { def, body, elapsed: 0, labelText, gfx };
       this.gates.push(rg);
       this.gateBodyMap.set(body, rg);
       if (isDebug()) console.log('[GateSystem] gate created, label:', body.label, 'body id:', body.id);
@@ -69,7 +73,20 @@ export class GateSystem implements GameSystem {
     }
   }
 
-  private buildBody(scene: Phaser.Scene, def: GateDef): { body: MatterJS.BodyType; labelText: Phaser.GameObjects.Text } {
+  /** Re-apply the active Theme to every gate sign (milestone palette swap). */
+  restyle(): void {
+    for (const { def, gfx, labelText } of this.gates) {
+      gfx.setFillStyle(this.paintFor(def)).setStrokeStyle(2, Theme.pineShadow);
+      labelText.setColor(hexColor(Theme.ink));
+    }
+  }
+
+  /** Sign paint: green for high multipliers, brass for low. */
+  private paintFor(def: GateDef): number {
+    return def.multiplier >= 4 ? Theme.gatePaint : Theme.brass;
+  }
+
+  private buildBody(scene: Phaser.Scene, def: GateDef): { body: MatterJS.BodyType; labelText: Phaser.GameObjects.Text; gfx: Phaser.GameObjects.Rectangle } {
     const opts: Phaser.Types.Physics.Matter.MatterBodyConfig = {
       isStatic: true,
       isSensor: false,
@@ -92,20 +109,19 @@ export class GateSystem implements GameSystem {
     scene.matter.body.setAngle(rect, angle);
 
     // Visual: a painted wooden sign — green paint for high multipliers, brass for low —
-    // with a dark stencilled "X N" and a wood-shadow edge so it sits on the light paper.
-    const color = def.multiplier >= 4 ? 0x6aa84f : Theme.brass;
+    // with a dark stencilled "X N" and a wood-shadow edge so it sits on the paper.
     const g = scene.add
-      .rectangle(cx, cy, def.length, GATE_THICKNESS, color)
+      .rectangle(cx, cy, def.length, GATE_THICKNESS, this.paintFor(def))
       .setStrokeStyle(2, Theme.pineShadow)
       .setDepth(5);
     const labelText = scene.add.text(cx, cy, `X${def.multiplier}`, {
-      fontFamily: 'sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#3f3428', // Theme.ink
+      fontFamily: 'sans-serif', fontSize: '15px', fontStyle: 'bold', color: hexColor(Theme.ink),
     }).setOrigin(0.5).setDepth(6);
 
     // Track the visual rect alongside the body so we can move it in update()
     (rect as unknown as { gfx: Phaser.GameObjects.Rectangle }).gfx = g;
 
-    return { body: rect, labelText };
+    return { body: rect, labelText, gfx: g };
   }
 
   private applyMotion(gate: RuntimeGate): void {

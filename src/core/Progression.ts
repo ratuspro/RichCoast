@@ -1,4 +1,5 @@
 import data from './progression.json';
+import type { PaletteName } from './Theme';
 
 export interface ProgressionStage {
   fromLevel: number;
@@ -11,6 +12,12 @@ export interface ProgressionStage {
    * harder; >1 = roomier breather. Only meaningful on stages whose ballWindow shifts.
    */
   tightness?: number;
+  /**
+   * Environment palette the milestone swaps to (a `PALETTES` key in `Theme.ts`). Authored
+   * on the draw-window-shift stages; levels between/after authored stages hold the last
+   * one (author-then-hold, resolved by `paletteNameForLevel`).
+   */
+  palette?: PaletteName;
 }
 
 /** Levels between arena zoom-out milestones (25, 50, 75, …). The draw-window *shift-ups* in
@@ -41,6 +48,20 @@ export function bufferForLevel(level: number): number {
   if (level <= 2) return 5; // start (L1) and the first fill (L2)
   if (level <= 5) return 5 + 2 * (level - 2); // three +2 fills: L3=7, L4=9, L5=11
   return 11 + (level - 5); // +1 per fill thereafter: L6=12, L7=13, …
+}
+
+/**
+ * The environment palette active at a given internal level: the last stage at-or-below
+ * `level` that authors one, else the base `'workshop'`. Author-then-hold — past the last
+ * authored palette the look stays put, mirroring how window shifts self-heal.
+ */
+export function paletteNameForLevel(level: number): PaletteName {
+  let result: PaletteName = 'workshop';
+  for (const stage of stages) {
+    if (stage.fromLevel > level) break;
+    if (stage.palette) result = stage.palette;
+  }
+  return result;
 }
 
 /** Returns the active stage for a given internal level (1-based). */
