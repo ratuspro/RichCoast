@@ -37,9 +37,15 @@ section when the work touches it:
   interface live there. Changing it is a both-devs-must-agree action — treat it as frozen
   unless the task is explicitly about the contract.
 - Cross-zone events: `BALL_DROPPED {value,tier,x}` (C→B), `ZONE_B_BUSY`/`ZONE_B_EMPTY`
-  (B→C, drives the trap-door lock), `SCORE_CHANGED {total}` (B→HUD), `SCORE_BAR_CHANGED`/
-  `SCORE_BAR_FILLED` (B→A, the buffer-refill trigger), `BALL_BUFFER_CHANGED {count}`
-  (A→HUD/queue row), `PROGRESSION_CHANGED {level,scoreBarTarget,…}` (A→B),
+  (B→C, drives the trap-door lock), `SCORE_CHANGED {total}` (B→HUD, the live per-drain lifetime
+  total — feeds Zone A's game-over mirror; the HUD no longer *displays* it), `SCORE_HARVESTED
+  {amount,x,y}` (B→HUD, once per cash-in — the round's banked haul + its screen-space launch
+  point; THIS drives the HUD number, so the top total freezes through a B round and jumps once
+  when the haul flies up and lands), `SCORE_BAR_CHANGED`/
+  `SCORE_BAR_FILLED` (B→A, the per-level buffer-refill trigger — fires once per level as the
+  bar rolls through a multi-level cash-in), `SCORE_BAR_CASHED_IN` (B→PhaseDirector: the whole
+  roll finished — the pan-up trigger, held until the roll plays out in the B framing),
+  `BALL_BUFFER_CHANGED {count}` (A→HUD/queue row), `PROGRESSION_CHANGED {level,scoreBarTarget,…}` (A→B),
   `ARENA_ZOOM {active}` (A→C, locks the trap-door while Zone A's milestone zoom-out animates),
   `PHASE_CHANGED {phase}` (PhaseDirector→all, drives the two-phase input locks) and
   `ZONE_A_DEPLETED` (A→PhaseDirector: buffer empty + board settled).
@@ -92,7 +98,10 @@ camera's viewport height (465↔71) in lockstep from a rounded proxy — `framin
 `src/core/phaseGeometry.ts` keeps the arena-bottom/Zone-C seam pixel-locked at every tick,
 and the pure FSM lives in `src/core/phaseMachine.ts` (states `A`/`A_TO_B`/`B`/`B_TO_A`,
 with a `refillQueued` turnaround for a score bar that fills mid-pan). The director listens
-for `ZONE_A_DEPLETED` (pan down) and `SCORE_BAR_FILLED` (pan up) and broadcasts
+for `ZONE_A_DEPLETED` (pan down) and `SCORE_BAR_CASHED_IN` (pan up — fired once the score
+bar's whole roll-through has finished, so the multi-level roll plays out in the B framing
+before the camera leaves; `SCORE_BAR_FILLED` fires per-level and no longer drives the pan)
+and broadcasts
 `PHASE_CHANGED` — the input-lock signal: Zone A's aim is frozen outside the A phase, Zone
 C's door is locked outside the B phase (it boots locked), and both stay locked during the
 pans. **Both inputs accept the whole screen** — Zone A's drag-to-aim has no y-guard and
@@ -196,7 +205,11 @@ level 24, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 25-level miles
 shift stage also carries its `tightness`), and the `scoreBarTarget`s are rescaled to track
 the (powers-of-three, now much larger) per-window value magnitudes, scaled down for the
 smaller `bufferForLevel` supply at the halved milestone levels — the targets and the
-tightness rhythm are starting numbers to tune by playtest. **Zone A also owns the phase
+tightness rhythm are starting numbers to tune by playtest. Past the last authored stage the
+target **keeps growing geometrically** (`scoreBarTargetForLevel` / `TAIL_TARGET_GROWTH` =
+3^(4/25) per level in `Progression.ts` — the authored curve's own rate), because merged ball
+values are unbounded: a flat tail let one monster drain cross a frozen target thousands of
+times, wedging the game behind hours of owed score-bar wraps. **Zone A also owns the phase
 triggers**: it tracks the finite ball supply (`ZoneASystem.ballBuffer`, refilled per stage
 from `progression.json`, broadcast via `BALL_BUFFER_CHANGED` to the queue row), and when
 the buffer hits 0 a **settle gate** (`src/zoneA/settleGate.ts`: 350ms of contiguous
@@ -205,16 +218,20 @@ with a 4s hard timeout) emits `ZONE_A_DEPLETED` so the pan to the B phase waits 
 last drop's merges to resolve; the gate is skipped when the game is over, when a cash-in is
 pending, or when the board is stalemate-shaped (buffer 0 + board empty + Zone B empty stays
 `checkLoss`'s job). Filling the score bar is a
-**cash-in reward beat** rather than an instant refill: once `filled` crosses `target` the bar
-pins full and `ZoneASystem` holds a `scoreBarCashingIn`/`cashInPending` pair of flags so the
-stalemate check can't misfire while Zone B finishes draining any balls still in flight. The
-`SCORE_BAR_FILLED` handler is split for the phases: the level-up, stage apply, queue
-re-roll, and `PROGRESSION_CHANGED` emit happen **immediately** in any phase (Zone B reads
-the new target synchronously), but the **visible reward** — milestone zoom + drain, the
-ticked buffer refill, the drop unlock — defers until the pan lands back in the A phase
-(released on `PHASE_CHANGED {phase:'A'}`), so the milestone zoom never overlaps the pan.
-The bar itself never animates downward, it snaps to its carried-over value the moment the
-cash-in resolves; the refill then launches one **brass particle per new slot**
+**cash-in reward beat** rather than an instant refill: the bar wraps through its levels LIVE as
+Zone B drains (see Zone B's score-bar note), and `ZoneASystem` holds a
+`scoreBarCashingIn`/`cashInPending` pair of flags so the stalemate check can't misfire while Zone
+B finishes draining any balls still in flight. `SCORE_BAR_FILLED` now fires **once per level
+crossed, live during the drain** (a burst when one drain earns several levels); its handler is
+split for the phases: the level-up, stage apply, queue re-roll, and `PROGRESSION_CHANGED` emit
+happen **immediately** per level (Zone B reads the new target synchronously for its next
+crossing), but the **visible reward** — milestone zoom + drain, the ticked buffer refill, the drop
+unlock — defers until the pan lands back in the A phase (released on `PHASE_CHANGED {phase:'A'}`),
+so the milestone zoom never overlaps the pan, and a multi-level drain collapses into the final
+level's one refill — but each burst level's zoom factor (`milestoneZoomFactor` in
+`ballMath.ts`, computed per event while `internalLevel` is that level) **composes by product**
+into the pending slot, so a roll-through that overshoots a milestone level still zooms. The
+refill then launches one **brass particle per new slot**
 (`animateBufferTo`, `bufferTickDelay` apart — `BUFFER_TICK_MS`=130 for ≤10 slots, then the
 gap shrinks inversely with the count, floored at 55ms, so a big refill doesn't drag) that
 arcs from the score bar up to the queue-row balls-left count
@@ -226,7 +243,15 @@ in `main.ts`, transparent, input-disabled) — their path spans the whole screen
 bottom → through Zone A → the HUD count), so they can't live on the main camera (Zone A's
 dedicated camera paints an opaque band over it) nor its own scene camera; the overlay scene
 is full-screen at scroll 0, so its coords are 1:1 with the screen chrome they target and it
-renders above every Zone A ball and is immune to the phase pan. The game-over
+renders above every Zone A ball and is immune to the phase pan. The **HUD score total** rides
+the same overlay road: it does NOT display the live `SCORE_CHANGED`; instead it holds a frozen
+`shownTotal` and, on each `SCORE_HARVESTED`, flies a brass `+N` number token (shrinking, with a
+trail) from Zone B's haul spot up to the top total, which counts up + scale-pops when the token
+lands — so the number stays frozen through a B round and jumps once, in sync with the pan up.
+Both fly-ups (buffer refill + score harvest) share one helper, **`src/core/overlayFx.ts`**
+(`launchOverlayFlyer`: jittered quadratic-bezier arc + fading trail, drive tween on GameScene so
+a restart kills it, object on the surviving overlay scene). Because that overlay scene outlives a
+`scene.restart()`, `HUD.destroy()` discards any in-flight harvest tokens. The game-over
 overlay + RESTART are pinned screen-space (`setScrollFactor(0)`), so they render
 full-screen and clickable in either phase framing.
 
@@ -245,14 +270,34 @@ band is `y=607..1238` — taller than what the A phase shows (the bottom 394px, 
 score bar, are off-screen until the pan) and exactly filling the screen below Zone C in the
 B phase. The ball supply lives in Zone A (`zoneB/BallBuffer.ts` is dead code, kept only by
 its own unit test); Zone B's job is scoring (`SCORE_CHANGED`, `SCORE_BAR_CHANGED`,
-`SCORE_BAR_FILLED`) and the busy/empty door signals. The **score bar** is drawn by
+`SCORE_BAR_FILLED`, `SCORE_HARVESTED`) and the busy/empty door signals. Above the bar hovers a
+**haul label** — `ZoneBSystem` tracks `roundScore` (the total earned THIS B round, reset each
+cash-in) and `pumpHaulLabel` shows it as a big `+N` chip that counts up and whose base scale
+grows with the haul magnitude (capped at `HAUL_MAX_SCALE`, a Back-ease pop per add). At cash-in
+(`harvestRound`, just before `SCORE_BAR_CASHED_IN`) it emits `SCORE_HARVESTED {amount,x,y}` with
+the label's on-screen position (world→screen via `cameras.main.scrollY`, clamped inside the
+bottom edge for a rare phase-A milestone-drain cash-in) and hides the label — the number never
+flies itself (a world-space object would slide off-screen as the camera pans up); the HUD flies a
+matching token instead (see below). The **score bar** is drawn by
 `ZoneBSystem` along the bottom of the Zone B band (a groove-bg + brass fill rectangle with the
 `X / Y` label centred inside a 16px-tall bar, lifted a small margin off the screen edge). Its
-shown value is **eased upward every frame** (`animateBar`, `FILL_LERP`) so both the fill and the
-counting label glide up as balls drain instead of snapping; a cash-in reset snaps the fill down
-(the bar only ever animates up). The instant the shown fill reaches a full bar it fires a
-one-shot celebration (`celebrateFull`): the groove+fill throb vertically and a brass sparkle
-rises off the bar. Balls are small
+shown fill is tracked as a 0..1 `displayFraction`, and the bar fills and wraps **live as balls
+drain** — no waiting for the drain to finish. `addScore` accumulates into `ScoreBar` and, in a
+loop, consumes one level per target crossed: each crossing emits `SCORE_BAR_FILLED` (a real Zone A
+level-up that — synchronously, via `PROGRESSION_CHANGED` → `setTarget` — raises the next target)
+and queues one owed wrap, **capped at `MAX_LEVELS_PER_CASHIN` (10) per cash-in cycle** — at the
+cap the rest of the fill is forfeited (`ScoreBar.forfeitOverflow`, bar rests at 99%), the safety
+valve that keeps a freak monster drain from banking thousands of owed wraps. `animateBar` eases `displayFraction` toward the current fill when nothing
+is owed, and when wraps are owed sweeps the bar to full (`WRAP_FILL_MS`) then celebrates + snaps it
+to empty per wrap — so the fill → empty → fill roll plays out while the balls are still cascading.
+`ScoreBar` is deliberately minimal (`filled` + `target`, `add`/`crossedTarget`/`consumeLevel`), so a
+single big drain rolls through several levels and lands the exact remainder — N crossings = N
+level-ups. Each bar-full fires the celebration (`celebrateFull`: groove+fill throb, brass sparkle,
+`Sfx.goal()`). The **pan up waits for the drain, not the fills**: once Zone B drains with a level
+owed, `ZONE_B_EMPTY` is deferred (so Zone C's door stays locked, no ball injected mid-cash-in) and
+`updateResolve` waits for the bar to finish its wraps + a short `SETTLE_DWELL_MS` beat, then emits
+`ZONE_B_EMPTY` + `SCORE_BAR_CASHED_IN` (the PhaseDirector's pan-up trigger).
+Balls are small
 (10px radius) and **collide with each other** (the `CAT_BALL` mask includes itself), so they
 pile and nudge in the cascade. Ball textures use the same shared
 `src/core/Materials.ts` + `MaterialPainter.ts` recipes as Zone A (small LOD), with the

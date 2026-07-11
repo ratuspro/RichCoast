@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   bufferForLevel,
+  getStage,
   MILESTONE_EVERY,
   milestoneProgress,
   paletteNameForLevel,
+  scoreBarTargetForLevel,
+  TAIL_TARGET_GROWTH,
 } from './Progression';
 
 describe('milestoneProgress', () => {
@@ -46,6 +49,33 @@ describe('paletteNameForLevel', () => {
   it('holds the last authored palette forever (author-then-hold)', () => {
     expect(paletteNameForLevel(101)).toBe('gilded');
     expect(paletteNameForLevel(500)).toBe('gilded');
+  });
+});
+
+describe('scoreBarTargetForLevel', () => {
+  it('returns the authored target at and below the last authored stage', () => {
+    expect(scoreBarTargetForLevel(1)).toBe(getStage(1).scoreBarTarget);
+    expect(scoreBarTargetForLevel(60)).toBe(320_000);
+    expect(scoreBarTargetForLevel(97)).toBe(21_000_000); // holds the level-90 stage
+    expect(scoreBarTargetForLevel(100)).toBe(670_000_000);
+  });
+
+  it('keeps growing geometrically past the last authored stage (the endless tail)', () => {
+    const last = scoreBarTargetForLevel(100);
+    expect(scoreBarTargetForLevel(101)).toBeCloseTo(last * TAIL_TARGET_GROWTH, -2);
+    expect(scoreBarTargetForLevel(101)).toBeGreaterThan(last);
+    // Strictly increasing far into the tail — the flat-forever bug.
+    expect(scoreBarTargetForLevel(500)).toBeGreaterThan(scoreBarTargetForLevel(499));
+  });
+
+  it('tail rate continues the authored curve: one draw-window of value per milestone span', () => {
+    // Ball values grow 3^4 per window shift every MILESTONE_EVERY levels, and the authored
+    // targets track that (105K@50 -> 670M@100 ~ x3^8 over 50 levels). The tail keeps the
+    // same per-level rate so one good drain stays worth ~one level forever.
+    expect(TAIL_TARGET_GROWTH ** MILESTONE_EVERY).toBeCloseTo(3 ** 4, 8);
+    expect(
+      scoreBarTargetForLevel(100 + MILESTONE_EVERY) / scoreBarTargetForLevel(100),
+    ).toBeCloseTo(3 ** 4, 2);
   });
 });
 

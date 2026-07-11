@@ -1,58 +1,81 @@
 import { describe, test, expect } from 'vitest';
 import { ScoreBar } from './ScoreBar';
 
+/** Drives ScoreBar the way ZoneBSystem does live: add points, then consume one level per
+ *  crossing, updating the target between crossings (as Zone A does via ProgressionChanged).
+ *  Returns how many levels were crossed. */
+function consumeCrossings(bar: ScoreBar, nextTarget: () => number): number {
+  let levels = 0;
+  while (bar.crossedTarget()) {
+    bar.consumeLevel();
+    levels += 1;
+    bar.setTarget(nextTarget());
+  }
+  return levels;
+}
+
 describe('ScoreBar', () => {
-  test('accumulates points without filling', () => {
+  test('accumulates points without crossing', () => {
     const bar = new ScoreBar(10);
-    expect(bar.add(4)).toBe(false);
+    bar.add(4);
     expect(bar.getFilled()).toBe(4);
+    expect(bar.crossedTarget()).toBe(false);
   });
 
-  test('returns true and pins filled at the over-target value on first fill', () => {
-    const bar = new ScoreBar(10);
-    expect(bar.add(7)).toBe(false);
-    expect(bar.add(6)).toBe(true); // 13 >= 10
-    expect(bar.getFilled()).toBe(13);
-    expect(bar.isCashingIn()).toBe(true);
-  });
-
-  test('further points while cashing in are banked, not shown', () => {
-    const bar = new ScoreBar(10);
-    bar.add(10); // fills exactly, enters cash-in
-    expect(bar.add(5)).toBe(false); // banked, no new fill event
-    expect(bar.getFilled()).toBe(10); // unchanged while cashing in
-  });
-
-  test('completeCashIn resets to the banked overflow and exits cash-in when below target', () => {
+  test('crossedTarget is true at or above the target', () => {
     const bar = new ScoreBar(10);
     bar.add(10);
-    bar.add(3); // banked overflow
-    expect(bar.completeCashIn()).toBe(false);
+    expect(bar.crossedTarget()).toBe(true);
+  });
+
+  test('consumeLevel subtracts the current target from filled', () => {
+    const bar = new ScoreBar(10);
+    bar.add(13);
+    bar.consumeLevel();
     expect(bar.getFilled()).toBe(3);
-    expect(bar.isCashingIn()).toBe(false);
   });
 
-  test('completeCashIn cascades when the banked overflow alone reaches target', () => {
-    const bar = new ScoreBar(10);
-    bar.add(10);
-    bar.add(12); // overflow alone already >= target
-    expect(bar.completeCashIn()).toBe(true);
-    expect(bar.getFilled()).toBe(12);
-    expect(bar.isCashingIn()).toBe(true);
+  test('a single add can cross several levels, landing the exact remainder', () => {
+    const bar = new ScoreBar(4); // level-1 target
+    bar.add(50);
+    const targets = [30, 40, 55]; // successive level targets
+    let i = 0;
+    const levels = consumeCrossings(bar, () => targets[i++]);
+    // 50 - 4 = 46 (L2); 46 - 30 = 16 (L3); 16 < 40 -> stop.
+    expect(levels).toBe(2);
+    expect(bar.getFilled()).toBe(16);
+    expect(bar.getTarget()).toBe(40);
   });
 
-  test('completeCashIn with no overflow resets to zero', () => {
+  test('exact fill lands empty on the next level', () => {
     const bar = new ScoreBar(10);
     bar.add(10);
-    expect(bar.completeCashIn()).toBe(false);
+    const levels = consumeCrossings(bar, () => 30);
+    expect(levels).toBe(1);
     expect(bar.getFilled()).toBe(0);
+    expect(bar.crossedTarget()).toBe(false);
   });
 
-  test('add works normally again after a non-cascading completeCashIn', () => {
-    const bar = new ScoreBar(10);
-    bar.add(10);
-    bar.completeCashIn();
-    expect(bar.add(9)).toBe(false);
-    expect(bar.add(2)).toBe(true);
+  test('progress reflects the current fill against the current target', () => {
+    const bar = new ScoreBar(20);
+    bar.add(5);
+    expect(bar.getProgress()).toBeCloseTo(0.25);
+  });
+
+  test('forfeitOverflow drops an over-target fill to just under full', () => {
+    // The safety valve for a freak monster drain: the caller stops consuming levels at its
+    // cap and forfeits the rest, leaving a nearly-full bar (not a crossed one).
+    const bar = new ScoreBar(100);
+    bar.add(1_000_000);
+    bar.forfeitOverflow();
+    expect(bar.crossedTarget()).toBe(false);
+    expect(bar.getProgress()).toBeCloseTo(0.99);
+  });
+
+  test('forfeitOverflow is a no-op below the target', () => {
+    const bar = new ScoreBar(100);
+    bar.add(42);
+    bar.forfeitOverflow();
+    expect(bar.getFilled()).toBe(42);
   });
 });

@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { GameEvent, type BallBodyData, type GameSystem } from '../core/contracts';
+import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { Sfx } from '../core/Sfx';
 import { Theme } from '../core/Theme';
+import { findNearestDoorBall } from '../zoneA/doorTarget';
 
 /** How long the suck tween runs before the ball pops into Zone B, in ms. */
 const SUCK_MS = 150;
@@ -19,23 +20,6 @@ const SWEEP_POSITIONS = 9;
 const ZONE_B_BALL_PX = 20;
 /** Per-position dwell so one leg (8 steps) == SWEEP_MS, keeping the old cadence. */
 const STEP_MS = SWEEP_MS / (SWEEP_POSITIONS - 1);
-
-/**
- * Minimal structural view of a Matter body carrying ball identity. Zone A stamps
- * `ballData` onto each ball body it spawns (see BallBodyData); Zone C reads it off
- * a shared-world query — so the two zones couple through the physics world + bus,
- * never by importing each other.
- *
- * `circleRadius` (set by Matter on circle bodies) lets us measure edge distance, and
- * `gameObject` (Phaser's back-reference to the Matter.Image) lets us remove the ball
- * from Zone A by destroying its image — the Board self-prunes off that DESTROY event.
- */
-interface BallBody {
-  position: { x: number; y: number };
-  circleRadius?: number;
-  gameObject?: Phaser.GameObjects.GameObject;
-  ballData?: BallBodyData;
-}
 
 /**
  * Zone C — the trap-door (Dev 1).
@@ -177,7 +161,8 @@ export class ZoneCSystem implements GameSystem {
   private onTap(): void {
     if (this.isLocked()) return;
 
-    const ball = this.findNearestBall();
+    if (!this.scene) return;
+    const ball = findNearestDoorBall(this.scene);
     if (!ball?.ballData) return; // nothing to suck yet (e.g. Zone A still empty)
 
     // Freeze the sweep the instant the player commits — the lit position's column is
@@ -288,34 +273,6 @@ export class ZoneCSystem implements GameSystem {
   private emitDrop(value: number, tier: number, x: number): void {
     // x is the column the player picked by tapping the Zone C sweep marker at the right moment.
     this.bus.emit(GameEvent.BallDropped, { value, tier, x });
-  }
-
-  /**
-   * The droppable ball closest to the tunnel mouth by EDGE distance, read from the
-   * SHARED Matter world. Only bodies tagged with `ballData` and still above the door
-   * count. Subtracting the radius favours a bigger ball whose edge reaches nearer.
-   */
-  private findNearestBall(): BallBody | undefined {
-    if (!this.scene) return undefined;
-
-    const mouthX = Layout.zoneBEntry.x;
-    const doorY = Layout.zoneC.y;
-
-    let best: BallBody | undefined;
-    let bestDist = Infinity;
-    for (const raw of this.scene.matter.world.getAllBodies()) {
-      const body = raw as unknown as BallBody;
-      if (!body.ballData) continue;
-      if (body.position.y > doorY) continue; // only balls still in Zone A
-      const dx = body.position.x - mouthX;
-      const dy = body.position.y - doorY;
-      const dist = Math.hypot(dx, dy) - (body.circleRadius ?? 0);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = body;
-      }
-    }
-    return best;
   }
 
   private setLocked(locked: boolean): void {

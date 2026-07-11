@@ -12,8 +12,10 @@ const PAN_MS = 650;
 /**
  * Scene-level choreographer of the two-phase flow (shared shell, like the HUD).
  *
- * Listens for the two triggers — ZONE_A_DEPLETED (A → pan down) and SCORE_BAR_FILLED
- * (B → pan up) — runs the camera pan, and broadcasts PHASE_CHANGED so each zone applies
+ * Listens for the two triggers — ZONE_A_DEPLETED (A → pan down) and SCORE_BAR_CASHED_IN
+ * (B → pan up, fired once the whole score-bar roll-through has finished, so the roll plays
+ * out in the B framing before the camera leaves) — runs the camera pan, and broadcasts
+ * PHASE_CHANGED so each zone applies
  * its own input lock. It never calls into a zone: the state lives in the pure
  * `phaseMachine`, and the cameras are driven by name (`cameras.getCamera('arena')` — the
  * same decoupling trick Zone C's `toApparent` uses), so Zone A's ArenaView stays the
@@ -41,7 +43,7 @@ export class PhaseDirector implements GameSystem {
     this.applyPan(0);
 
     this.bus.on(GameEvent.ZoneADepleted, () => this.step('depleted'));
-    this.bus.on(GameEvent.ScoreBarFilled, () => this.step('barFilled'));
+    this.bus.on(GameEvent.ScoreBarCashedIn, () => this.step('barFilled'));
 
     this.bus.emit(GameEvent.PhaseChanged, { phase: this.state.phase });
   }

@@ -61,10 +61,22 @@ export const GameEvent = {
   ZoneBEmpty: 'ZONE_B_EMPTY',
   /** Zone B → HUD: running cumulative score total changed. */
   ScoreChanged: 'SCORE_CHANGED',
-  /** Zone B → all: score bar filled and reset; Zone A should refill its ball buffer. */
+  /** Zone B → all: one score-bar level was cashed in; Zone A advances a level and refills.
+   *  Fires once PER LEVEL during a multi-level roll-through (the bar can cross several targets
+   *  in one drain), so Zone A may receive a burst of these before the pan up. */
   ScoreBarFilled: 'SCORE_BAR_FILLED',
+  /** Zone B → PhaseDirector: the score-bar cash-in has FULLY resolved (the whole multi-level
+   *  roll finished). This — not SCORE_BAR_FILLED — is the pan-up trigger, so the roll plays
+   *  out entirely in the B framing before the camera leaves Zone B. */
+  ScoreBarCashedIn: 'SCORE_BAR_CASHED_IN',
   /** Zone B → HUD: score bar progress changed (for the fill bar visual). */
   ScoreBarChanged: 'SCORE_BAR_CHANGED',
+  /** Zone B → HUD: a B-round's accumulated haul is banked and cashing in. Carries the amount to
+   *  add to the shown total and the SCREEN-SPACE launch point (Zone B's haul label position), so
+   *  the HUD flies a number token from there up to the score total and increments it on landing.
+   *  This — not SCORE_CHANGED — drives the HUD number, so it freezes during a B round and jumps
+   *  only when the haul lands. Fires once per cash-in, in the same beat as SCORE_BAR_CASHED_IN. */
+  ScoreHarvested: 'SCORE_HARVESTED',
   /** Zone A → HUD: ball buffer count changed. */
   BallBufferChanged: 'BALL_BUFFER_CHANGED',
   /** Zone A → all: internal level advanced; carries the new stage parameters. */
@@ -108,6 +120,14 @@ export interface ScoreBarChangedPayload {
   target: number;
 }
 
+export interface ScoreHarvestedPayload {
+  /** Score to add to the shown total when the flyer lands on the HUD. */
+  amount: number;
+  /** Screen-space launch point (1:1 with the overlay scene / design screen). */
+  x: number;
+  y: number;
+}
+
 export interface BallBufferChangedPayload {
   count: number;
 }
@@ -143,7 +163,9 @@ export interface GameEventMap {
   [GameEvent.ZoneBEmpty]: void;
   [GameEvent.ScoreChanged]: ScoreChangedPayload;
   [GameEvent.ScoreBarFilled]: void;
+  [GameEvent.ScoreBarCashedIn]: void;
   [GameEvent.ScoreBarChanged]: ScoreBarChangedPayload;
+  [GameEvent.ScoreHarvested]: ScoreHarvestedPayload;
   [GameEvent.BallBufferChanged]: BallBufferChangedPayload;
   [GameEvent.ProgressionChanged]: ProgressionChangedPayload;
   [GameEvent.ArenaZoom]: ArenaZoomPayload;

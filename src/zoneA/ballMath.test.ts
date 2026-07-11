@@ -20,6 +20,8 @@ import {
   isOverflow,
   isRestingAbove,
   midpoint,
+  milestoneZoomFactor,
+  nearestDoorBall,
   neutralGrowth,
   nextRestMs,
   radiusForTier,
@@ -105,6 +107,41 @@ describe('progression milestone wiring', () => {
   });
 });
 
+describe('milestoneZoomFactor', () => {
+  it('is 1 on a non-milestone level, even if the windows differ', () => {
+    expect(milestoneZoomFactor(26, [1, 4], [5, 8], 0.92)).toBe(1);
+  });
+
+  it('is 1 on a milestone whose window did not shift (past the last authored shift)', () => {
+    expect(milestoneZoomFactor(125, [17, 20], [17, 20], 1.05)).toBe(1);
+  });
+
+  it('is the neutral growth × tightness on a shifted milestone', () => {
+    expect(milestoneZoomFactor(25, [1, 4], [5, 8], 0.92)).toBeCloseTo((56 / 26) * 0.92, 10);
+  });
+
+  it('defaults tightness to 1', () => {
+    expect(milestoneZoomFactor(25, [1, 4], [5, 8], undefined)).toBeCloseTo(56 / 26, 10);
+  });
+
+  it('regression: a roll-through that overshoots a milestone still zooms (factors compose)', () => {
+    // One Zone B drain rolls the bar through levels 49 → 50 → 51: level 50 is a shifted
+    // milestone, but the burst's FINAL level (51) is not. Folding the per-level factors
+    // into a product — what ZoneASystem's pendingCashIn does — must preserve the zoom.
+    const factors = [
+      milestoneZoomFactor(50, getStage(49).ballWindow, getStage(50).ballWindow, getStage(50).tightness),
+      milestoneZoomFactor(51, getStage(50).ballWindow, getStage(51).ballWindow, getStage(51).tightness),
+    ];
+    const product = factors.reduce((acc, f) => acc * f, 1);
+    const s50 = getStage(50);
+    expect(product).toBeCloseTo(
+      neutralGrowth(getStage(49).ballWindow[1], s50.ballWindow[1]) * (s50.tightness ?? 1),
+      10,
+    );
+    expect(product).not.toBe(1);
+  });
+});
+
 describe('frictionForTier', () => {
   it('is the clamped size ramp shaped by the material feel multiplier', () => {
     for (let t = 1; t <= MATERIAL_COUNT; t++) {
@@ -175,6 +212,45 @@ describe('rest / overflow', () => {
   it('overflows once the rest threshold is reached', () => {
     expect(isOverflow(999, 1000)).toBe(false);
     expect(isOverflow(1000, 1000)).toBe(true);
+  });
+});
+
+describe('nearestDoorBall', () => {
+  // Door mouth for these cases: centred at x=195, balls count while above y=507.
+  const mouthX = 195;
+  const doorY = 507;
+  const ball = (x: number, y: number, r: number) => ({
+    position: { x, y }, circleRadius: r, ballData: { value: 1, tier: 1 },
+  });
+
+  it('returns undefined when the board is empty', () => {
+    expect(nearestDoorBall([], mouthX, doorY)).toBeUndefined();
+  });
+
+  it('picks the ball nearest the mouth by centre distance when radii are equal', () => {
+    const near = ball(195, 480, 13);
+    const far = ball(100, 300, 13);
+    expect(nearestDoorBall([far, near], mouthX, doorY)).toBe(near);
+  });
+
+  it('favours a bigger ball whose EDGE reaches nearer over a closer-centre small one', () => {
+    const bigFarther = ball(195, 420, 90); // centre 87 away, edge -3
+    const smallCloser = ball(195, 460, 13); // centre 47 away, edge 34
+    expect(nearestDoorBall([smallCloser, bigFarther], mouthX, doorY)).toBe(bigFarther);
+  });
+
+  it('ignores bodies with no ballData tag (walls, funnel, Zone B balls)', () => {
+    const wall = { position: { x: 195, y: 500 }, circleRadius: 5 };
+    const real = ball(120, 400, 13);
+    expect(nearestDoorBall([wall, real], mouthX, doorY)).toBe(real);
+  });
+
+  it('ignores balls that have already fallen past the door (below doorY)', () => {
+    const belowDoor = ball(195, doorY + 1, 13);
+    const inZoneA = ball(120, 400, 13);
+    expect(nearestDoorBall([belowDoor, inZoneA], mouthX, doorY)).toBe(inZoneA);
+    // A ball exactly on the door line still counts.
+    expect(nearestDoorBall([ball(195, doorY, 13)], mouthX, doorY)).toBeDefined();
   });
 });
 

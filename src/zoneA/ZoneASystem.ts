@@ -6,10 +6,16 @@ import { compactValue, hexColor } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
 import { Theme } from '../core/Theme';
 import { OVERLAY_SCENE_KEY } from '../core/OverlayScene';
-import { bufferForLevel, getStage, MILESTONE_EVERY, type ProgressionStage } from '../core/Progression';
+import {
+  bufferForLevel,
+  getStage,
+  scoreBarTargetForLevel,
+  type ProgressionStage,
+} from '../core/Progression';
 import { AimController } from './AimController';
 import { ArenaView } from './ArenaView';
-import { neutralGrowth } from './ballMath';
+import { milestoneZoomFactor } from './ballMath';
+import { findNearestDoorBall } from './doorTarget';
 import { BallFactory } from './BallFactory';
 import { BallQueue } from './BallQueue';
 import { Board } from './Board';
@@ -22,6 +28,9 @@ const DRAIN_MS = 280;
 const ZONE_B_BALL_PX = 20;
 /** Keep drained columns a touch inside the Zone B side walls. */
 const DRAIN_MARGIN = 12;
+
+/** Gap between the drop-candidate highlight ring and the ball's edge (arena-world px). */
+const HIGHLIGHT_MARGIN = 5;
 
 /**
  * A stalemate must persist this long before the run actually ends. Balls hand off between
@@ -77,7 +86,13 @@ export class ZoneASystem implements GameSystem {
   private aim?: AimController;
   private deathLine?: DeathLine;
   private queue?: BallQueue;
+  /** Ring that marks the ball a Zone C tap would grab, shown while the buffer is spent (see
+   *  updateDropHighlight). Lives on the arena layer so it zooms/scrolls with the balls. */
+  private dropHighlight?: Phaser.GameObjects.Arc;
   private over = false;
+  /** Game-over overlay objects (live on OverlayScene, which persists across restart, so we
+   *  destroy them explicitly on RESTART). */
+  private gameOverObjects: Phaser.GameObjects.GameObject[] = [];
 
   private internalLevel = 1;
   private ballBuffer = 0;
@@ -109,9 +124,12 @@ export class ZoneASystem implements GameSystem {
   private milestoneZoomActive = false;
   /** Armed when the buffer empties: the settle gate that fires ZONE_A_DEPLETED. */
   private settleGate?: SettleGateState;
-  /** A cash-in that arrived outside the 'A' phase — its visible reward sequence
-   *  (milestone zoom / buffer refill) is deferred until the pan lands back in A. */
-  private pendingCashIn?: { stage: ProgressionStage; prev: ProgressionStage };
+  /** Cash-ins that arrived outside the 'A' phase — the visible reward sequence
+   *  (milestone zoom / buffer refill) is deferred until the pan lands back in A. A
+   *  multi-level roll-through delivers a BURST of these, so the slot accumulates:
+   *  latest stage wins, but every level's zoom factor composes into the product —
+   *  a milestone crossed mid-burst must not be lost to a later plain level. */
+  private pendingCashIn?: { stage: ProgressionStage; zoomFactor: number };
 
   constructor(private readonly bus: EventBus) {}
 
@@ -148,6 +166,16 @@ export class ZoneASystem implements GameSystem {
     this.board = board;
     this.aim = aim;
 
+    // Drop-candidate highlight: a stroke-only ring, hidden until the buffer empties. On the
+    // arena layer so it rides the dedicated zoomed camera with the balls (colour/size are set
+    // live each frame in updateDropHighlight, so it needs no THEME_CHANGED restyle).
+    this.dropHighlight = scene.add
+      .circle(0, 0, 1, undefined, 0)
+      .setStrokeStyle(3, Theme.brassBright, 1)
+      .setDepth(1000)
+      .setVisible(false);
+    arena.claim(this.dropHighlight);
+
     this.emitBuffer();
 
     this.bus.on(GameEvent.ScoreChanged, ({ total }) => { this.score = total; });
@@ -172,18 +200,29 @@ export class ZoneASystem implements GameSystem {
         minTier: stage.ballWindow[0],
         maxTier: stage.ballWindow[1],
         bufferCapacity: bufferForLevel(this.internalLevel),
-        scoreBarTarget: stage.scoreBarTarget,
+        // Not stage.scoreBarTarget: past the last authored stage the target keeps growing
+        // geometrically (see TAIL_TARGET_GROWTH) instead of freezing while values triple.
+        scoreBarTarget: scoreBarTargetForLevel(this.internalLevel),
       });
       // Deferred half: the visible reward (milestone zoom / drain / ticked buffer refill)
       // runs only in the 'A' phase. A cash-in normally arrives in the 'B' phase and the
-      // PhaseDirector pans back up on this same event — the sequence then runs when
-      // PHASE_CHANGED('A') lands, so the milestone zoom never overlaps the pan. A cash-in
-      // while already in 'A' (e.g. milestone-drain balls filled the bar) runs immediately.
+      // sequence runs when PHASE_CHANGED('A') lands, so the milestone zoom never overlaps
+      // the pan. A cash-in while already in 'A' (e.g. milestone-drain balls filled the
+      // bar) runs immediately. The zoom factor is computed HERE, per level, while
+      // internalLevel is this event's level — a roll-through burst then composes the
+      // factors into the pending slot, so a milestone crossed mid-burst keeps its zoom
+      // even though only the final level's stage drives the refill.
       const prev = getStage(this.internalLevel - 1);
+      const zoom = milestoneZoomFactor(
+        this.internalLevel, prev.ballWindow, stage.ballWindow, stage.tightness,
+      );
       if (this.phase === 'A') {
-        this.runCashInSequence(stage, prev);
+        this.runCashInSequence(stage, zoom);
       } else {
-        this.pendingCashIn = { stage, prev };
+        this.pendingCashIn = {
+          stage,
+          zoomFactor: (this.pendingCashIn?.zoomFactor ?? 1) * zoom,
+        };
       }
     });
 
@@ -199,9 +238,9 @@ export class ZoneASystem implements GameSystem {
       this.phase = phase;
       this.applyFreeze();
       if (phase === 'A' && this.pendingCashIn) {
-        const { stage, prev } = this.pendingCashIn;
+        const { stage, zoomFactor } = this.pendingCashIn;
         this.pendingCashIn = undefined;
-        this.runCashInSequence(stage, prev);
+        this.runCashInSequence(stage, zoomFactor);
       }
     });
 
@@ -213,32 +252,55 @@ export class ZoneASystem implements GameSystem {
   }
 
   /**
-   * The visible reward sequence for one score-bar cash-in. Every MILESTONE_EVERY levels the
-   * draw window jumps up, blacklisting the lowest tiers, and the arena zooms out (input
-   * frozen during the tween) by the neutral ball-growth match × the stage's authored
-   * tightness — so apparent ball size holds constant at tightness 1 and the arena-to-ball
-   * headroom is exactly the tightness rhythm authored in progression.json. Past the last
-   * authored window shift the stage stops moving, so milestones become plain levels (no
-   * growth — the tail self-heals). Otherwise just lift the buffer-empty drop lock (guarded:
+   * The visible reward sequence for one score-bar cash-in (possibly collapsing a whole
+   * roll-through burst). `zoomFactor` is the product of every burst level's
+   * `milestoneZoomFactor` — 1 means no milestone was crossed (plain levels, and the
+   * self-healing tail past the last authored window shift); anything else zooms the arena
+   * out by exactly that factor (input frozen during the tween) and drains the
+   * newly-blacklisted tiers. Otherwise just lift the buffer-empty drop lock (guarded:
    * the ticked buffer refill may not have delivered its first slot yet).
    */
-  private runCashInSequence(stage: ProgressionStage, prev: ProgressionStage): void {
+  private runCashInSequence(stage: ProgressionStage, zoomFactor: number): void {
     this.animateBufferTo(bufferForLevel(this.internalLevel));
-    const shifted =
-      stage.ballWindow[0] !== prev.ballWindow[0] || stage.ballWindow[1] !== prev.ballWindow[1];
-    if (this.internalLevel % MILESTONE_EVERY === 0 && shifted) {
-      const factor =
-        neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
-      this.beginMilestoneZoom(factor, stage.ballWindow[0]);
+    if (zoomFactor !== 1) {
+      this.beginMilestoneZoom(zoomFactor, stage.ballWindow[0]);
     } else {
       this.maybeUnlockDrop();
     }
   }
 
-  update(_time: number, delta: number): void {
+  update(time: number, delta: number): void {
     if (this.over) return;
     this.board?.update(delta);
     this.advanceDepletionGate(delta);
+    this.updateDropHighlight(time);
+  }
+
+  /**
+   * Track the ring on the ball a Zone C tap would grab. It shows only while the buffer is
+   * spent (`ballBuffer === 0`) and no milestone zoom is running — the "out of balls" window
+   * that opens as the last drop settles, rides the pan, and covers the whole B phase, closing
+   * when the buffer refills. `findNearestDoorBall` is the SAME selector Zone C's tap uses, so
+   * the ring can never sit on a different ball than the one that gets sucked. Position, radius,
+   * colour and a gentle breathing pulse are recomputed each frame (the candidate changes as
+   * balls settle, and a fresh nearest is picked the instant one is sucked away).
+   */
+  private updateDropHighlight(time: number): void {
+    const ring = this.dropHighlight;
+    if (!ring) return;
+    const active = this.ballBuffer === 0 && !this.milestoneZoomActive && !!this.scene;
+    const ball = active ? findNearestDoorBall(this.scene!) : undefined;
+    if (!ball) {
+      ring.setVisible(false);
+      return;
+    }
+    const r = ball.circleRadius ?? 12;
+    const breathe = 0.5 + 0.5 * Math.sin(time / 260);
+    ring.setPosition(ball.position.x, ball.position.y);
+    ring.setRadius(r + HIGHLIGHT_MARGIN + breathe * r * 0.08);
+    ring.setStrokeStyle(Math.max(2, r * 0.14), Theme.brassBright, 1);
+    ring.setAlpha(0.65 + 0.35 * breathe);
+    ring.setVisible(true);
   }
 
   /**
@@ -578,28 +640,22 @@ export class ZoneASystem implements GameSystem {
   private drawGameOverOverlay(): void {
     const scene = this.scene;
     if (!scene) return;
+    // Draw on OverlayScene, not GameScene: GameScene's `arena` camera (added after `main`)
+    // renders Zone A's opaque gameplay band LAST, and setDepth only orders within one camera
+    // — so a GameScene overlay is overdrawn by the zoomed band. OverlayScene renders above
+    // every GameScene camera (it's listed last in main.ts), so it's the only true top layer.
+    // It boots input-disabled for pointer pass-through; enable it so RESTART is clickable.
+    const overlay = this.overlayScene();
+    if (!overlay) return;
+    overlay.input.enabled = true;
     const cx = Layout.WIDTH / 2;
     const cy = Layout.HEIGHT / 2;
 
-    // Pinned + arena-ignored: game over can fire in either phase framing (main camera may
-    // be scrolled down), so everything is scrollFactor(0) to cover the actual screen, and
-    // kept off the arena camera so the zoomed band can't double-draw it.
-    const pin = <T extends Phaser.GameObjects.GameObject & { setScrollFactor(v: number): T }>(
-      obj: T,
-    ): T => {
-      obj.setScrollFactor(0);
-      this.arena?.ignoreOnArenaCamera(obj);
-      return obj;
-    };
-
-    pin(
-      scene.add
+    this.gameOverObjects.push(
+      overlay.add
         .rectangle(cx, cy, Layout.WIDTH, Layout.HEIGHT, Theme.scrim, 0.85)
         .setDepth(2000),
-    );
-
-    pin(
-      scene.add
+      overlay.add
         .text(cx, cy - 80, 'GAME OVER', {
           fontFamily: 'monospace',
           fontSize: '40px',
@@ -609,10 +665,7 @@ export class ZoneASystem implements GameSystem {
         })
         .setOrigin(0.5)
         .setDepth(2001),
-    );
-
-    pin(
-      scene.add
+      overlay.add
         .text(cx, cy - 20, `Score: ${compactValue(this.score)}`, {
           fontFamily: 'monospace',
           fontSize: '24px',
@@ -623,20 +676,24 @@ export class ZoneASystem implements GameSystem {
         .setDepth(2001),
     );
 
-    this.drawRestartButton(scene, cx, cy + 60);
+    this.drawRestartButton(overlay, scene, cx, cy + 60);
   }
 
-  private drawRestartButton(scene: Phaser.Scene, cx: number, cy: number): void {
+  private drawRestartButton(
+    overlay: Phaser.Scene,
+    game: Phaser.Scene,
+    cx: number,
+    cy: number,
+  ): void {
     const width = 200;
     const height = 56;
-    const button = scene.add
+    const button = overlay.add
       .rectangle(cx, cy, width, height, Theme.pineDark)
       .setStrokeStyle(2, Theme.brassBright)
-      .setScrollFactor(0)
       .setDepth(2001)
       .setInteractive({ useHandCursor: true });
 
-    const label = scene.add
+    const label = overlay.add
       .text(cx, cy, 'RESTART', {
         fontFamily: 'monospace',
         fontSize: '22px',
@@ -644,10 +701,16 @@ export class ZoneASystem implements GameSystem {
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
-      .setScrollFactor(0)
       .setDepth(2002);
-    this.arena?.ignoreOnArenaCamera([button, label]);
+    this.gameOverObjects.push(button, label);
 
-    button.on('pointerup', () => scene.scene.restart());
+    // OverlayScene persists across GameScene.restart(), so tear our objects down and restore
+    // its input-disabled pass-through before restarting the game.
+    button.on('pointerup', () => {
+      for (const obj of this.gameOverObjects) obj.destroy();
+      this.gameOverObjects.length = 0;
+      overlay.input.enabled = false;
+      game.scene.restart();
+    });
   }
 }

@@ -4,50 +4,44 @@ export const SCORE_BAR_TARGET = 10;
 /**
  * Pure score-bar logic — no Phaser dependency, fully unit-testable.
  *
- * `add(points)` accumulates points and returns `true` the moment the bar first
- * crosses `target`. Crossing does NOT reset the bar immediately — it enters a
- * "cashing in" state where `filled` stays pinned at its (possibly over-target)
- * value, so a caller can visually dwell on a full bar, and any further points
- * are banked into `overflow` instead of shown. Call `completeCashIn()` once
- * that dwell/drain-out sequence finishes to actually reset the bar and carry
- * the banked overflow into the next cycle.
+ * Deliberately minimal: it holds the running `filled` toward the current `target`. Points
+ * accumulate through `add()`; whenever `crossedTarget()` is true the caller consumes one
+ * level with `consumeLevel()` (subtracting the current target) and — via
+ * SCORE_BAR_FILLED → PROGRESSION_CHANGED → `setTarget()` — may raise the target for the next
+ * level, then re-checks. Because levels are consumed one at a time against their own target,
+ * a single big `add()` can roll through several levels and land the exact remainder.
+ *
+ * No pinning / cash-in state: the bar wraps LIVE as balls drain (ZoneBSystem drives the
+ * fill/empty animation), so the logic never has to hold a "full" state.
  */
 export class ScoreBar {
   private filled = 0;
-  private overflow = 0;
-  private cashingIn = false;
 
   constructor(private target = SCORE_BAR_TARGET) {}
 
-  /** Returns true the moment this addition first crosses the target (enters cash-in). */
-  add(points: number): boolean {
-    if (this.cashingIn) {
-      this.overflow += points;
-      return false;
-    }
+  /** Accumulate drained score into the current level's fill. */
+  add(points: number): void {
     this.filled += points;
-    if (this.filled >= this.target) {
-      this.cashingIn = true;
-      return true;
-    }
-    return false;
   }
 
-  /**
-   * Resolve a cash-in: reset `filled` to the banked `overflow` (0 if none) and
-   * clear it. If the carried-over amount alone already reaches `target`, stays
-   * in cash-in state and returns true (the caller should immediately begin
-   * another dwell/drain-out cycle); otherwise clears cash-in state and returns
-   * false.
-   */
-  completeCashIn(): boolean {
-    this.filled = this.overflow;
-    this.overflow = 0;
-    this.cashingIn = this.filled >= this.target;
-    return this.cashingIn;
+  /** True while the current fill has reached the target — the caller should consume a level. */
+  crossedTarget(): boolean {
+    return this.filled >= this.target;
   }
 
-  isCashingIn(): boolean { return this.cashingIn; }
+  /** Consume one level's worth: subtract the current target from `filled`. */
+  consumeLevel(): void {
+    this.filled -= this.target;
+  }
+
+  /** Safety valve: discard any fill at/above the target, leaving a nearly-full (99%) bar.
+   *  The caller invokes this when a freak drain hits its levels-per-cash-in cap — the
+   *  excess is forfeited so the crossing loop terminates instead of banking thousands of
+   *  owed wraps. No-op below the target. */
+  forfeitOverflow(): void {
+    this.filled = Math.min(this.filled, this.target * 0.99);
+  }
+
   setTarget(target: number): void { this.target = target; }
   getFilled(): number { return this.filled; }
   getTarget(): number { return this.target; }

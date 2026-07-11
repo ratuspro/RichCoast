@@ -64,6 +64,27 @@ export function paletteNameForLevel(level: number): PaletteName {
   return result;
 }
 
+/**
+ * Per-level growth of the score-bar target past the last authored stage. Ball values triple
+ * per tier and (pre-tail) the draw window shifts +4 tiers every MILESTONE_EVERY levels, so
+ * value magnitude — and the authored target curve tracking it (105K@50 → 670M@100 ≈ ×3⁸ over
+ * 50 levels) — grows ×3⁴ per milestone span. The tail continues that same rate so one good
+ * drain keeps earning ~one level forever; a flat tail lets ever-tripling merged balls cross
+ * a frozen target thousands of times in one drain (the "endless wrap" bug).
+ */
+export const TAIL_TARGET_GROWTH = 3 ** (4 / MILESTONE_EVERY);
+
+/**
+ * The score-bar target for a given internal level: the authored stage value through the
+ * last authored stage, then geometric self-healing at TAIL_TARGET_GROWTH per level —
+ * mirroring how the draw window and palette self-heal, but growing instead of holding.
+ */
+export function scoreBarTargetForLevel(level: number): number {
+  const last = stages[stages.length - 1];
+  if (level <= last.fromLevel) return getStage(level).scoreBarTarget;
+  return Math.round(last.scoreBarTarget * TAIL_TARGET_GROWTH ** (level - last.fromLevel));
+}
+
 /** Returns the active stage for a given internal level (1-based). */
 export function getStage(level: number): ProgressionStage {
   let result = stages[0];

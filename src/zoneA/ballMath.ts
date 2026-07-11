@@ -1,5 +1,6 @@
 import { TIER_COUNT } from '../core/contracts';
 import { materialForTier } from '../core/Materials';
+import { MILESTONE_EVERY } from '../core/Progression';
 import { FRICTION_BASE, FRICTION_MAX, FRICTION_STEP, RADII, RADIUS_GROWTH } from './tuning';
 
 /**
@@ -42,6 +43,26 @@ export function neutralGrowth(oldMaxTier: number, newMaxTier: number): number {
   return radiusForTier(newMaxTier) / radiusForTier(oldMaxTier);
 }
 
+/**
+ * Arena zoom-out factor owed by ONE level-up: `neutralGrowth × tightness` when `level` is a
+ * shifted-window milestone, else exactly 1 (non-milestone levels, and milestones past the
+ * last authored shift — the self-healing tail). Because a shifted window always grows
+ * (radii strictly increase, tightness never inverts that), 1 doubles as the "no zoom"
+ * sentinel, and factors from a multi-level score-bar roll-through compose by product —
+ * so a burst that overshoots a milestone level still carries its zoom.
+ */
+export function milestoneZoomFactor(
+  level: number,
+  prevWindow: readonly [number, number],
+  window: readonly [number, number],
+  tightness: number | undefined,
+): number {
+  if (level % MILESTONE_EVERY !== 0) return 1;
+  const shifted = window[0] !== prevWindow[0] || window[1] !== prevWindow[1];
+  if (!shifted) return 1;
+  return neutralGrowth(prevWindow[1], window[1]) * (tightness ?? 1);
+}
+
 /** Surface friction for a tier: the size ramp (grows with tier, clamped to
  *  FRICTION_MAX) shaped by the tier's material feel — metals slide, gems slip. */
 export function frictionForTier(tier: number): number {
@@ -80,6 +101,44 @@ export function blastImpulse(target: Vec2, origin: Vec2, radius: number, strengt
 /** Accumulate rest time: previous + delta while resting, else reset to 0. */
 export function nextRestMs(prev: number, delta: number, resting: boolean): number {
   return resting ? prev + delta : 0;
+}
+
+/** Minimal structural view of a Matter body for door-target selection: its position,
+ *  optional `circleRadius` (edge distance), and a truthy `ballData` tag marking it as a
+ *  ball. Both real Matter bodies and test fakes satisfy it. */
+export interface DoorBallBody {
+  position: Vec2;
+  circleRadius?: number;
+  ballData?: unknown;
+}
+
+/**
+ * The ball a trap-door tap would grab: nearest the fixed door mouth (`mouthX`, `doorY`) by
+ * EDGE distance (centre-to-mouth minus `circleRadius`, so a bigger ball whose edge reaches
+ * nearer wins), among bodies tagged with `ballData` and still above the door
+ * (`position.y <= doorY`). `undefined` when no ball qualifies. Pure so it can be unit-tested
+ * and shared by both Zone C's grab and Zone A's candidate highlight — one source of truth,
+ * so the two can never disagree about which ball is next.
+ */
+export function nearestDoorBall<T extends DoorBallBody>(
+  bodies: Iterable<T>,
+  mouthX: number,
+  doorY: number,
+): T | undefined {
+  let best: T | undefined;
+  let bestDist = Infinity;
+  for (const body of bodies) {
+    if (!body.ballData) continue;
+    if (body.position.y > doorY) continue;
+    const dx = body.position.x - mouthX;
+    const dy = body.position.y - doorY;
+    const dist = Math.hypot(dx, dy) - (body.circleRadius ?? 0);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = body;
+    }
+  }
+  return best;
 }
 
 /** A ball "rests above the line" when its centre is above lineY AND it's slow. */

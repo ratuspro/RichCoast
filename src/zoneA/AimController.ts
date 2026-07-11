@@ -8,15 +8,14 @@ import { DROP_COOLDOWN_MS } from './tuning';
 import { Theme } from '../core/Theme';
 import { hexColor } from '../core/Materials';
 
-// One coherent top-right queue row: `NEXT (o)  N left`. The preview ball is the icon;
-// the count sits on the far right, clear of the centred score. Shared type treatment.
+// One coherent top-right queue row: `N left  (o)`. The balls-left count sits left,
+// clear of the centred score; the small next-ball preview is the far-right icon.
 const ROW_Y = 21;
-const LABEL_X = Layout.WIDTH - 152;
-const PREVIEW_X = Layout.WIDTH - 100;
-const PREVIEW_SIZE = 36;
-const COUNT_X = Layout.WIDTH - 14;
-// Text colours come from the live Theme: inkSoft (muted) for the "NEXT" label,
-// ink (stronger) for the live count — re-applied in restyle() on palette swaps.
+const PREVIEW_SIZE = 24;
+const PREVIEW_X = Layout.WIDTH - 14 - PREVIEW_SIZE / 2; // rightmost, ball edge at the margin
+const COUNT_X = Layout.WIDTH - 46; // right-aligned, just left of the preview ball
+// Text colour comes from the live Theme: ink (stronger) for the live count —
+// re-applied in restyle() on palette swaps.
 
 /**
  * Drag-to-aim input for Zone A. The current ball is a body-less sprite that tracks
@@ -36,7 +35,6 @@ export class AimController {
   private readonly aimImage: Phaser.GameObjects.Image;
   private readonly guide: Phaser.GameObjects.Graphics;
   private readonly previewImage: Phaser.GameObjects.Image;
-  private readonly previewLabel: Phaser.GameObjects.Text;
   private readonly countText: Phaser.GameObjects.Text;
 
   constructor(
@@ -60,15 +58,6 @@ export class AimController {
 
     // The queue row is screen-space chrome pinned to the HUD bar: scrollFactor(0) keeps it
     // put while the main camera pans between the phase framings.
-    this.previewLabel = scene.add
-      .text(LABEL_X, ROW_Y, 'NEXT', {
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        color: hexColor(Theme.inkSoft),
-      })
-      .setOrigin(0, 0.5)
-      .setScrollFactor(0)
-      .setDepth(20);
     this.previewImage = scene.add
       .image(PREVIEW_X, ROW_Y, factory.ensureTexture(this.queue.peekNext()))
       .setDisplaySize(PREVIEW_SIZE, PREVIEW_SIZE)
@@ -88,7 +77,7 @@ export class AimController {
 
     // The queue row is screen-space chrome — keep it out of the zoomed arena camera so it
     // doesn't render tiny inside the playfield once the arena grows.
-    arena.ignoreOnArenaCamera([this.previewImage, this.previewLabel, this.countText]);
+    arena.ignoreOnArenaCamera([this.previewImage, this.countText]);
 
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown);
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove);
@@ -147,7 +136,6 @@ export class AimController {
 
   /** Re-apply the active Theme's text colours + guide tint (milestone palette swap). */
   restyle(): void {
-    this.previewLabel.setColor(hexColor(Theme.inkSoft));
     this.countText.setColor(hexColor(Theme.ink));
     this.drawGuide(); // guide colour is baked per redraw — refresh it in place
   }
@@ -181,7 +169,6 @@ export class AimController {
     this.aimImage.destroy();
     this.guide.destroy();
     this.previewImage.destroy();
-    this.previewLabel.destroy();
     this.countText.destroy();
   }
 

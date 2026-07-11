@@ -27,6 +27,12 @@ export class WallSystem implements GameSystem {
       const cy = (wall.y1 + wall.y2) / 2;
       const angle = Math.atan2(dy, dx);
 
+      // Round the ends into a capsule (chamfer = half thickness) so no wall presents a
+      // flat horizontal top. A flat top is a stable ledge a ball can balance on; a
+      // semicircular cap leaves only a zero-width apex, so any ball that lands there is
+      // shed by the cascade's jitter. capRadius is clamped under half the shorter side
+      // so short posts/end-caps stay valid.
+      const capRadius = Math.min(thickness / 2, length / 2 - 0.5);
       const body = scene.matter.add.rectangle(cx, cy, length, thickness, {
         isStatic: true,
         isSensor: false,
@@ -34,6 +40,7 @@ export class WallSystem implements GameSystem {
         collisionFilter: { category: CAT_WALL, mask: CAT_BALL },
         friction: 0.1,
         restitution: 0.3,
+        chamfer: { radius: capRadius },
       });
       scene.matter.body.setAngle(body, angle);
 

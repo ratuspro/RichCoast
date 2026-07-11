@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
+import * as Layout from '../core/Layout';
 
 /** How long the fake arena "runs" a ball before it drains, in ms. */
 const FAKE_FLIGHT_MS = 900;
@@ -23,6 +24,7 @@ export class StubZoneB implements GameSystem {
   private scene?: Phaser.Scene;
   private inFlight = 0;
   private total = 0;
+  private roundScore = 0;
   private barFilled = 0;
   private barTarget = DEFAULT_BAR_TARGET;
 
@@ -45,6 +47,7 @@ export class StubZoneB implements GameSystem {
     this.scene?.time.delayedCall(FAKE_FLIGHT_MS, () => {
       this.total += value;
       this.bus.emit(GameEvent.ScoreChanged, { total: this.total });
+      this.roundScore += value;
       this.barFilled += value;
       this.bus.emit(GameEvent.ScoreBarChanged, { filled: this.barFilled, target: this.barTarget });
 
@@ -57,11 +60,21 @@ export class StubZoneB implements GameSystem {
   }
 
   /** Arena just emptied: if the fake bar is full, cash it in (Filled advances the stage in
-   *  Zone A, whose PROGRESSION_CHANGED handler above then refreshes our target). */
+   *  Zone A, whose PROGRESSION_CHANGED handler above then refreshes our target). The stub does
+   *  no multi-level roll, so it fires CashedIn — the pan-up trigger — in the same beat. */
   private maybeCashIn(): void {
     if (this.barFilled < this.barTarget) return;
     this.barFilled = 0;
     this.bus.emit(GameEvent.ScoreBarFilled);
     this.bus.emit(GameEvent.ScoreBarChanged, { filled: 0, target: this.barTarget });
+    if (this.roundScore > 0) {
+      this.bus.emit(GameEvent.ScoreHarvested, {
+        amount: this.roundScore,
+        x: Layout.WIDTH / 2,
+        y: Layout.HEIGHT - 5,
+      });
+      this.roundScore = 0;
+    }
+    this.bus.emit(GameEvent.ScoreBarCashedIn);
   }
 }
