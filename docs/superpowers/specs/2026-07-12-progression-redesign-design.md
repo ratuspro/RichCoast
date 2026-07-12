@@ -1,6 +1,6 @@
 # Progression Redesign — Tension from Board Pressure, not Drop Count
 
-**Date:** 2026-07-12 · **Status:** implemented
+**Date:** 2026-07-12 · **Status:** implemented, retuned same day (v2, see bottom)
 
 ## Problem
 
@@ -53,3 +53,25 @@ pessimistic ×4 gate cascade) — future retunes can't author a soft-lockable le
 
 `src/zoneA/tuning.ts`, `src/core/Progression.ts`, `src/core/progression.json`,
 `src/core/Progression.test.ts`, `src/zoneA/ballMath.test.ts`, `SPEC.md`, `CLAUDE.md`.
+
+---
+
+## Retune v2 (same day, after a full playtest run)
+
+A near-perfect run died at ~L82 to the tail's **death wall** (supply frozen at [17,20],
+target still compounding ×1.34/level → the bar becomes unfillable ~20 levels into the
+tail). Verdict: the wall is a legitimate designed endgame, but it arrived too early and the
+ramp to it was too steep for a casual game. Player also asked for richer refills (15–20)
+and a tangible reward for multi-level bursts.
+
+| Axis | v1 | v2 |
+|------|----|----|
+| Cadence | 15 (shifts 15/30/45/60) | **20** (shifts 20/40/60/80) — per-level target growth ×1.34 → **×1.25**, endgame wall ~L82 → **~L110** (~30-min sessions) |
+| Early anchors | 20/60/85/120 | 20/**80/130/200** (first milestone no longer three taps away; whole curve ≈ ×1.22–1.25/level) |
+| Window anchors | 5K@15 / 400K@30 / 33M@45 / 2.7B@60 | same values at **20/40/60/80** |
+| Buffer | L1=6; base 9→15 ±3; cap 18 | **L1=8; base 15→18 ±2; cap 20** (typical 15–20, pressure 13–16) |
+| Burst reward | none (final level's refill only) | **`BURST_REFILL_BONUS` = +2 balls per level crossed beyond the first** in one cash-in cycle (`ZoneASystem.burstLevels`) |
+| Refill semantics | `animateBufferTo` snapped DOWN to a lower capacity | never confiscates: a refill target below the in-hand count keeps the balls (needed once capacities oscillate) |
+
+The endgame wall is now documented as intentional in SPEC.md (Score Bar Target); the
+reachability guard covers the full authored range (1–80) and deliberately not the tail.
