@@ -75,3 +75,24 @@ and a tangible reward for multi-level bursts.
 
 The endgame wall is now documented as intentional in SPEC.md (Score Bar Target); the
 reachability guard covers the full authored range (1–80) and deliberately not the tail.
+
+---
+
+## Retune v3 — living tail milestones
+
+Tail milestones (past L80: L100, L120, …) were plain level-ups: window frozen at [17,20],
+no arena growth — a static grind to the wall. Now they keep the milestone beat alive:
+
+- **Window steps +2 per tail milestone** (`windowForLevel` + `TAIL_WINDOW_STEP` in
+  `Progression.ts` — the single window source; authored stages still own levels ≤ 80).
+  [17,20] → [19,22] @ first tail milestone → [21,24] → …, wrapping the material ladder
+  with gold rings. Blacklist + drain + queue re-roll run exactly as at authored milestones.
+- **Arena grows a flat ×1.2** (`TAIL_MILESTONE_ZOOM` in `ballMath.ts`), deliberately below
+  the ~×1.39 neutral match for +2 tiers — apparent ball size creeps ~16% per tail
+  milestone, so the endgame closes in visually while supply value (×9/milestone) chases
+  the target (×81/milestone). Wall ~L115 by the income model, likely sooner by overflow.
+- `ZoneASystem` now reads all windows via `windowForLevel` (stage `ballWindow` is only the
+  authored base), `pendingCashIn` carries just the composed zoom, and curated
+  `bufferBalls` seeds apply only on the stage's own level (previously they re-seeded the
+  queue on every level a seeded stage covered — L4's hand repeated through L19).
+- Guard extended to levels 1–100 (first tail window included).
