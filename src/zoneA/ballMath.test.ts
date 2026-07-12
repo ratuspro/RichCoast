@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { TIER_COUNT } from '../core/contracts';
 import { WIDTH } from '../core/Layout';
-import { getStage } from '../core/Progression';
+import { getStage, windowForLevel } from '../core/Progression';
 import { MATERIAL_COUNT, materialForTier } from '../core/Materials';
 import {
   BLAST_RADIUS,
   BLAST_STRENGTH,
   DEATH_LINE_Y,
+  DENSITY,
+  DENSITY_TAPER_TIER,
   FRICTION_MAX,
+  MAX_BALL_SPEED,
   RADII,
   SPAWN_Y,
   WARN_BAND,
@@ -15,6 +18,8 @@ import {
 import {
   blastImpulse,
   clampSpawnX,
+  clampSpeed,
+  densityForTier,
   frictionForTier,
   isNearDeath,
   isOverflow,
@@ -25,6 +30,7 @@ import {
   neutralGrowth,
   nextRestMs,
   radiusForTier,
+  TAIL_MILESTONE_ZOOM,
 } from './ballMath';
 
 describe('tuning tables', () => {
@@ -66,7 +72,7 @@ describe('radiusForTier', () => {
 
 describe('neutralGrowth', () => {
   it('matches the window-max radius ratio in the hand-table region ([1,4] → [5,8])', () => {
-    expect(neutralGrowth(4, 8)).toBeCloseTo(56 / 26, 10);
+    expect(neutralGrowth(4, 8)).toBeCloseTo(71 / 34, 10);
   });
 
   it('converges to RADIUS_GROWTH^4 past the table ([9,12] → [13,16])', () => {
@@ -79,63 +85,69 @@ describe('neutralGrowth', () => {
 });
 
 describe('progression milestone wiring', () => {
-  // Mirrors ZoneASystem.MILESTONE_EVERY (not importable here — it pulls in Phaser).
-  const MILESTONE_EVERY = 25;
+  // Mirrors Progression.MILESTONE_EVERY (kept literal so a cadence change is a conscious edit).
+  const MILESTONE_EVERY = 20;
 
   it('only shifts the window floor on milestone levels (the blacklist/zoom coupling)', () => {
     for (let level = 2; level <= 400; level++) {
-      const prev = getStage(level - 1);
-      const stage = getStage(level);
-      if (stage.ballWindow[0] !== prev.ballWindow[0]) {
+      const prev = windowForLevel(level - 1);
+      const window = windowForLevel(level);
+      if (window[0] !== prev[0]) {
         expect(level % MILESTONE_EVERY, `floor shift at level ${level}`).toBe(0);
       }
     }
   });
 
-  it('grows the level-25 milestone by the neutral ball match × its authored tightness', () => {
-    const prev = getStage(24);
-    const stage = getStage(25);
+  it('grows the level-20 milestone by the neutral ball match × its authored tightness', () => {
+    const prev = getStage(19);
+    const stage = getStage(20);
     const factor = neutralGrowth(prev.ballWindow[1], stage.ballWindow[1]) * (stage.tightness ?? 1);
-    expect(factor).toBeCloseTo((56 / 26) * 0.92, 10);
+    expect(factor).toBeCloseTo((71 / 34) * 0.92, 10);
   });
 
-  it('self-heals past the last authored shift: window stops moving, growth is 1', () => {
-    const prev = getStage(124);
-    const stage = getStage(125);
-    expect(stage.ballWindow).toEqual(prev.ballWindow);
-    expect(neutralGrowth(prev.ballWindow[1], stage.ballWindow[1])).toBe(1);
+  it('keeps stepping the window +2 per TAIL milestone, zooming a flat ×1.2', () => {
+    expect(windowForLevel(99)).toEqual([17, 20]);
+    expect(windowForLevel(100)).toEqual([19, 22]);
+    expect(windowForLevel(119)).toEqual([19, 22]); // holds between tail milestones
+    expect(windowForLevel(120)).toEqual([21, 24]);
+    const zoom = milestoneZoomFactor(100, windowForLevel(99), windowForLevel(100), undefined, true);
+    expect(zoom).toBe(TAIL_MILESTONE_ZOOM);
+    // The flat tail zoom sits BELOW the neutral match for a +2 shift, so apparent ball
+    // size creeps up each tail milestone — the endgame's mounting squeeze.
+    expect(TAIL_MILESTONE_ZOOM).toBeLessThan(neutralGrowth(20, 22));
+    expect(TAIL_MILESTONE_ZOOM).toBeGreaterThan(1);
   });
 });
 
 describe('milestoneZoomFactor', () => {
   it('is 1 on a non-milestone level, even if the windows differ', () => {
-    expect(milestoneZoomFactor(26, [1, 4], [5, 8], 0.92)).toBe(1);
+    expect(milestoneZoomFactor(21, [1, 4], [5, 8], 0.92)).toBe(1);
   });
 
-  it('is 1 on a milestone whose window did not shift (past the last authored shift)', () => {
-    expect(milestoneZoomFactor(125, [17, 20], [17, 20], 1.05)).toBe(1);
+  it('is 1 on a milestone whose window did not shift', () => {
+    expect(milestoneZoomFactor(100, [17, 20], [17, 20], 1.05)).toBe(1);
   });
 
   it('is the neutral growth × tightness on a shifted milestone', () => {
-    expect(milestoneZoomFactor(25, [1, 4], [5, 8], 0.92)).toBeCloseTo((56 / 26) * 0.92, 10);
+    expect(milestoneZoomFactor(20, [1, 4], [5, 8], 0.92)).toBeCloseTo((71 / 34) * 0.92, 10);
   });
 
   it('defaults tightness to 1', () => {
-    expect(milestoneZoomFactor(25, [1, 4], [5, 8], undefined)).toBeCloseTo(56 / 26, 10);
+    expect(milestoneZoomFactor(20, [1, 4], [5, 8], undefined)).toBeCloseTo(71 / 34, 10);
   });
 
   it('regression: a roll-through that overshoots a milestone still zooms (factors compose)', () => {
-    // One Zone B drain rolls the bar through levels 49 → 50 → 51: level 50 is a shifted
-    // milestone, but the burst's FINAL level (51) is not. Folding the per-level factors
+    // One Zone B drain rolls the bar through levels 39 → 40 → 41: level 40 is a shifted
+    // milestone, but the burst's FINAL level (41) is not. Folding the per-level factors
     // into a product — what ZoneASystem's pendingCashIn does — must preserve the zoom.
     const factors = [
-      milestoneZoomFactor(50, getStage(49).ballWindow, getStage(50).ballWindow, getStage(50).tightness),
-      milestoneZoomFactor(51, getStage(50).ballWindow, getStage(51).ballWindow, getStage(51).tightness),
+      milestoneZoomFactor(40, getStage(39).ballWindow, getStage(40).ballWindow, getStage(40).tightness),
+      milestoneZoomFactor(41, getStage(40).ballWindow, getStage(41).ballWindow, getStage(41).tightness),
     ];
     const product = factors.reduce((acc, f) => acc * f, 1);
-    const s50 = getStage(50);
+    const s40 = getStage(40);
     expect(product).toBeCloseTo(
-      neutralGrowth(getStage(49).ballWindow[1], s50.ballWindow[1]) * (s50.tightness ?? 1),
+      neutralGrowth(getStage(39).ballWindow[1], s40.ballWindow[1]) * (s40.tightness ?? 1),
       10,
     );
     expect(product).not.toBe(1);
@@ -158,6 +170,56 @@ describe('frictionForTier', () => {
     // Tiers 1–4 are all primitives with the same multiplier except wood (tier 1).
     expect(frictionForTier(3)).toBeGreaterThan(frictionForTier(2));
     expect(frictionForTier(4)).toBeGreaterThan(frictionForTier(3));
+  });
+});
+
+describe('densityForTier', () => {
+  it('keeps the flat base density at and below the taper tier', () => {
+    for (let t = 1; t <= DENSITY_TAPER_TIER; t++) {
+      expect(densityForTier(t)).toBe(DENSITY);
+    }
+  });
+
+  it('reduces density above the taper tier and never raises it', () => {
+    expect(densityForTier(DENSITY_TAPER_TIER + 1)).toBeLessThan(DENSITY);
+    for (let t = DENSITY_TAPER_TIER + 2; t <= 24; t++) {
+      expect(densityForTier(t)).toBeLessThan(densityForTier(t - 1));
+      expect(densityForTier(t)).toBeLessThan(DENSITY);
+    }
+  });
+
+  it('makes mass grow ~linearly with radius above the taper (DENSITY_MASS_EXP = 1)', () => {
+    // mass ∝ density · radius²; with the exp-1 taper it should track radius^1, so mass/radius
+    // is constant above the taper tier (up to fp).
+    const massPerRadius = (t: number) => (densityForTier(t) * radiusForTier(t) ** 2) / radiusForTier(t);
+    const ref = massPerRadius(DENSITY_TAPER_TIER + 1);
+    for (let t = DENSITY_TAPER_TIER + 2; t <= 24; t++) {
+      expect(massPerRadius(t)).toBeCloseTo(ref, 6);
+    }
+  });
+});
+
+describe('clampSpeed', () => {
+  it('leaves a velocity under the cap unchanged', () => {
+    const v = { x: 3, y: 4 }; // speed 5
+    expect(clampSpeed(v, 16)).toBe(v);
+  });
+
+  it('scales an over-cap velocity to exactly the cap, preserving direction', () => {
+    const capped = clampSpeed({ x: 30, y: 40 }, 10); // speed 50 → ×0.2
+    expect(Math.hypot(capped.x, capped.y)).toBeCloseTo(10, 10);
+    expect(capped.x / capped.y).toBeCloseTo(30 / 40, 10); // direction held
+  });
+
+  it('is a no-op on the zero vector (no divide-by-zero)', () => {
+    expect(clampSpeed({ x: 0, y: 0 }, 16)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('anti-tunnel invariant: the base cap sits below the base wall thickness', () => {
+    // Mirrors ArenaView's WALL_T (kept literal so a change there is a conscious edit). Both the
+    // cap and the walls scale ×s, so a per-step speed under the cap can never cross a wall.
+    const WALL_T = 40;
+    expect(MAX_BALL_SPEED).toBeLessThan(WALL_T);
   });
 });
 

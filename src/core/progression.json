@@ -2,199 +2,53 @@
   "stages": [
     {
       "fromLevel": 1,
-      "ballWindow": [
-        1,
-        1
-      ],
-      "scoreBarTarget": 4,
-      "bufferBalls": [
-        1,
-        1,
-        1,
-        1
-      ]
+      "ballWindow": [1, 1],
+      "scoreBarTarget": 20,
+      "bufferBalls": [1, 1, 1, 1, 1, 1, 1, 1]
     },
     {
       "fromLevel": 2,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 30,
-      "bufferBalls": [
-        1,
-        2,
-        1,
-        2
-      ]
+      "ballWindow": [1, 2],
+      "scoreBarTarget": 80,
+      "bufferBalls": [1, 1, 2, 1, 2]
     },
     {
       "fromLevel": 3,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 40,
-      "bufferBalls": [
-        2,
-        1,
-        2,
-        3
-      ]
+      "ballWindow": [1, 3],
+      "scoreBarTarget": 130,
+      "bufferBalls": [2, 1, 1, 3, 2]
     },
     {
       "fromLevel": 4,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 55,
-      "bufferBalls": [
-        1,
-        2,
-        3,
-        2
-      ]
-    },
-    {
-      "fromLevel": 5,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 70,
-      "bufferBalls": [
-        2,
-        3,
-        2,
-        3
-      ]
-    },
-    {
-      "fromLevel": 10,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 110
-    },
-    {
-      "fromLevel": 15,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 150
+      "ballWindow": [1, 4],
+      "scoreBarTarget": 200,
+      "bufferBalls": [1, 2, 3, 2]
     },
     {
       "fromLevel": 20,
-      "ballWindow": [
-        1,
-        4
-      ],
-      "scoreBarTarget": 195
-    },
-    {
-      "fromLevel": 25,
-      "ballWindow": [
-        5,
-        8
-      ],
-      "scoreBarTarget": 1300,
+      "ballWindow": [5, 8],
+      "scoreBarTarget": 5000,
       "tightness": 0.92,
       "palette": "dusk"
     },
     {
-      "fromLevel": 30,
-      "ballWindow": [
-        5,
-        8
-      ],
-      "scoreBarTarget": 2700
-    },
-    {
-      "fromLevel": 35,
-      "ballWindow": [
-        5,
-        8
-      ],
-      "scoreBarTarget": 4900
-    },
-    {
       "fromLevel": 40,
-      "ballWindow": [
-        5,
-        8
-      ],
-      "scoreBarTarget": 8600
-    },
-    {
-      "fromLevel": 45,
-      "ballWindow": [
-        5,
-        8
-      ],
-      "scoreBarTarget": 14000
-    },
-    {
-      "fromLevel": 50,
-      "ballWindow": [
-        9,
-        12
-      ],
-      "scoreBarTarget": 105000,
+      "ballWindow": [9, 12],
+      "scoreBarTarget": 400000,
       "tightness": 1.05,
       "palette": "night"
     },
     {
       "fromLevel": 60,
-      "ballWindow": [
-        9,
-        12
-      ],
-      "scoreBarTarget": 320000
-    },
-    {
-      "fromLevel": 70,
-      "ballWindow": [
-        9,
-        12
-      ],
-      "scoreBarTarget": 800000
-    },
-    {
-      "fromLevel": 75,
-      "ballWindow": [
-        13,
-        16
-      ],
-      "scoreBarTarget": 4200000,
+      "ballWindow": [13, 16],
+      "scoreBarTarget": 33000000,
       "tightness": 0.85,
       "palette": "dawn"
     },
     {
       "fromLevel": 80,
-      "ballWindow": [
-        13,
-        16
-      ],
-      "scoreBarTarget": 8500000
-    },
-    {
-      "fromLevel": 90,
-      "ballWindow": [
-        13,
-        16
-      ],
-      "scoreBarTarget": 21000000
-    },
-    {
-      "fromLevel": 100,
-      "ballWindow": [
-        17,
-        20
-      ],
-      "scoreBarTarget": 670000000,
+      "ballWindow": [17, 20],
+      "scoreBarTarget": 2700000000,
       "tightness": 1.05,
       "palette": "gilded"
     }

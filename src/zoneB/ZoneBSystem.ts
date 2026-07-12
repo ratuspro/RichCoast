@@ -3,6 +3,7 @@ import { GameEvent, type GameSystem } from '../core/contracts';
 import type { EventBus } from '../core/EventBus';
 import * as Layout from '../core/Layout';
 import { compactValue, hexColor } from '../core/Materials';
+import { scoreBarTargetForLevel } from '../core/Progression';
 import { Theme } from '../core/Theme';
 import { Sfx } from '../core/Sfx';
 import { pickRandomLayout } from './zoneLayout';
@@ -49,7 +50,9 @@ const HAUL_POP_MS = 180;
 
 export class ZoneBSystem implements GameSystem {
   private scene?: Phaser.Scene;
-  private readonly scoreBar = new ScoreBar();
+  // Boot on the real level-1 target — PROGRESSION_CHANGED only arrives at the first
+  // level-up, so the ScoreBar's own default would silently govern the whole first level.
+  private readonly scoreBar = new ScoreBar(scoreBarTargetForLevel(1));
 
   // One of the two layouts, chosen at random per run (this system is reconstructed on every
   // scene boot, including scene.restart()).

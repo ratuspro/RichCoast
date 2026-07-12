@@ -8,8 +8,11 @@ import { Theme } from '../core/Theme';
 import { OVERLAY_SCENE_KEY } from '../core/OverlayScene';
 import {
   bufferForLevel,
+  BURST_REFILL_BONUS,
   getStage,
+  isTailLevel,
   scoreBarTargetForLevel,
+  windowForLevel,
   type ProgressionStage,
 } from '../core/Progression';
 import { AimController } from './AimController';
@@ -29,8 +32,16 @@ const ZONE_B_BALL_PX = 20;
 /** Keep drained columns a touch inside the Zone B side walls. */
 const DRAIN_MARGIN = 12;
 
-/** Gap between the drop-candidate highlight ring and the ball's edge (arena-world px). */
-const HIGHLIGHT_MARGIN = 5;
+/** Drop-candidate glow: a soft brass halo that breathes over the ball a tap would grab. */
+const HIGHLIGHT_TEX = 'zoneA-drop-glow';
+/** Halo diameter as a multiple of the ball's diameter, at the pulse's dim and bright ends. */
+const HIGHLIGHT_SCALE_MIN = 1.15;
+const HIGHLIGHT_SCALE_MAX = 1.45;
+/** Halo alpha at the pulse's dim and bright ends. */
+const HIGHLIGHT_ALPHA_MIN = 0.3;
+const HIGHLIGHT_ALPHA_MAX = 0.85;
+/** One full dim→bright→dim breath of the glow, in ms. */
+const HIGHLIGHT_PULSE_MS = 1100;
 
 /**
  * A stalemate must persist this long before the run actually ends. Balls hand off between
@@ -86,9 +97,9 @@ export class ZoneASystem implements GameSystem {
   private aim?: AimController;
   private deathLine?: DeathLine;
   private queue?: BallQueue;
-  /** Ring that marks the ball a Zone C tap would grab, shown while the buffer is spent (see
+  /** Soft glow marking the ball a Zone C tap would grab, shown while the buffer is spent (see
    *  updateDropHighlight). Lives on the arena layer so it zooms/scrolls with the balls. */
-  private dropHighlight?: Phaser.GameObjects.Arc;
+  private dropHighlight?: Phaser.GameObjects.Image;
   private over = false;
   /** Game-over overlay objects (live on OverlayScene, which persists across restart, so we
    *  destroy them explicitly on RESTART). */
@@ -127,9 +138,15 @@ export class ZoneASystem implements GameSystem {
   /** Cash-ins that arrived outside the 'A' phase — the visible reward sequence
    *  (milestone zoom / buffer refill) is deferred until the pan lands back in A. A
    *  multi-level roll-through delivers a BURST of these, so the slot accumulates:
-   *  latest stage wins, but every level's zoom factor composes into the product —
-   *  a milestone crossed mid-burst must not be lost to a later plain level. */
-  private pendingCashIn?: { stage: ProgressionStage; zoomFactor: number };
+   *  every level's zoom factor composes into the product — a milestone crossed mid-burst
+   *  must not be lost to a later plain level. (The refill amount and blacklist floor are
+   *  read fresh from internalLevel when the sequence runs, so only the zoom needs carrying.) */
+  private pendingCashIn?: { zoomFactor: number };
+  /** Levels crossed since the last refill ran — the size of one cash-in cycle's roll-through
+   *  burst. Only the FINAL level's refill runs after a burst, so without a bonus a 4-level
+   *  burst would pay exactly like a 1-level fill; instead every level past the first adds
+   *  BURST_REFILL_BONUS balls on top (consumed + reset in runCashInSequence). */
+  private burstLevels = 0;
 
   constructor(private readonly bus: EventBus) {}
 
@@ -146,7 +163,7 @@ export class ZoneASystem implements GameSystem {
     const queue = new BallQueue();
     this.queue = queue;
     const initialStage = getStage(this.internalLevel);
-    this.applyStage(initialStage, queue);
+    this.applyStage(initialStage, windowForLevel(this.internalLevel), queue);
     this.ballBuffer = bufferForLevel(this.internalLevel);
 
     const board = new Board(
@@ -166,12 +183,13 @@ export class ZoneASystem implements GameSystem {
     this.board = board;
     this.aim = aim;
 
-    // Drop-candidate highlight: a stroke-only ring, hidden until the buffer empties. On the
-    // arena layer so it rides the dedicated zoomed camera with the balls (colour/size are set
-    // live each frame in updateDropHighlight, so it needs no THEME_CHANGED restyle).
+    // Drop-candidate highlight: a soft additive glow, hidden until the buffer empties. On the
+    // arena layer so it rides the dedicated zoomed camera with the balls (tint/size/alpha are
+    // set live each frame in updateDropHighlight, so it needs no THEME_CHANGED restyle).
+    this.ensureGlowTexture(scene);
     this.dropHighlight = scene.add
-      .circle(0, 0, 1, undefined, 0)
-      .setStrokeStyle(3, Theme.brassBright, 1)
+      .image(0, 0, HIGHLIGHT_TEX)
+      .setBlendMode(Phaser.BlendModes.ADD)
       .setDepth(1000)
       .setVisible(false);
     arena.claim(this.dropHighlight);
@@ -188,17 +206,21 @@ export class ZoneASystem implements GameSystem {
       // Immediate half (any phase): advance the stage and broadcast it — Zone B reads the
       // new scoreBarTarget synchronously for its cascade math, so this ordering is frozen.
       this.cashInPending = true;
+      this.burstLevels += 1;
       this.internalLevel += 1;
       const stage = getStage(this.internalLevel);
-      this.applyStage(stage, queue);
+      // Not stage.ballWindow: past the last authored stage the window keeps stepping up
+      // TAIL_WINDOW_STEP per milestone (see windowForLevel) instead of freezing.
+      const window = windowForLevel(this.internalLevel);
+      this.applyStage(stage, window, queue);
       // applyStage may have re-seeded the queue's current/next (stages with bufferBalls),
       // so re-sync the in-hand ball + Next preview — otherwise the player aims one tier
       // and drops another. The milestone path below re-rolls and refreshes again on top.
       this.aim?.refreshQueue();
       this.bus.emit(GameEvent.ProgressionChanged, {
         level: this.internalLevel,
-        minTier: stage.ballWindow[0],
-        maxTier: stage.ballWindow[1],
+        minTier: window[0],
+        maxTier: window[1],
         bufferCapacity: bufferForLevel(this.internalLevel),
         // Not stage.scoreBarTarget: past the last authored stage the target keeps growing
         // geometrically (see TAIL_TARGET_GROWTH) instead of freezing while values triple.
@@ -212,15 +234,17 @@ export class ZoneASystem implements GameSystem {
       // internalLevel is this event's level — a roll-through burst then composes the
       // factors into the pending slot, so a milestone crossed mid-burst keeps its zoom
       // even though only the final level's stage drives the refill.
-      const prev = getStage(this.internalLevel - 1);
       const zoom = milestoneZoomFactor(
-        this.internalLevel, prev.ballWindow, stage.ballWindow, stage.tightness,
+        this.internalLevel,
+        windowForLevel(this.internalLevel - 1),
+        window,
+        stage.tightness,
+        isTailLevel(this.internalLevel),
       );
       if (this.phase === 'A') {
-        this.runCashInSequence(stage, zoom);
+        this.runCashInSequence(zoom);
       } else {
         this.pendingCashIn = {
-          stage,
           zoomFactor: (this.pendingCashIn?.zoomFactor ?? 1) * zoom,
         };
       }
@@ -238,9 +262,9 @@ export class ZoneASystem implements GameSystem {
       this.phase = phase;
       this.applyFreeze();
       if (phase === 'A' && this.pendingCashIn) {
-        const { stage, zoomFactor } = this.pendingCashIn;
+        const { zoomFactor } = this.pendingCashIn;
         this.pendingCashIn = undefined;
-        this.runCashInSequence(stage, zoomFactor);
+        this.runCashInSequence(zoomFactor);
       }
     });
 
@@ -260,10 +284,16 @@ export class ZoneASystem implements GameSystem {
    * newly-blacklisted tiers. Otherwise just lift the buffer-empty drop lock (guarded:
    * the ticked buffer refill may not have delivered its first slot yet).
    */
-  private runCashInSequence(stage: ProgressionStage, zoomFactor: number): void {
-    this.animateBufferTo(bufferForLevel(this.internalLevel));
+  private runCashInSequence(zoomFactor: number): void {
+    // Roll-through jackpot: the burst's extra levels each pay a couple of bonus balls on
+    // top of the final level's refill (a deferred burst collapses into ONE refill here).
+    const bonus = Math.max(0, this.burstLevels - 1) * BURST_REFILL_BONUS;
+    this.burstLevels = 0;
+    this.animateBufferTo(bufferForLevel(this.internalLevel) + bonus);
     if (zoomFactor !== 1) {
-      this.beginMilestoneZoom(zoomFactor, stage.ballWindow[0]);
+      // windowForLevel, not stage.ballWindow: a TAIL milestone shifts the window without an
+      // authored stage, so the stage's floor would under-drain the blacklist there.
+      this.beginMilestoneZoom(zoomFactor, windowForLevel(this.internalLevel)[0]);
     } else {
       this.maybeUnlockDrop();
     }
@@ -277,30 +307,49 @@ export class ZoneASystem implements GameSystem {
   }
 
   /**
-   * Track the ring on the ball a Zone C tap would grab. It shows only while the buffer is
+   * Track the glow on the ball a Zone C tap would grab. It shows only while the buffer is
    * spent (`ballBuffer === 0`) and no milestone zoom is running — the "out of balls" window
    * that opens as the last drop settles, rides the pan, and covers the whole B phase, closing
    * when the buffer refills. `findNearestDoorBall` is the SAME selector Zone C's tap uses, so
-   * the ring can never sit on a different ball than the one that gets sucked. Position, radius,
-   * colour and a gentle breathing pulse are recomputed each frame (the candidate changes as
-   * balls settle, and a fresh nearest is picked the instant one is sucked away).
+   * the glow can never sit on a different ball than the one that gets sucked. Position, size,
+   * tint and a cyclic breathing pulse (scale + alpha) are recomputed each frame (the candidate
+   * changes as balls settle, and a fresh nearest is picked the instant one is sucked away).
    */
   private updateDropHighlight(time: number): void {
-    const ring = this.dropHighlight;
-    if (!ring) return;
+    const glow = this.dropHighlight;
+    if (!glow) return;
     const active = this.ballBuffer === 0 && !this.milestoneZoomActive && !!this.scene;
     const ball = active ? findNearestDoorBall(this.scene!) : undefined;
     if (!ball) {
-      ring.setVisible(false);
+      glow.setVisible(false);
       return;
     }
-    const r = ball.circleRadius ?? 12;
-    const breathe = 0.5 + 0.5 * Math.sin(time / 260);
-    ring.setPosition(ball.position.x, ball.position.y);
-    ring.setRadius(r + HIGHLIGHT_MARGIN + breathe * r * 0.08);
-    ring.setStrokeStyle(Math.max(2, r * 0.14), Theme.brassBright, 1);
-    ring.setAlpha(0.65 + 0.35 * breathe);
-    ring.setVisible(true);
+    const diameter = (ball.circleRadius ?? 12) * 2;
+    const breathe = 0.5 + 0.5 * Math.sin((time * 2 * Math.PI) / HIGHLIGHT_PULSE_MS);
+    const scale = HIGHLIGHT_SCALE_MIN + (HIGHLIGHT_SCALE_MAX - HIGHLIGHT_SCALE_MIN) * breathe;
+    glow.setPosition(ball.position.x, ball.position.y);
+    glow.setDisplaySize(diameter * scale, diameter * scale);
+    glow.setTint(Theme.brassBright);
+    glow.setAlpha(HIGHLIGHT_ALPHA_MIN + (HIGHLIGHT_ALPHA_MAX - HIGHLIGHT_ALPHA_MIN) * breathe);
+    glow.setVisible(true);
+  }
+
+  /** Build the soft radial-gradient blob the glow tints brass (white so tint colours it),
+   *  once per texture cache — mirrors Board's spark-texture recipe. */
+  private ensureGlowTexture(scene: Phaser.Scene): void {
+    if (scene.textures.exists(HIGHLIGHT_TEX)) return;
+    const size = 64;
+    const canvas = scene.textures.createCanvas(HIGHLIGHT_TEX, size, size);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const r = size / 2;
+    const grad = ctx.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    canvas.refresh();
   }
 
   /**
@@ -414,9 +463,17 @@ export class ZoneASystem implements GameSystem {
     }
   }
 
-  private applyStage(stage: ProgressionStage, queue: BallQueue): void {
-    queue.setWindow(stage.ballWindow[0], stage.ballWindow[1]);
-    if (stage.bufferBalls) queue.seed(stage.bufferBalls);
+  private applyStage(
+    stage: ProgressionStage,
+    window: readonly [number, number],
+    queue: BallQueue,
+  ): void {
+    queue.setWindow(window[0], window[1]);
+    // Seed only on the stage's OWN level: getStage holds a stage for many levels, and
+    // re-seeding the same curated hand every level would erase the window's randomness.
+    if (stage.bufferBalls && stage.fromLevel === this.internalLevel) {
+      queue.seed(stage.bufferBalls);
+    }
   }
 
   /**
@@ -429,8 +486,9 @@ export class ZoneASystem implements GameSystem {
    * maybeUnlockDrop(); cashInPending stays true until every slot has landed (not just the
    * first — see bufferTicksRemaining), since the stalemate check must stay suppressed for
    * the buffer's ENTIRE arrival, not just its first slot. If the buffer is already at or
-   * above the new capacity (shouldn't normally happen, since capacity is non-decreasing
-   * across stages), applies it in one step and resolves cashInPending immediately.
+   * above the new capacity (possible since capacities OSCILLATE across levels — a
+   * back-to-back cash-in can land on a leaner "pressure" level), keeps the balls in hand
+   * (a refill never confiscates) and resolves cashInPending immediately.
    */
   private animateBufferTo(newCapacity: number): void {
     this.bufferTickTimer?.remove();
@@ -441,8 +499,6 @@ export class ZoneASystem implements GameSystem {
     // need to touch it itself.
     this.settleBufferParticles();
     if (newCapacity <= this.ballBuffer) {
-      this.ballBuffer = newCapacity;
-      this.emitBuffer();
       this.maybeUnlockDrop();
       this.bufferTicksRemaining = 0;
       this.cashInPending = false;

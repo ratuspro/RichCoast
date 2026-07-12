@@ -15,20 +15,22 @@
 
 /** The row the current/aim ball sits on, near the top. Above the death line and far
  *  enough below the HUD chrome bar (42px tall) that the largest spawnable ball (tier 4,
- *  radius 26) clears it: top edge at y=42 meets the bar, bottom at y=94 stays above the
+ *  radius 34) clears it: top edge at y=44 clears the bar, bottom at y=112 stays above the
  *  death line. */
-export const SPAWN_Y = 68;
+export const SPAWN_Y = 78;
 
 /** Forgiving death line, just below the spawn row: a ball resting ABOVE this for
  *  REST_MS ends the run (see ballMath.isRestingAbove / isOverflow). In the B-phase
  *  framing this row is cropped off-screen — benign, since only sucks (removals) touch
  *  the board then, so it can't newly overflow while invisible. */
-export const DEATH_LINE_Y = 96;
+export const DEATH_LINE_Y = 108;
 
 /** Ball radius for the base tier table; index = tier-1. Has TIER_COUNT (10) entries.
- *  tier-10 diameter 156 < 390 (fits the base arena); tier-4 radius 26 < SPAWN_Y (clears ceiling).
+ *  tier-10 diameter 198 < 390 (fits the base arena); tier-4 radius 34 < SPAWN_Y (clears ceiling).
+ *  Low tiers are deliberately chunky (~30% over the original table) so a 12-ball buffer
+ *  visibly crowds the base board — early-game tension comes from board pressure, not count.
  *  Merges are uncapped, so tiers past the table grow geometrically — see RADIUS_GROWTH. */
-export const RADII: readonly number[] = [13, 17, 21, 26, 32, 39, 47, 56, 66, 78];
+export const RADII: readonly number[] = [17, 22, 28, 34, 41, 50, 60, 71, 84, 99];
 
 /** Per-tier radius multiplier beyond the base table (≈ the table's own top step, 78/66).
  *  radiusForTier(tier > 10) = RADII[last] * RADIUS_GROWTH^(tier-10). */
@@ -50,11 +52,35 @@ export const FRICTION_STATIC = 0.1;
  *  balls slide — lower = smaller/lighter balls slide toward the apex more. */
 export const FLOOR_FRICTION = 0.02;
 
-/** Uniform density — Matter derives mass from density*area, so bigger tier = heavier. */
+/** Base density for the small tiers — Matter derives mass from density*area. Larger balls
+ *  taper below this (see DENSITY_TAPER_TIER / DENSITY_MASS_EXP) so their mass — and the
+ *  collision momentum between big balls — grows sub-quadratically instead of ∝ r². */
 export const DENSITY = 0.02;
+
+/** Tiers at or below this keep the flat DENSITY (early/mid-game balance untouched); larger
+ *  tiers taper. `densityForTier` in ballMath.ts turns this into the per-tier density. */
+export const DENSITY_TAPER_TIER = 8;
+
+/** Above the taper tier, mass grows like radius^DENSITY_MASS_EXP (was ∝ r², i.e. exp 2). 1 =
+ *  linear in radius, so a tier-20 ball ends up ~5× lighter than a flat-density one would be. */
+export const DENSITY_MASS_EXP = 1;
 
 /** Restitution (bounciness). Modest, so balls settle but still bounce/roll a little. */
 export const RESTITUTION = 0.2;
+
+// --- Collision categories -------------------------------------------------
+
+/**
+ * Matter collision-filter bitmask categories for Zone A's own bodies. Zone B owns
+ * `0x0001`–`0x0008` (see `zoneB/ZoneBBall.ts`), and Zone B balls mask exactly those bits —
+ * so Zone A takes the *next* bits, which Zone B balls never collide with. This is what keeps
+ * Zone A's boundary walls + funnel (whose thickness now scales with the arena, so at the last
+ * milestone the funnel reaches hundreds of px past the Zone A/C seam into Zone B's space) from
+ * catching balls that belong to Zone B. Zone A balls and walls collide only with each other,
+ * never with anything in Zone B. Keep these outside the `0x0001`–`0x0008` range Zone B uses.
+ */
+export const CAT_ZONE_A_BALL = 0x0010;
+export const CAT_ZONE_A_WALL = 0x0020;
 
 // --- Merge blast ----------------------------------------------------------
 
@@ -71,6 +97,13 @@ export const BLAST_STRENGTH = 1.6;
 /** A body whose `speed` is below this counts as "at rest". Base value at arena scale 1 —
  *  Board scales it by the live scale (normalized gravity makes world speeds grow with it). */
 export const REST_SPEED = 0.8;
+
+/** Hard ceiling on a ball's per-step speed (px/step at arena scale 1); Board scales it by the
+ *  live scale, so it tracks the ×s world speeds. The anti-tunnel backstop: it MUST stay below
+ *  WALL_T (the ArenaView wall thickness, also ×s), so a ball can never cross a wall in one step
+ *  even from stacked merge-blasts. Set well above normal play speeds (rest 0.8, blast peak 1.6)
+ *  so it only clips runaway cases and doesn't change ordinary feel. */
+export const MAX_BALL_SPEED = 16;
 
 /** How long a ball must rest above the death line before the run ends (ms). */
 export const REST_MS = 1000;

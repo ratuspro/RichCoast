@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import { blastImpulse, isNearDeath, isOverflow, isRestingAbove, midpoint, nextRestMs, radiusForTier } from './ballMath';
+import { blastImpulse, clampSpeed, isNearDeath, isOverflow, isRestingAbove, midpoint, nextRestMs, radiusForTier } from './ballMath';
 import { canMerge, mergedTier } from './MergeLogic';
 import { materialForTier } from '../core/Materials';
 import { Sfx } from '../core/Sfx';
 import type { ArenaView } from './ArenaView';
 import type { Ball, BallFactory } from './BallFactory';
-import { BLAST_RADIUS, BLAST_STRENGTH, REST_MS, REST_SPEED, WARN_BAND } from './tuning';
+import { BLAST_RADIUS, BLAST_STRENGTH, MAX_BALL_SPEED, REST_MS, REST_SPEED, WARN_BAND } from './tuning';
 
 /** A blacklisted ball pulled off the board at a milestone — enough to animate its drain to Zone B. */
 export interface DrainedBall {
@@ -129,21 +129,35 @@ export class Board {
   }
 
   /**
-   * Supplemental gravity, applied before each physics step. Zone A balls should feel
-   * gravity × arena scale `s` (the camera zoom is 1/s, so this keeps on-screen fall speed
-   * milestone-invariant), but world gravity is shared with Zone B and must stay put. So we
-   * add the missing (s−1) gravities to our own balls only, mirroring Matter's gravity
-   * formula (force += mass × g × g.scale); forces are cleared by the engine each step.
+   * Per-step physics prep, applied before each Matter integration. Two jobs:
+   *
+   * 1. Supplemental gravity: Zone A balls should feel gravity × arena scale `s` (the camera
+   *    zoom is 1/s, so this keeps on-screen fall speed milestone-invariant), but world gravity
+   *    is shared with Zone B and must stay put. So we add the missing (s−1) gravities to our own
+   *    balls only, mirroring Matter's gravity formula (force += mass × g × g.scale); forces are
+   *    cleared by the engine each step.
+   * 2. Speed cap: clamp each awake ball to MAX_BALL_SPEED × s px/step — the anti-tunnel
+   *    backstop. World speeds scale ×s, walls are (also ×s) but only WALL_T thick with no
+   *    continuous collision detection, so without this a stacked merge-blast could fling a ball
+   *    clean through a wall in one step at high milestones. The cap stays below the wall
+   *    thickness at every scale, so the ball always registers the collision.
    */
   private onBeforePhysics = (): void => {
-    const extra = this.arena.scale - 1;
-    if (extra === 0) return;
+    const s = this.arena.scale;
+    const extra = s - 1;
+    const cap = MAX_BALL_SPEED * s;
     const g = this.scene.matter.world.localWorld.gravity;
     for (const ball of this.registry.values()) {
       const body = ball.body;
       if (body.isSleeping) continue; // Matter skips gravity for sleepers; so do we
-      body.force.x += body.mass * g.x * g.scale * extra;
-      body.force.y += body.mass * g.y * g.scale * extra;
+      if (extra > 0) {
+        body.force.x += body.mass * g.x * g.scale * extra;
+        body.force.y += body.mass * g.y * g.scale * extra;
+      }
+      if (body.speed > cap) {
+        const v = clampSpeed(body.velocity, cap);
+        ball.image.setVelocity(v.x, v.y);
+      }
     }
   };
 

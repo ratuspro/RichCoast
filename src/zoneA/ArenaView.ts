@@ -2,7 +2,11 @@ import Phaser from 'phaser';
 import * as Layout from '../core/Layout';
 import { ARENA_VIEW_H_A, HUD_H, arenaCenterY } from '../core/phaseGeometry';
 import { Theme } from '../core/Theme';
-import { DEATH_LINE_Y, FLOOR_FRICTION, SPAWN_Y } from './tuning';
+import { CAT_ZONE_A_BALL, CAT_ZONE_A_WALL, DEATH_LINE_Y, FLOOR_FRICTION, SPAWN_Y } from './tuning';
+
+/** Zone A's boundary walls + funnel collide only with Zone A balls. Zone B balls mask a
+ *  disjoint category range, so they pass straight through the (deep, s-scaled) funnel. */
+const WALL_FILTER = { category: CAT_ZONE_A_WALL, mask: CAT_ZONE_A_BALL } as const;
 
 /**
  * The expanding Zone A arena + its own camera.
@@ -201,22 +205,29 @@ export class ArenaView {
     if (world) for (const body of this.walls) world.remove(body);
     this.walls = [];
 
+    // Wall thickness scales with the arena, like everything else in Zone A's `s`-normalized
+    // physics — a fixed 40px would be ~13× thinner (relative to ball sizes/speeds) at the last
+    // milestone, letting fast balls tunnel through. Inner faces are derived as edge ± t/2, so
+    // scaling t keeps them pinned to minX/maxX/top/FLOOR_Y — the playable interior is unchanged.
+    const t = WALL_T * this.s;
     const left = this.minX;
     const right = this.maxX;
     const top = this.ceilingY;
     const midY = (top + FLOOR_Y) / 2;
-    const spanY = FLOOR_Y - top + 2 * WALL_T;
+    const spanY = FLOOR_Y - top + 2 * t;
     const add = (x: number, y: number, w: number, h: number, angle = 0): void => {
-      this.walls.push(this.scene.matter.add.rectangle(x, y, w, h, { isStatic: true, angle }));
+      this.walls.push(
+        this.scene.matter.add.rectangle(x, y, w, h, { isStatic: true, angle, collisionFilter: WALL_FILTER }),
+      );
     };
 
-    add(Layout.WIDTH / 2, top - WALL_T / 2, right - left + 2 * WALL_T, WALL_T); // ceiling
-    add(left - WALL_T / 2, midY, WALL_T, spanY); // left wall
-    add(right + WALL_T / 2, midY, WALL_T, spanY); // right wall
+    add(Layout.WIDTH / 2, top - t / 2, right - left + 2 * t, t); // ceiling
+    add(left - t / 2, midY, t, spanY); // left wall
+    add(right + t / 2, midY, t, spanY); // right wall
 
     const [l, apex, r] = this.floorEdge();
-    this.addFloorSegment(l, apex);
-    this.addFloorSegment(apex, r);
+    this.addFloorSegment(l, apex, t);
+    this.addFloorSegment(apex, r, t);
 
     this.redrawWalls(l, apex, r, top);
   }
@@ -232,19 +243,22 @@ export class ArenaView {
     ];
   }
 
-  /** One static, rotated floor rectangle whose top edge runs from p0 to p1. */
-  private addFloorSegment(p0: Point, p1: Point): void {
+  /** One static, rotated floor rectangle whose top edge runs from p0 to p1. `thickness` scales
+   *  with the arena (like the boundary walls), so the body extends downward from the ramp
+   *  surface without moving the surface itself. */
+  private addFloorSegment(p0: Point, p1: Point, thickness: number): void {
     const dx = p1.x - p0.x;
     const dy = p1.y - p0.y;
     const len = Math.hypot(dx, dy);
     const angle = Math.atan2(dy, dx);
-    const cx = (p0.x + p1.x) / 2 + (-dy / len) * (WALL_T / 2);
-    const cy = (p0.y + p1.y) / 2 + (dx / len) * (WALL_T / 2);
+    const cx = (p0.x + p1.x) / 2 + (-dy / len) * (thickness / 2);
+    const cy = (p0.y + p1.y) / 2 + (dx / len) * (thickness / 2);
     this.walls.push(
-      this.scene.matter.add.rectangle(cx, cy, len + 8, WALL_T, {
+      this.scene.matter.add.rectangle(cx, cy, len + 8, thickness, {
         isStatic: true,
         angle,
         friction: FLOOR_FRICTION,
+        collisionFilter: WALL_FILTER,
       }),
     );
   }

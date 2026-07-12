@@ -1,7 +1,16 @@
 import { TIER_COUNT } from '../core/contracts';
 import { materialForTier } from '../core/Materials';
 import { MILESTONE_EVERY } from '../core/Progression';
-import { FRICTION_BASE, FRICTION_MAX, FRICTION_STEP, RADII, RADIUS_GROWTH } from './tuning';
+import {
+  DENSITY,
+  DENSITY_MASS_EXP,
+  DENSITY_TAPER_TIER,
+  FRICTION_BASE,
+  FRICTION_MAX,
+  FRICTION_STEP,
+  RADII,
+  RADIUS_GROWTH,
+} from './tuning';
 
 /**
  * Pure Zone A math — no Phaser, no state. Turns the `tuning.ts` tables into the
@@ -43,23 +52,32 @@ export function neutralGrowth(oldMaxTier: number, newMaxTier: number): number {
   return radiusForTier(newMaxTier) / radiusForTier(oldMaxTier);
 }
 
+/** Arena growth per TAIL milestone: a flat factor, deliberately BELOW the neutral match for
+ *  a TAIL_WINDOW_STEP shift (RADIUS_GROWTH² ≈ 1.39), so apparent ball size creeps up ~16%
+ *  per tail milestone — the endgame's mounting board squeeze. */
+export const TAIL_MILESTONE_ZOOM = 1.2;
+
 /**
  * Arena zoom-out factor owed by ONE level-up: `neutralGrowth × tightness` when `level` is a
- * shifted-window milestone, else exactly 1 (non-milestone levels, and milestones past the
- * last authored shift — the self-healing tail). Because a shifted window always grows
- * (radii strictly increase, tightness never inverts that), 1 doubles as the "no zoom"
- * sentinel, and factors from a multi-level score-bar roll-through compose by product —
- * so a burst that overshoots a milestone level still carries its zoom.
+ * shifted-window milestone, else exactly 1 (non-milestone levels, and unshifted windows).
+ * TAIL milestones (past the last authored stage; the window still steps up there — see
+ * `windowForLevel`) ignore the neutral match and grow by the flat TAIL_MILESTONE_ZOOM.
+ * Because a shifted window always zooms (radii strictly increase, tightness never inverts
+ * that, and the tail factor is > 1), 1 doubles as the "no zoom" sentinel, and factors from
+ * a multi-level score-bar roll-through compose by product — so a burst that overshoots a
+ * milestone level still carries its zoom.
  */
 export function milestoneZoomFactor(
   level: number,
   prevWindow: readonly [number, number],
   window: readonly [number, number],
   tightness: number | undefined,
+  tail = false,
 ): number {
   if (level % MILESTONE_EVERY !== 0) return 1;
   const shifted = window[0] !== prevWindow[0] || window[1] !== prevWindow[1];
   if (!shifted) return 1;
+  if (tail) return TAIL_MILESTONE_ZOOM;
   return neutralGrowth(prevWindow[1], window[1]) * (tightness ?? 1);
 }
 
@@ -68,6 +86,19 @@ export function milestoneZoomFactor(
 export function frictionForTier(tier: number): number {
   const raw = FRICTION_BASE + FRICTION_STEP * (clampTier(tier) - 1);
   return Math.min(raw, FRICTION_MAX) * materialForTier(tier).def.physics.frictionMult;
+}
+
+/**
+ * Density (before the material `densityMult`) for a tier. Small tiers (≤ DENSITY_TAPER_TIER)
+ * keep the flat DENSITY; larger balls taper so that mass (∝ density·radius²) grows like
+ * radius^DENSITY_MASS_EXP instead of radius² — keeping big-ball collision momentum in check
+ * so late-milestone shoves stay gentle. The taper only ever reduces density (bigger radius →
+ * smaller factor, ≤1), never raises it.
+ */
+export function densityForTier(tier: number): number {
+  if (tier <= DENSITY_TAPER_TIER) return DENSITY;
+  const ratio = radiusForTier(DENSITY_TAPER_TIER) / radiusForTier(tier); // ≤ 1
+  return DENSITY * ratio ** (2 - DENSITY_MASS_EXP);
 }
 
 /** Clamp a spawn X so a ball of `radius` stays fully within [minX, maxX]. */
@@ -96,6 +127,18 @@ export function blastImpulse(target: Vec2, origin: Vec2, radius: number, strengt
   if (dist === 0 || dist >= radius) return { x: 0, y: 0 };
   const mag = strength * (1 - dist / radius);
   return { x: (dx / dist) * mag, y: (dy / dist) * mag };
+}
+
+/**
+ * Cap a velocity's magnitude at `maxSpeed`, preserving direction. Below the cap (or a zero
+ * vector) it's returned unchanged. The anti-tunnel backstop: Board clamps every ball's speed
+ * to MAX_BALL_SPEED×s each step, so no single-step displacement can exceed a wall's thickness.
+ */
+export function clampSpeed(v: Vec2, maxSpeed: number): Vec2 {
+  const speed = Math.hypot(v.x, v.y);
+  if (speed <= maxSpeed || speed === 0) return v;
+  const k = maxSpeed / speed;
+  return { x: v.x * k, y: v.y * k };
 }
 
 /** Accumulate rest time: previous + delta while resting, else reset to 0. */

@@ -162,20 +162,36 @@ Ball radius reads the `RADII` table for tiers 1–10 and keeps growing geometric
 (`RADIUS_GROWTH` in `tuning.ts`); look + physics feel come from the shared
 `src/core/Materials.ts` ladder (one source for both zones, so a transferred ball keeps its
 material). Because balls grow without bound, the **arena expands at
-recurring milestones**: every 25 levels Zone A input freezes, `ArenaView` grows the playfield
+recurring milestones**: every 20 levels Zone A input freezes, `ArenaView` grows the playfield
 by a **per-milestone factor** = the *neutral ball-growth match* (`neutralGrowth` in
 `ballMath.ts`: the window-max radius ratio, so apparent ball size holds constant) × the
 stage's authored **`tightness`** in `progression.json` (<1 = tighter/harder, >1 = roomier
 breather; current rhythm 0.92/1.05/0.85/1.05 — squeeze→breathe with deepening squeezes).
 Ceiling rises, walls move out, funnel widens — always *outward*, never into Zone B — and a
 **dedicated Zone-A camera** zooms out (`zoom = 1/s`) with relative positions intact. Past the
-last authored window shift, milestones self-heal into plain levels (no growth). **Physics
+last authored window shift, TAIL milestones step the window **+2 tiers**
+(`windowForLevel`/`TAIL_WINDOW_STEP` in `Progression.ts` — the single window source; stages'
+raw `ballWindow` freezes at [17,20]) and zoom a **flat ×1.2** (`TAIL_MILESTONE_ZOOM` in
+`ballMath.ts`, below the ~×1.39 neutral match — apparent ball size creeps ~16% per tail
+milestone, the endgame squeeze). **Physics
 feel is normalized to `s`** (`Board.ts`): each Zone A ball gets a supplemental
 `(s−1)`-gravities force before every physics step (world gravity is shared with Zone B and
 stays untouched), and the merge-blast radius/strength + rest-speed threshold scale by `s`,
-so on-screen falls, shoves, and settling look identical at every milestone. Each
-milestone also **shifts the draw window up by 4 tiers** (hand-authored in `progression.json`:
-`[1,4]→[5,8]→[9,12]→…`), so the lowest 4 tiers are **blacklisted** from future spawns — the
+so on-screen falls, shoves, and settling look identical at every milestone. Containment is
+part of that normalization: `ArenaView` scales the boundary/funnel **wall thickness** by `s`
+too (a fixed 40px would be ~13× thinner vs ball speeds at the last milestone, letting fast
+balls tunnel out), and `Board.onBeforePhysics` clamps every ball's per-step speed to
+`MAX_BALL_SPEED·s` (`clampSpeed` in `ballMath.ts`) — a hard anti-tunnel backstop that stays
+below the scaled wall thickness at every scale. Because that scaled funnel reaches far past
+the Zone A/C seam into Zone B's space at high `s`, Zone A's balls + walls use **dedicated
+collision categories** (`CAT_ZONE_A_BALL`/`CAT_ZONE_A_WALL` in `tuning.ts`, in the `0x0010+`
+range disjoint from Zone B's `0x0001–0x0008`), so they collide only with each other — Zone B
+balls pass straight through the funnel and never snag on it. Large balls also **taper in density**
+(`densityForTier` in `ballMath.ts`: mass grows ~linearly with radius above `DENSITY_TAPER_TIER`
+instead of ∝ r²), so late-tier collision momentum — the "too much force" — stays in check
+without changing fall feel (acceleration is mass-independent). Each
+authored milestone also **shifts the draw window up by 4 tiers** (in `progression.json`:
+`[1,4]→[5,8]→[9,12]→…`), so the obsolete tiers are **blacklisted** from future spawns — the
 in-hand and Next pieces are **re-rolled** off any blacklisted tier (`BallQueue.reroll` +
 `AimController.refreshQueue`), and any now-obsolete balls still on the board are **drained
 together into Zone B** in one synchronized slide
@@ -200,18 +216,35 @@ event. Every dropped ball stamps `body.ballData` so Zone C can find it. The zone
 `tuning.ts`, `ballMath.ts`, `BallFactory.ts`, `AimController.ts`, `Board.ts`, `DeathLine.ts`,
 `ArenaView.ts`, plus the existing `BallQueue`/`MergeLogic`. The boundary walls + funnel floor
 now live in `ArenaView` (movable), not `GameScene` (which keeps only the off-screen bottom
-wall). `progression.json` is now **milestone-structured**: `ballWindow` holds at `[1,4]` through
-level 24, then jumps `[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 25-level milestone (each
-shift stage also carries its `tightness`), and the `scoreBarTarget`s are rescaled to track
-the (powers-of-three, now much larger) per-window value magnitudes, scaled down for the
-smaller `bufferForLevel` supply at the halved milestone levels — the targets and the
-tightness rhythm are starting numbers to tune by playtest. Past the last authored stage the
-target **keeps growing geometrically** (`scoreBarTargetForLevel` / `TAIL_TARGET_GROWTH` =
-3^(4/25) per level in `Progression.ts` — the authored curve's own rate), because merged ball
-values are unbounded: a flat tail let one monster drain cross a frozen target thousands of
-times, wedging the game behind hours of owed score-bar wraps. **Zone A also owns the phase
-triggers**: it tracks the finite ball supply (`ZoneASystem.ballBuffer`, refilled per stage
-from `progression.json`, broadcast via `BALL_BUFFER_CHANGED` to the queue row), and when
+wall). `progression.json` is **anchor-structured**: `ballWindow` ramps in softly (`[1,1]`/
+`[1,2]`/`[1,3]` at levels 1–3, ceiling-only, no blacklist) to `[1,4]` at level 4, then jumps
+`[5,8]`/`[9,12]`/`[13,16]`/`[17,20]` at each 20-level milestone (20/40/60/80; each shift
+stage also carries its `tightness` + `palette`), and the `scoreBarTarget`s are **anchors, not
+plateaus** — `scoreBarTargetForLevel` interpolates geometrically between them (~×1.22–1.25 per
+level, ×3⁴ per window span, tracking the powers-of-three value magnitudes; 20 @ L1 → 5K @ L20
+→ 2.7B @ L80), so a multi-level roll-through burst self-limits (each crossed level immediately
+raises the next bar) and each window traces a cheap-after-milestone → tight-before-milestone
+arc — the anchors and the tightness rhythm are starting numbers to tune by playtest. Past the
+last authored stage the target **keeps growing geometrically** (`TAIL_TARGET_GROWTH` =
+3^(4/20) per level in `Progression.ts` — the authored curve's own rate) while the supply's
+value only grows ×3² per tail milestone (the +2 window steps), so every run eventually hits
+a **designed endgame wall** (~L115 by the income model, likely sooner by overflow under the
+compounding tail squeeze; the game-over is the natural end of a run, aimed at ~30 min).
+A reachability guard test in
+`Progression.test.ts` (refill × perfect merging × worst-case ×4 gates ≥ target, levels
+1–100) keeps future retunes from authoring a soft-lockable level. The RADII table is deliberately
+chunky at the low end (tier 1 = 17px … tier 4 = 34px) so early buffers crowd the base board,
+and `bufferForLevel` **oscillates instead of ramping**: a base rising 15→18 (flat from level
+30) swings ±2 by parity — even = roomy "harvest" refills, odd = lean "pressure" refills
+leaning on carried-over board balls, milestones always harvest — capped at 20 drops so the
+A-phase never becomes a drop chore (tension comes from ball size vs arena room, not count).
+A roll-through burst also pays a **jackpot bonus**: `BURST_REFILL_BONUS` (2) extra balls per
+level crossed beyond the first in one cash-in cycle (`ZoneASystem.burstLevels`, consumed by
+`runCashInSequence`), and `animateBufferTo` never confiscates — a refill target below the
+in-hand count (possible now that capacities oscillate) keeps the balls.
+**Zone A also owns the phase
+triggers**: it tracks the finite ball supply (`ZoneASystem.ballBuffer`, refilled per level
+via `bufferForLevel`, broadcast via `BALL_BUFFER_CHANGED` to the queue row), and when
 the buffer hits 0 a **settle gate** (`src/zoneA/settleGate.ts`: 350ms of contiguous
 `Board.isSettled()` — no pending merges, every body asleep or under the scaled rest speed —
 with a 4s hard timeout) emits `ZONE_A_DEPLETED` so the pan to the B phase waits for the

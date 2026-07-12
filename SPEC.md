@@ -45,7 +45,7 @@ ends on overflow or on a full stalemate (see Failure conditions).
 Because balls grow without bound, the arena itself grows to make room, on a schedule tied to
 the draw-window shifts below.
 
-- Every 25 levels, Zone A input freezes and the arena — ceiling, walls, floor/funnel width —
+- Every 20 levels, Zone A input freezes and the arena — ceiling, walls, floor/funnel width —
   expands outward (never into Zone B). A dedicated camera zooms out to match, so relative
   ball sizes and positions on screen hold steady.
 - The growth factor per milestone is the *neutral match* for the window's new max tier (the
@@ -57,8 +57,10 @@ the draw-window shifts below.
   automatically in one synchronized slide, so the board never gets stuck holding
   now-forbidden tiers.
 - Zone C is locked for the duration of the zoom (and the drain), then re-arms.
-- Past the last authored window shift, milestones self-heal into plain level-ups with no
-  growth.
+- Past the last authored window shift (level 80), TAIL milestones keep the beat alive at a
+  gentler pitch: the draw window steps up **+2 tiers** (instead of +4) and the arena grows a
+  **flat ×1.2** — deliberately below the ~×1.39 neutral match for a +2 shift, so apparent
+  ball size creeps up ~16% per tail milestone. The endgame literally closes in.
 
 ---
 
@@ -168,7 +170,7 @@ hyper-casual and casual for UA-driven mobile: bright, readable, friendly.
 
 **Balls are materials.** Each tier IS a physical material — the higher the tier, the more
 valuable the stuff. The ladder is 20 materials in 5 families of 4, each family aligned
-with one 4-tier draw window (so a 25-level window shift reads as advancing a material age):
+with one 4-tier draw window (so a 20-level window shift reads as advancing a material age):
 
 1. **Primitives** [1–4]: Wood, Stone, Turquoise, Clay
 2. **Metals** [5–8]: Copper, Iron, Steel, Silver
@@ -243,15 +245,19 @@ window-shift milestones, which is a deliberate, visible beat — see Zone A abov
 ### Ball Window
 
 Balls queued in Zone A (both the live queue and the ball buffer) are drawn randomly from a
-sliding window of consecutive tiers, always four tiers wide. The window holds at `[1,4]`
-through level 24, then jumps `[5,8]` / `[9,12]` / `[13,16]` / `[17,20]` at each 25-level
-milestone. At each jump, the lowest 4 tiers become **blacklisted**: the in-hand and
-next-preview balls are re-rolled off any blacklisted tier, and any obsolete balls still on
-the board are drained into Zone B in one synchronized slide (see Arena Growth). The window
-never exposes tiers beyond 20 in the current authored schedule; the underlying tier system
-itself has no ceiling.
+sliding window of consecutive tiers, four tiers wide once fully open. The window ramps in
+softly over the first levels — `[1,1]` / `[1,2]` / `[1,3]` at levels 1–3 (ceiling-only
+widening, no blacklist) — reaching `[1,4]` at level 4, then jumps `[5,8]` / `[9,12]` /
+`[13,16]` / `[17,20]` at each 20-level milestone (levels 20/40/60/80). At each jump, the
+now-obsolete tiers become **blacklisted**: the in-hand and next-preview balls are re-rolled
+off any blacklisted tier, and any obsolete balls still on the board are drained into Zone B
+in one synchronized slide (see Arena Growth). Past level 80 the window keeps stepping
+**+2 tiers per tail milestone** (`[19,22]` at the first, `[21,24]` at the next, …,
+`windowForLevel` in `Progression.ts`), wrapping the 20-material ladder with gold rings —
+the tier system has no ceiling.
 
-- Early game: tiers 1–4 (smallest balls, easy to merge, low Zone B value).
+- Early game: tiers 1–4 (chunky enough to crowd the base board, easy to merge, low Zone B
+  value).
 - Mid game: tiers 5–8 (copper→silver; merging is harder but each ball sent to Zone B is
   worth more).
 - Late game: tiers 9–20 (precious → gems → exotic; the board fills quickly, every drop
@@ -259,19 +265,35 @@ itself has no ceiling.
 
 ### Buffer Capacity
 
-The number of ball slots in the buffer starts at 4 and grows with the internal level
-(currently up to 10, per the authored stages in `progression.json`). A larger buffer gives
-the player more room to breathe between score bar fills, partially offsetting the rising
-score bar target.
+The refill is an **oscillation, not a ramp** (`bufferForLevel` in `Progression.ts`): a
+slowly-rising base (15 → 18 by level 30, flat after) swings ±2 by level parity — even levels
+are roomy "harvest" refills, odd levels are lean "pressure" refills that lean on balls
+carried over on the board from the previous cycle. Milestone levels always pay the harvest
+amount (a breather to enjoy the fresh draw window). The cap is 20 drops per A-phase,
+deliberately low: the buffer is double-edged (fuel *and* overflow risk), and difficulty
+must come from ball size versus arena room, never from a long drop chore. On top of the
+refill, a **roll-through bonus** (`BURST_REFILL_BONUS`) pays 2 extra balls per level crossed
+beyond the first in one Zone B session — a multi-level burst is a jackpot in the resource
+that matters, not just a bigger number.
 
 ### Score Bar Target
 
-The number of points required to fill the score bar increases with each authored stage —
-from single digits at level 1 up into the billions by level 200, tracking the (powers-of-
-three) per-window value magnitudes. A rising target means the player must send higher-value
-balls through Zone B to keep up, which in turn requires more merging in Zone A. This is the
-primary difficulty lever. The exact target curve is a starting point to keep tuning by
-playtest, not a locked design.
+Authored stages are **anchors, not plateaus**: `scoreBarTargetForLevel` interpolates
+geometrically between them, so every level's bar is strictly bigger than the last (~×1.22–1.25
+per level, ×3⁴ per 20-level window — exactly tracking the powers-of-three value growth per
+window shift; 20 points at level 1, 5K at level 20, 2.7B at level 80, then the geometric
+tail forever). Per-level growth matters because one Zone B drain can cross several levels
+in a burst: each crossed level immediately raises the next bar, so a monster drain
+self-limits to a few celebratory level-ups instead of wrapping a flat plateau many times.
+Within each window the curve traces an arc — cheap bars right after a milestone (a
+multi-level burst, the power-fantasy beat), tightening to ~1 full send per level just
+before the next milestone (the squeeze). Past the last authored shift (level 80) the tail
+target keeps compounding at ×3⁴ per milestone span while the supply's value only grows ×3²
+(the +2 tail window steps) — and the under-neutral ×1.2 tail zoom squeezes the board on
+top — so every run eventually hits a **designed endgame wall** (~level 115 by the income
+model, likely sooner by overflow) — the game-over is the run's natural end, aimed at ~30
+minutes into a session. The exact anchors are a starting point to keep tuning by playtest,
+not a locked design.
 
 ### Open Question — Merge Incentive
 

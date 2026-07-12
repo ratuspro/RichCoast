@@ -2,8 +2,8 @@ import type Phaser from 'phaser';
 import { materialForTier } from '../core/Materials';
 import { paintBall } from '../core/MaterialPainter';
 import { tierToValue, type BallBodyData } from '../core/contracts';
-import { frictionForTier, radiusForTier } from './ballMath';
-import { DENSITY, FRICTION_AIR, FRICTION_STATIC, RESTITUTION } from './tuning';
+import { densityForTier, frictionForTier, radiusForTier } from './ballMath';
+import { CAT_ZONE_A_BALL, CAT_ZONE_A_WALL, FRICTION_AIR, FRICTION_STATIC, RESTITUTION } from './tuning';
 
 /**
  * A live Zone A ball: its Matter.Image (sprite + body in one), its tier, and the
@@ -72,6 +72,9 @@ export class BallFactory {
 
     const image = this.scene.matter.add.image(x, y, key, undefined, {
       shape: { type: 'circle', radius },
+      // Zone A balls collide only with each other and Zone A's walls/funnel — never with Zone B
+      // (which masks a disjoint category range), so the s-scaled funnel can't catch Zone B balls.
+      collisionFilter: { category: CAT_ZONE_A_BALL, mask: CAT_ZONE_A_BALL | CAT_ZONE_A_WALL },
     });
     // Material feel: the shared multipliers are a narrow band on top of Zone A's tuned
     // constants — wood bounces a touch, gold is dense, gems slip — no balance rework.
@@ -79,7 +82,7 @@ export class BallFactory {
     image
       .setFriction(frictionForTier(tier), FRICTION_AIR, FRICTION_STATIC)
       .setBounce(RESTITUTION * feel.restitutionMult)
-      .setDensity(DENSITY * feel.densityMult);
+      .setDensity(densityForTier(tier) * feel.densityMult);
 
     const body = image.body as MatterJS.BodyType;
     (body as TaggedBody).ballData = { value: tierToValue(tier), tier };
