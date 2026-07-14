@@ -1,0 +1,48 @@
+{
+  "name": "com.gameanalytics.sdk",
+  "version": "8.0.1",
+  "displayName": "GameAnalytics",
+  "description": "GameAnalytics collects and stores your data with no limits.  You can then view your core KPI's in order to see what areas of your game need to improvements.  If you want to find out more about how gamers play, then add in funnels, progression events and resource tracking. ",
+  "unity": "2018.1",
+  "dependencies": {
+    "com.google.external-dependency-manager": "1.2.168"
+  },
+  "publishConfig": {
+    "registry": "https://package.openupm.com"
+  },
+  "keywords": [
+    "data",
+    "analytics",
+    "events",
+    "funnels",
+    "reporting",
+    "dashboard",
+    "tracking",
+    "track",
+    "analyse",
+    "analyze",
+    "bigdata",
+    "mixpanel",
+    "unreal",
+    "google",
+    "flurry",
+    "unity",
+    "segments",
+    "realtime",
+    "time",
+    "player",
+    "understand",
+    "focus"
+  ],
+  "author": {
+    "name": "GameAnalytics",
+    "email": "sdk@gameanalytics.com",
+    "url": "https://www.gameanalytics.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GameAnalytics/GA-SDK-UNITY",
+    "revision": "af7b0d28dc607b8cb0b2daddf60a813635d1abfe"
+  },
+  "_fingerprint": "770dff7b5a42d98dc2b82190346152702b8ddedf"
+}
