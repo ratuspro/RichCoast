@@ -46,22 +46,23 @@
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0",
-    "com.gameanalytics.sdk": "8.0.1"
+    "com.gameanalytics.sdk": "8.0.1",
+    "com.unity.pipeline": "0.4.0-exp.1"
   },
-"scopedRegistries": [
-  {
-    "name": "Game Package Registry by Google",
-    "url": "https://unityregistry-pa.googleapis.com/",
-    "scopes": [
-      "com.google"
-    ]
-  },
-  {
-    "name": "package.openupm.com",
-    "url": "https://package.openupm.com",
-    "scopes": [
-      "com.gameanalytics"
-    ]
-  }
-]
+  "scopedRegistries": [
+    {
+      "name": "Game Package Registry by Google",
+      "url": "https://unityregistry-pa.googleapis.com/",
+      "scopes": [
+        "com.google"
+      ]
+    },
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.gameanalytics"
+      ]
+    }
+  ]
 }
