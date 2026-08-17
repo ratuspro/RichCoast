@@ -71,7 +71,12 @@ namespace RichCoast.Core
         public static float ScreenHeightForAspect(float widthOverHeight)
         {
             if (widthOverHeight <= 0f) return DesignScreenHeight;
-            return Width / widthOverHeight;
+
+            // Clamped to a sane band. The game is portrait-locked on device, but an editor game
+            // view — or a batchmode run's landscape stub — can report an aspect that would leave
+            // the visible world shorter than Zone A itself, framing the board out of existence.
+            var minimum = ZoneA.Height + ZoneC.Height;
+            return Mathf.Clamp(Width / widthOverHeight, minimum, WorldHeight);
         }
 
         /// <summary>Convenience for runtime code: the visible height on the current screen.</summary>

@@ -35,6 +35,7 @@ Assets/Game/
   View/       RichCoast.View.asmdef       view components, palette, effects (swappable)
   Scenes/Game.unity
 Assets/Tests/EditMode/  RichCoast.Tests.EditMode.asmdef
+Assets/Tests/PlayMode/  RichCoast.Tests.PlayMode.asmdef
 Tools/run-tests.sh
 ```
 
@@ -69,7 +70,10 @@ Events, unchanged from the original design:
 Every zone implements `IGameSystem { Create(); Tick(float dt); Dispose(); }`. `GameRoot` (the
 single scene bootstrap) constructs the systems, wires the bus and ticks them, and exposes a
 `ZoneMode` enum that swaps a real zone for a stub — the Unity replacement for the old `?zone=`
-URL flag, and the reason Zone A can be built and played before Zones B and C exist.
+URL flag, and the reason Zone A could be built and played before Zones B and C existed.
+
+Systems announce their opening state on their first **tick**, not in `Create()`: construction runs
+system by system, so anything emitted during it is missed by every system built later.
 
 ## View seam
 
@@ -87,6 +91,19 @@ positioned each frame through the seam. `BallPhysicsTests` pins this: a resting 
 exactly one radius above the floor, which fails the moment a collider's size drifts from the
 radius the rules use.
 
+## Cameras
+
+`Gameplay/CameraRig.cs` owns the two cameras and derives both from one pan value:
+
+- The **main camera** shows the world 1:1 and scrolls between the phases; Zone B and Zone C ride it.
+- The **arena camera** draws Zone A into a viewport below the HUD at zoom `1/arenaScale`, so a
+  milestone's growth gives the board room without changing how big the balls look. Its viewport
+  shrinks with the pan, top-cropping Zone A to a sliver in the B phase.
+
+The split is by layer (`PhysicsLayers`), which is also why every Zone A *view* object must be put
+on the Zone A layer — a view left on the default layer is simply never drawn. Aiming reads through
+the arena camera, since that is the projection the board is drawn under.
+
 ## Coordinate spaces
 
 The design is authored y-DOWN from the world's top-left, as the original was; Unity is y-up.
@@ -98,17 +115,18 @@ which is what lets every tuned constant be compared directly against the origina
 floor: the arena grows upward and outward at milestones, never into Zone B, and gravity and the
 speed thresholds scale with it so the drop feel is identical at every milestone.
 
-## Layout and camera
+## Layout
 
 `Core/Layout.cs` ports the original world geometry: a **390 × 1238** design-space world, taller
-than the screen, with Zone A (42 HUD + 465 board), Zone C (44) and Zone B (687) bands. The
-game does not move world objects between phases — it pans two cameras through a single
-`pan ∈ [0, PAN_DISTANCE]` proxy (`Core/PhaseGeometry.cs`, ported from `phaseGeometry.ts`), so
-the arena-bottom / Zone-C seam stays pixel-locked mid-pan.
+than the screen, with Zone A (42 HUD + 465 board), Zone C (44) and Zone B (687) bands. Nothing in
+the world moves between phases — the cameras do, through a single `pan ∈ [0, PanDistance]` proxy
+(`Core/PhaseGeometry.cs`, ported from `phaseGeometry.ts`), which is what keeps the
+arena-bottom / Zone-C seam locked mid-pan.
 
 Unlike the original, the design height is **not** assumed to equal the device screen: layout
-resolves the design world against the real aspect ratio and `Screen.safeArea`, so notches and
-tall/short devices are handled rather than letterboxed.
+resolves the design world against the real aspect ratio (clamped, so an odd editor aspect cannot
+frame the board out of existence) and against `Screen.safeArea`, so notches and tall or short
+devices are handled rather than letterboxed.
 
 ## Ported pure logic
 
@@ -126,6 +144,8 @@ These modules are direct C# ports and keep their original unit tests:
 | `Core/ComboPitch.cs` | `core/comboPitch.ts` | combo pitch-rise shared by merges and Zone B multiplies |
 | `Core/BallQueue.cs` | `zoneA/BallQueue.ts` | draw-window sampling, next-ball preview, blacklist re-roll |
 | `Core/BallBuffer.cs` | (redesigned) | fuel supply: spend, drip-fed refills, burst bonus, last-chance window |
+| `Core/DoorSweep.cs` | `zoneC/ZoneCSystem.ts` | the trap-door's nine-column ping-pong marker |
+| `Core/ZoneBLayout.cs` | `zoneB/zoneLayout.ts` | gate/wall/collector defs and gate motion |
 
 ## Tuning data
 
@@ -133,9 +153,11 @@ Authored values live in ScriptableObjects (`Assets/Game/Data`), each exposing a 
 that returns a plain struct for Core:
 
 - `ProgressionConfigSO` — the stage table ported verbatim from `core/progression.json`
-  (`fromLevel`, `ballWindow`, `scoreBarTarget`, `bufferBalls`, `tightness`, `palette`).
+  (`fromLevel`, `ballWindow`, `scoreBarTarget`, `tightness`, `palette`).
 - `BallTierTableSO` — base radii and the 20-material ladder with per-material physics feel.
-- Zone B layouts become layout SOs when Zone B is built.
+- `DefaultZoneBLayouts` — the two authored playfields, ported verbatim; one is picked per run.
+  `ZoneBSystem` takes an optional layout override so a cascade can be reproduced in a test instead
+  of depending on which playfield the run drew.
 
 Values are **not** re-tuned during the migration. The ported tests encode the tuned behaviour.
 
@@ -145,25 +167,42 @@ Values are **not** re-tuned during the migration. The ported tests encode the tu
 |---|---|
 | Foundations, seam, data layer, ported rules | done, tested |
 | Zone A: aim, drop, merge, death line, buffer, HUD, game over | done (grey-box) |
-| Zone B, Zone C | stubbed behind the seam (`Gameplay/Stubs`) — the full loop is playable |
-| Milestone arena zoom + blacklist drain | geometry ready (`ArenaGeometry`), not yet triggered |
-| Two-camera A/B framing | single-camera pan for now; lands with the real Zone B |
+| Zone C: sweeping marker, tap-to-freeze, nearest-by-edge grab, transit | done (grey-box) |
+| Zone B: authored layouts, gates, cascading splits, walls, collectors, scoring | done (grey-box) |
+| Milestone arena growth + camera zoom + blacklist drain | done |
+| Two-camera A/B framing (`CameraRig`) | done |
 | Audio, art pass, Android build scripting, iOS | not started |
+
+`ZoneMode.ZoneAC` on `GameRoot` still swaps the real Zone B for `StubZoneB`, which is the fastest
+way to tell which side of the seam a bug is on.
 
 ## Tools
 
 Generated rather than hand-authored, so a clean checkout rebuilds byte-identically:
 
 - `Rich Coast/Set Up Project` (menu, or `-executeMethod RichCoast.EditorTools.ProjectSetup.SetUpAll`)
-  applies the low-end player settings, creates the tuning assets and rebuilds the scene.
+  applies the low-end player settings, names the zone collision layers, creates the tuning assets
+  and rebuilds the scene.
 - `Tools/run-tests.sh [--platform EditMode|PlayMode] [--filter …]` — headless test run, exits
   non-zero with the failing test names.
-- `Tools/screenshot.sh` — renders the running game to `Logs/game-scene.png` (a batchmode run has
-  no backbuffer, so it renders the camera to a texture).
+- `Tools/screenshot.sh` — renders the running game to `Logs/game-scene.png`. It uses its own
+  design-space camera covering the whole 390×1238 world: a batchmode run has no backbuffer to
+  capture and reports a landscape screen, so the live rig would frame almost nothing.
 
 ## Verification
 
-The EditMode suite covers the rules; the PlayMode suite covers the wiring and the physics —
-the scene boots, a dropped ball rests on the floor at its own radius, a busy board leaks
-nothing through the walls, and two balls merge into one of the next tier. Android build
-scripting and on-device profiling are a later milestone.
+The EditMode suite covers the rules. The PlayMode suite covers the wiring and the physics, which
+is where this migration's real bugs have been:
+
+- the scene boots and the physics world is configured;
+- a dropped ball rests on the floor **at its own radius** (catches a collider whose size has
+  drifted from the radius the rules use);
+- a busy, merging board leaks nothing through the walls;
+- two balls merge into one of the next tier;
+- a Zone B round splits, drains, scores, and always returns to empty — a round that never closes
+  would lock the trap-door for the rest of the run;
+- a cascade never exceeds the ball cap;
+- a milestone grows the arena by the authored factor, locks input while it does, and drains the
+  tiers that just left the draw window.
+
+Android build scripting and on-device profiling are a later milestone.

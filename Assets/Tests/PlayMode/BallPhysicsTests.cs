@@ -2,6 +2,7 @@ using System.Collections;
 using NUnit.Framework;
 using RichCoast.Core;
 using RichCoast.Gameplay;
+using RichCoast.Gameplay.ZoneA;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -36,11 +37,11 @@ namespace RichCoast.Tests.PlayMode
             var ball = FindBall();
             Assert.That(ball, Is.Not.Null, "the dropped ball vanished");
 
-            var position = DesignSpace.ToDesign(ball.transform.position);
+            var position = ball.Position;
             var radius = _root.Context.Tiers.RadiusForTier(1);
 
             Assert.That(position.x, Is.InRange(arena.MinX, arena.MaxX), "the ball left through a side wall");
-            Assert.That(ball.linearVelocity.magnitude, Is.LessThan(arena.RestSpeed), "the ball never settled");
+            Assert.That(ball.Speed, Is.LessThan(arena.RestSpeed), "the ball never settled");
 
             // Resting exactly one radius above the floor. Checking the precise resting height —
             // not merely "somewhere inside" — is what catches a collider whose size has drifted
@@ -64,10 +65,10 @@ namespace RichCoast.Tests.PlayMode
             yield return new WaitForSeconds(2f);
 
             var escaped = 0;
-            foreach (var ball in Object.FindObjectsByType<Rigidbody2D>(FindObjectsSortMode.None))
+            foreach (var ball in Object.FindObjectsByType<Ball>(FindObjectsSortMode.None))
             {
                 if (!ball.gameObject.activeInHierarchy) continue;
-                var position = DesignSpace.ToDesign(ball.transform.position);
+                var position = ball.Position;
                 var inside = position.x >= arena.MinX && position.x <= arena.MaxX &&
                              position.y >= arena.CeilingY && position.y <= arena.FloorY;
                 if (!inside) escaped++;
@@ -76,11 +77,16 @@ namespace RichCoast.Tests.PlayMode
             Assert.That(escaped, Is.EqualTo(0), "balls leaked out of the arena");
         }
 
-        private static Rigidbody2D FindBall()
+        /// <summary>
+        /// The first live ZONE A ball. Typed on <see cref="Ball"/> rather than Rigidbody2D: Zone B's
+        /// gates are kinematic bodies too, and picking one of those up instead would quietly assert
+        /// nothing about Zone A.
+        /// </summary>
+        private static Ball FindBall()
         {
-            foreach (var body in Object.FindObjectsByType<Rigidbody2D>(FindObjectsSortMode.None))
+            foreach (var ball in Object.FindObjectsByType<Ball>(FindObjectsSortMode.None))
             {
-                if (body.gameObject.activeInHierarchy) return body;
+                if (ball.gameObject.activeInHierarchy) return ball;
             }
             return null;
         }

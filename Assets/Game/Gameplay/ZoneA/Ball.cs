@@ -52,7 +52,7 @@ namespace RichCoast.Gameplay.ZoneA
         }
 
         /// <summary>Take on a tier's identity: size, mass, surface and look. Used on spawn and on merge.</summary>
-        internal void Configure(int tier, float radius, float mass, PhysicsMaterial2D surface, TierMaterial material)
+        internal void Configure(int tier, float radius, float mass, float gravityScale, PhysicsMaterial2D surface, TierMaterial material)
         {
             Tier = tier;
             Radius = radius;
@@ -62,6 +62,9 @@ namespace RichCoast.Gameplay.ZoneA
             _collider.radius = radius;
             _collider.sharedMaterial = surface;
             _body.mass = mass;
+            // The world's gravity is authored at arena scale 1; a grown arena scales it per body,
+            // which keeps Zone B's much gentler fall independent of Zone A's milestones.
+            _body.gravityScale = gravityScale;
             _body.linearDamping = Tuning.FrictionAir * Tuning.StepsPerSecond;
 
             _view.SetTier(tier, radius, material);

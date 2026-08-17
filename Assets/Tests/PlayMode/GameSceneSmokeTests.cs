@@ -102,7 +102,9 @@ namespace RichCoast.Tests.PlayMode
             Assert.That(busy, Is.True, "Zone B must report busy so the trap-door locks");
 
             empty = false;
-            yield return new WaitForSeconds(1.5f);
+            // The real arena cascades before it drains, so this waits on the round rather than on
+            // a fixed beat.
+            for (var i = 0; i < 20 && !empty; i++) yield return new WaitForSeconds(1f);
 
             Assert.That(empty, Is.True, "Zone B must report empty so the trap-door can re-arm");
             Assert.That(scored, Is.GreaterThan(0d), "the drained ball should have scored");

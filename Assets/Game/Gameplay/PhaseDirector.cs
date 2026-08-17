@@ -10,10 +10,6 @@ namespace RichCoast.Gameplay
     /// framings. The pure <see cref="PhaseMachine"/> decides WHEN, this decides how it looks, and
     /// every zone learns about it through <see cref="PhaseChanged"/>.
     ///
-    /// Milestone note: the original ran two cameras (a Zone A arena viewport plus the main camera)
-    /// so Zone A stayed partly visible during the B phase. That split lands with the real Zone B;
-    /// for now a single camera pans the full distance, which is behaviourally identical from every
-    /// system's point of view.
     /// </summary>
     public sealed class PhaseDirector : IGameSystem
     {
@@ -21,7 +17,7 @@ namespace RichCoast.Gameplay
         private const float PanMs = 450f;
 
         private readonly EventBus _bus;
-        private readonly Camera _camera;
+        private readonly CameraRig _rig;
         private readonly float _panDistance;
         private readonly PhaseMachine _machine = new PhaseMachine();
 
@@ -29,12 +25,13 @@ namespace RichCoast.Gameplay
         private float _panFrom;
         private float _panTo;
         private float _panElapsed = -1f;
+        private bool _announced;
 
-        public PhaseDirector(EventBus bus, Camera camera, float panDistance)
+        public PhaseDirector(EventBus bus, CameraRig rig)
         {
             _bus = bus;
-            _camera = camera;
-            _panDistance = panDistance;
+            _rig = rig;
+            _panDistance = rig.PanDistance;
         }
 
         public GamePhase Phase => _machine.Phase;
@@ -44,7 +41,6 @@ namespace RichCoast.Gameplay
             _bus.Subscribe<ZoneADepleted>(OnDepleted);
             _bus.Subscribe<ScoreBarCashedIn>(OnCashedIn);
             ApplyPan(0f);
-            _bus.Emit(new PhaseChanged(_machine.Phase));
         }
 
         public void Dispose()
@@ -55,6 +51,14 @@ namespace RichCoast.Gameplay
 
         public void Tick(float deltaMs)
         {
+            // Announced on the first tick rather than in Create(), so systems built after this one
+            // still hear the opening phase.
+            if (!_announced)
+            {
+                _announced = true;
+                _bus.Emit(new PhaseChanged(_machine.Phase));
+            }
+
             if (_panElapsed < 0f) return;
 
             _panElapsed += deltaMs;
@@ -85,15 +89,12 @@ namespace RichCoast.Gameplay
             if (step.Changed) _bus.Emit(new PhaseChanged(step.Phase));
         }
 
-        /// <summary>Move the camera down by the pan; design space is y-down, so the world y falls.</summary>
+        /// <summary>Hand the pan to the rig, which re-frames both cameras from it.</summary>
         private void ApplyPan(float pan)
         {
             _pan = pan;
-            var position = _camera.transform.position;
-            _camera.transform.position = new Vector3(position.x, DesignSpace.ToWorldY(BaseCenterY() + pan), position.z);
+            _rig.Pan = pan;
         }
-
-        private float BaseCenterY() => _camera.orthographicSize;
 
         /// <summary>Smoothstep: the pan should ease at both ends, never snap.</summary>
         private static float Smooth(float t) => t * t * (3f - 2f * t);

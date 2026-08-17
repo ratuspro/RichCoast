@@ -31,6 +31,7 @@ namespace RichCoast.EditorTools
         public static void SetUpAll()
         {
             ApplyPlayerSettings();
+            ApplyPhysicsLayers();
             CreateDataAssets();
             CreateGameScene();
             AssetDatabase.SaveAssets();
@@ -83,6 +84,30 @@ namespace RichCoast.EditorTools
             PlayerSettings.runInBackground = false;
 
             Debug.Log("[RichCoast] Applied low-end Android player settings.");
+        }
+
+        /// <summary>
+        /// Name the zone collision layers. Unity has no runtime API for this, so the names are
+        /// written into the tag manager here and <see cref="PhysicsLayers"/> holds the numbers the
+        /// game uses; a test asserts the two still agree.
+        /// </summary>
+        [MenuItem("Rich Coast/Apply Physics Layers")]
+        public static void ApplyPhysicsLayers()
+        {
+            var asset = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (asset == null || asset.Length == 0)
+            {
+                Debug.LogError("[RichCoast] Could not open TagManager.asset.");
+                return;
+            }
+
+            var tagManager = new SerializedObject(asset[0]);
+            var layers = tagManager.FindProperty("layers");
+            layers.GetArrayElementAtIndex(PhysicsLayers.ZoneA).stringValue = PhysicsLayers.ZoneAName;
+            layers.GetArrayElementAtIndex(PhysicsLayers.ZoneB).stringValue = PhysicsLayers.ZoneBName;
+            tagManager.ApplyModifiedPropertiesWithoutUndo();
+
+            Debug.Log("[RichCoast] Named the zone collision layers.");
         }
 
         /// <summary>Create the tuning assets if they are missing; never overwrite authored edits.</summary>

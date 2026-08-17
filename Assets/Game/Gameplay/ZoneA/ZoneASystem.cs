@@ -12,7 +12,28 @@ namespace RichCoast.Gameplay.ZoneA
     public interface IBallSource
     {
         /// <summary>Pull the ball nearest the door mouth off the board. False when the board is empty.</summary>
-        bool TryGrabNearestBall(float mouthX, float doorY, out BallSpec spec);
+        bool TryGrabNearestBall(float mouthX, float doorY, out GrabbedBall grabbed);
+
+        /// <summary>The ball a tap would take right now, without taking it — for the door's highlight.</summary>
+        bool TryPeekNearestBall(float mouthX, float doorY, out GrabbedBall grabbed);
+    }
+
+    /// <summary>
+    /// A ball taken off the Zone A board, with the on-screen state the trap-door's transit
+    /// animation needs: it starts at the ball's real position and size and ends at Zone B's.
+    /// </summary>
+    public readonly struct GrabbedBall
+    {
+        public readonly BallSpec Spec;
+        public readonly Vector2 Position;
+        public readonly float Radius;
+
+        public GrabbedBall(BallSpec spec, Vector2 position, float radius)
+        {
+            Spec = spec;
+            Position = position;
+            Radius = radius;
+        }
     }
 
     /// <summary>
@@ -28,8 +49,11 @@ namespace RichCoast.Gameplay.ZoneA
         /// <summary>Interval between refill slots landing (ms) — the buffer climbs, never jumps.</summary>
         private const float RefillDripMs = 70f;
 
+        /// <summary>How long a milestone's arena growth takes to play out (ms).</summary>
+        private const float MilestoneZoomMs = 900f;
+
         private readonly GameContext _context;
-        private readonly Camera _camera;
+        private readonly CameraRig _rig;
         private readonly Transform _root;
         private readonly HudView _hud;
 
@@ -45,16 +69,21 @@ namespace RichCoast.Gameplay.ZoneA
         private ArenaGeometry _arena;
         private int _level = 1;
         private float _refillTimer;
+        private float _pendingZoom = 1f;
+        private float _zoomElapsed = -1f;
+        private float _zoomFrom = 1f;
+        private float _zoomTo = 1f;
         private bool _depletedAnnounced;
+        private bool _started;
         private bool _runOver;
         private bool _zoneBEmpty = true;
         private double _score;
         private GamePhase _phase = GamePhase.A;
 
-        public ZoneASystem(GameContext context, Camera camera, Transform root, HudView hud)
+        public ZoneASystem(GameContext context, CameraRig rig, Transform root, HudView hud)
         {
             _context = context;
-            _camera = camera;
+            _rig = rig;
             _root = root;
             _hud = hud;
         }
@@ -62,19 +91,26 @@ namespace RichCoast.Gameplay.ZoneA
         public void Create()
         {
             _arena = new ArenaGeometry(1f);
-            Physics2D.gravity = new Vector2(0f, -_arena.Gravity);
+            // Gravity is authored at arena scale 1 and lives in the world; each body then carries
+            // its own multiplier, so Zone A's milestone growth cannot disturb Zone B's fall.
+            Physics2D.gravity = new Vector2(0f, -Tuning.Gravity);
+            Physics2D.IgnoreLayerCollision(PhysicsLayers.ZoneA, PhysicsLayers.ZoneB, true);
 
             _board = new Board(_context.Tiers, _arena);
             _factory = new BallFactory(_root, _context.Tiers, _board);
+            _factory.SetArenaScale(_arena.Scale);
             _board.Bind(_factory);
             _board.Overflowed += OnOverflow;
 
             _arenaView = new ArenaBuilder(_root, _arena);
-            _aim = new AimController(_camera, _arena.CenterX);
+            // Aiming reads through the ARENA camera: it is the one whose zoom and viewport the
+            // board is drawn under, so a screen column means nothing without it.
+            _aim = new AimController(_rig.Arena, _arena.CenterX);
             _aimBall = FlatBallView.Create("Aim Ball", sortingOrder: 12);
             _aimBall.transform.SetParent(_root, worldPositionStays: false);
 
             _context.Bus.Subscribe<ScoreBarFilled>(OnScoreBarFilled);
+            _context.Bus.Subscribe<ScoreBarCashedIn>(OnCashedIn);
             _context.Bus.Subscribe<ScoreChanged>(OnScoreChanged);
             _context.Bus.Subscribe<ScoreBarChanged>(OnScoreBarChanged);
             _context.Bus.Subscribe<PhaseChanged>(OnPhaseChanged);
@@ -82,13 +118,12 @@ namespace RichCoast.Gameplay.ZoneA
             _context.Bus.Subscribe<ZoneBEmpty>(OnZoneBEmpty);
 
             _hud.RestartRequested += StartRun;
-
-            StartRun();
         }
 
         public void Dispose()
         {
             _context.Bus.Unsubscribe<ScoreBarFilled>(OnScoreBarFilled);
+            _context.Bus.Unsubscribe<ScoreBarCashedIn>(OnCashedIn);
             _context.Bus.Unsubscribe<ScoreChanged>(OnScoreChanged);
             _context.Bus.Unsubscribe<ScoreBarChanged>(OnScoreBarChanged);
             _context.Bus.Unsubscribe<PhaseChanged>(OnPhaseChanged);
@@ -111,6 +146,9 @@ namespace RichCoast.Gameplay.ZoneA
             _depletedAnnounced = false;
             _zoneBEmpty = true;
             _refillTimer = 0f;
+            _pendingZoom = 1f;
+            _zoomElapsed = -1f;
+            SetArenaScale(1f);
             _settleGate.Reset();
 
             var window = _context.Progression.WindowForLevel(_level);
@@ -142,14 +180,24 @@ namespace RichCoast.Gameplay.ZoneA
 
         public void Tick(float deltaMs)
         {
+            // The opening broadcast waits for the first tick: Create() runs system by system, so
+            // anything emitted there would miss every system built after this one — Zone B would
+            // never hear the level-1 score-bar target.
+            if (!_started)
+            {
+                _started = true;
+                StartRun();
+            }
+
             _board.Tick(deltaMs);
             _arenaView.SetDeathLineWarning(_board.NearDeath);
+            AdvanceMilestoneZoom(deltaMs);
 
             if (_runOver) return;
 
             DripRefill(deltaMs);
 
-            _aim.Enabled = _phase == GamePhase.A && _buffer.Count > 0;
+            _aim.Enabled = _phase == GamePhase.A && _buffer.Count > 0 && _zoomElapsed < 0f;
             _aim.Tick(deltaMs);
             RefreshAimBall();
 
@@ -257,12 +305,95 @@ namespace RichCoast.Gameplay.ZoneA
         {
             // One event per level, so a multi-level roll-through arrives as a burst; each level is
             // applied in turn and the burst bonus is paid on the crossings beyond the first.
+            var previousWindow = _context.Progression.WindowForLevel(_level);
             _level++;
             var window = _context.Progression.WindowForLevel(_level);
+
+            // Zoom factors COMPOSE by product, so a burst that overshoots a milestone level still
+            // carries that milestone's growth even though the burst ended on a plain level.
+            _pendingZoom *= BallMath.MilestoneZoomFactor(
+                _context.Tiers,
+                _level,
+                previousWindow,
+                window,
+                _context.Progression.GetStage(_level).Tightness,
+                _context.Progression.IsTailLevel(_level));
+
             _queue.SetWindow(window);
             _buffer.BeginRefill(Progression.BufferForLevel(_level));
             BroadcastProgression();
             RefreshAimBall();
+        }
+
+        /// <summary>
+        /// A cash-in has fully resolved. If it crossed a milestone, the arena grows now — after the
+        /// whole roll-through, so a burst produces one growth beat rather than several.
+        /// </summary>
+        private void OnCashedIn(ScoreBarCashedIn _)
+        {
+            if (Mathf.Approximately(_pendingZoom, 1f)) return;
+
+            BeginMilestoneZoom(_arena.Scale * _pendingZoom);
+            _pendingZoom = 1f;
+        }
+
+        private void BeginMilestoneZoom(float targetScale)
+        {
+            _zoomFrom = _arena.Scale;
+            _zoomTo = targetScale;
+            _zoomElapsed = 0f;
+
+            // Input stays locked for the whole beat: the boundary geometry is mid-tween, so both
+            // aiming and the trap-door would be aiming at something that is no longer there.
+            _aim.Enabled = false;
+            _context.Bus.Emit(new ArenaZoom(true));
+
+            DrainBlacklistedBalls();
+        }
+
+        /// <summary>
+        /// Balls whose tier just fell out of the draw window slide into Zone B rather than lingering
+        /// on a board that can no longer produce their match — otherwise the board slowly fills with
+        /// tiers the player can never merge again.
+        /// </summary>
+        private void DrainBlacklistedBalls()
+        {
+            var floor = _context.Progression.WindowForLevel(_level).Min;
+            for (var i = _board.Balls.Count - 1; i >= 0; i--)
+            {
+                var ball = _board.Balls[i];
+                if (ball.Tier >= floor) continue;
+
+                var spec = ball.Spec;
+                var x = Mathf.Clamp(ball.Position.x, Layout.ZoneB.X + 20f, Layout.ZoneB.Right - 20f);
+                _board.Remove(ball);
+                _context.Bus.Emit(new BallDropped(spec, x));
+            }
+        }
+
+        private void AdvanceMilestoneZoom(float deltaMs)
+        {
+            if (_zoomElapsed < 0f) return;
+
+            _zoomElapsed += deltaMs;
+            var t = Mathf.Clamp01(_zoomElapsed / MilestoneZoomMs);
+            // Ease at both ends: the growth is a deliberate beat, not a jolt.
+            var eased = t * t * (3f - 2f * t);
+            SetArenaScale(Mathf.Lerp(_zoomFrom, _zoomTo, eased));
+
+            if (t < 1f) return;
+
+            _zoomElapsed = -1f;
+            _context.Bus.Emit(new ArenaZoom(false));
+        }
+
+        private void SetArenaScale(float scale)
+        {
+            _arena = new ArenaGeometry(scale);
+            _board.SetArena(_arena);
+            _factory.SetArenaScale(scale);
+            _arenaView.SetArenaScale(scale);
+            _rig.ArenaScale = scale;
         }
 
         private void OnScoreChanged(ScoreChanged e)
@@ -294,17 +425,23 @@ namespace RichCoast.Gameplay.ZoneA
                 _context.Progression.ScoreBarTargetForLevel(_level)));
         }
 
-        public bool TryGrabNearestBall(float mouthX, float doorY, out BallSpec spec)
+        public bool TryGrabNearestBall(float mouthX, float doorY, out GrabbedBall grabbed)
+        {
+            if (!TryPeekNearestBall(mouthX, doorY, out grabbed)) return false;
+            _board.Remove(_board.NearestToDoor(mouthX, doorY));
+            return true;
+        }
+
+        public bool TryPeekNearestBall(float mouthX, float doorY, out GrabbedBall grabbed)
         {
             var ball = _board.NearestToDoor(mouthX, doorY);
             if (ball == null)
             {
-                spec = default;
+                grabbed = default;
                 return false;
             }
 
-            spec = ball.Spec;
-            _board.Remove(ball);
+            grabbed = new GrabbedBall(ball.Spec, ball.Position, ball.Radius);
             return true;
         }
 

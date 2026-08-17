@@ -3,6 +3,8 @@ using RichCoast.Core;
 using RichCoast.Data;
 using RichCoast.Gameplay.Stubs;
 using RichCoast.Gameplay.ZoneA;
+using RichCoast.Gameplay.ZoneB;
+using RichCoast.Gameplay.ZoneC;
 using RichCoast.View;
 using UnityEngine;
 
@@ -20,9 +22,6 @@ namespace RichCoast.Gameplay
 
         /// <summary>Real Zone A and C, stubbed Zone B (fake score, fake busy/empty).</summary>
         ZoneAC,
-
-        /// <summary>Real Zone B driven by a debug harness that fires drops at it.</summary>
-        ZoneB,
     }
 
     /// <summary>
@@ -55,6 +54,9 @@ namespace RichCoast.Gameplay
 
         /// <summary>The live Zone A system, for the debug harness and PlayMode tests. Null if unbuilt.</summary>
         public ZoneASystem ZoneA { get; private set; }
+
+        /// <summary>The live Zone B system, or null when the stub is standing in for it.</summary>
+        public ZoneBSystem ZoneB { get; private set; }
 
         private void Awake()
         {
@@ -101,19 +103,36 @@ namespace RichCoast.Gameplay
                 return;
             }
 
-            _systems.Add(new PhaseDirector(Context.Bus, camera, Context.PanDistance));
+            var rig = new CameraRig(camera, Context.ScreenHeight);
+            _systems.Add(new PhaseDirector(Context.Bus, rig));
 
-            // Zone A is real; Zone B and C stand in until they are migrated. Only the bus couples
-            // them, so swapping a stub for the real system changes nothing here but the line.
             var hud = HudView.Create(transform);
             var zoneARoot = new GameObject("Zone A").transform;
             zoneARoot.SetParent(transform, worldPositionStays: false);
 
-            var zoneA = new ZoneASystem(Context, camera, zoneARoot, hud);
+            var zoneCRoot = new GameObject("Zone C").transform;
+            zoneCRoot.SetParent(transform, worldPositionStays: false);
+
+            var zoneBRoot = new GameObject("Zone B").transform;
+            zoneBRoot.SetParent(transform, worldPositionStays: false);
+
+            var zoneA = new ZoneASystem(Context, rig, zoneARoot, hud);
             ZoneA = zoneA;
             _systems.Add(zoneA);
-            _systems.Add(new StubZoneC(Context.Bus, zoneA));
-            _systems.Add(new StubZoneB(Context.Bus));
+            _systems.Add(new ZoneCSystem(Context, zoneA, zoneCRoot));
+
+            // Only the bus couples the zones, so running against the stub is a one-line swap —
+            // useful when a bug could be on either side of the seam.
+            if (zoneMode == ZoneMode.ZoneAC)
+            {
+                _systems.Add(new StubZoneB(Context.Bus));
+            }
+            else
+            {
+                var zoneB = new ZoneBSystem(Context, zoneBRoot);
+                ZoneB = zoneB;
+                _systems.Add(zoneB);
+            }
         }
 
         /// <summary>

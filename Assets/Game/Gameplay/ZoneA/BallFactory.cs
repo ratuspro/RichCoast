@@ -18,6 +18,7 @@ namespace RichCoast.Gameplay.ZoneA
         private readonly Transform _parent;
         private readonly TierTable _tiers;
         private readonly Board _board;
+        private float _arenaScale = 1f;
         private readonly Stack<Ball> _pool = new Stack<Ball>();
         private readonly Dictionary<int, PhysicsMaterial2D> _surfaces = new Dictionary<int, PhysicsMaterial2D>();
 
@@ -33,12 +34,16 @@ namespace RichCoast.Gameplay.ZoneA
         /// <summary>Total balls ever built — the pool's high-water mark, useful when profiling.</summary>
         public int PoolSize => _created;
 
+        /// <summary>Gravity multiplier applied to new balls, matching the current arena scale.</summary>
+        public void SetArenaScale(float scale) => _arenaScale = scale;
+
         public Ball Spawn(int tier, Vector2 designPosition, Vector2 designVelocity)
         {
             var ball = _pool.Count > 0 ? _pool.Pop() : CreateBall();
             var radius = _tiers.RadiusForTier(tier);
 
-            ball.Configure(tier, radius, MassForTier(tier, radius), SurfaceForTier(tier), _tiers.MaterialForTier(tier));
+            ball.Configure(tier, radius, MassForTier(tier, radius), _arenaScale, SurfaceForTier(tier),
+                _tiers.MaterialForTier(tier));
             ball.gameObject.SetActive(true);
             ball.SetSimulated(true);
             ball.Place(designPosition, designVelocity);
@@ -63,10 +68,12 @@ namespace RichCoast.Gameplay.ZoneA
             // view and owes it nothing else.
             var view = FlatBallView.Create($"Ball {_created} View", sortingOrder: 10);
             view.transform.SetParent(_parent, worldPositionStays: false);
+            // Zone A is drawn by its own camera, which culls by layer — a view left on the default
+            // layer would simply never appear.
+            view.gameObject.layer = PhysicsLayers.ZoneA;
 
             var go = new GameObject($"Ball {_created}");
             go.transform.SetParent(_parent, worldPositionStays: false);
-            go.layer = _parent.gameObject.layer;
 
             var body = go.AddComponent<Rigidbody2D>();
             body.bodyType = RigidbodyType2D.Dynamic;
@@ -77,6 +84,7 @@ namespace RichCoast.Gameplay.ZoneA
             body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             body.interpolation = RigidbodyInterpolation2D.Interpolate;
 
+            go.layer = PhysicsLayers.ZoneA;
             go.AddComponent<CircleCollider2D>();
 
             var ball = go.AddComponent<Ball>();

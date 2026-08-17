@@ -42,6 +42,16 @@ namespace RichCoast.Tests
         }
 
         [Test]
+        public void AnUnreasonableAspectStillLeavesTheBoardOnScreen()
+        {
+            // A landscape editor window (or a batchmode stub) must not frame Zone A out of
+            // existence — the game clamps rather than trusting whatever the screen reports.
+            var landscape = Layout.ScreenHeightForAspect(4f / 3f);
+            Assert.That(landscape, Is.GreaterThanOrEqualTo(Layout.ZoneA.Height));
+            Assert.That(Layout.ScreenHeightForAspect(0.1f), Is.LessThanOrEqualTo(Layout.WorldHeight));
+        }
+
+        [Test]
         public void PanDistanceIsZoneBsOverhangBelowTheScreen()
         {
             Assert.That(PhaseGeometry.DesignPanDistance, Is.EqualTo(394f));

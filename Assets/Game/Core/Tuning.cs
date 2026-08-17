@@ -128,6 +128,49 @@ namespace RichCoast.Core
         /// <summary>Distance below the death line within which a resting ball flags the red warning line.</summary>
         public const float WarnBand = 28f;
 
+        // --- Zone B ----------------------------------------------------------
+
+        /// <summary>
+        /// Zone B ball radius. Deliberately tiny: many balls coexist in the cascade, and at this
+        /// size colour alone carries a ball's identity.
+        /// </summary>
+        public const float ZoneBBallRadius = 10f;
+
+        /// <summary>Physical thickness of a gate bar.</summary>
+        public const float GateThickness = 16f;
+
+        /// <summary>Zone B surface feel, before each material's own multipliers.</summary>
+        public const float ZoneBRestitution = 0.35f;
+
+        /// <summary>Cap on restitution after the material multiplier, so exotic tiers stay lively
+        /// without ping-ponging the cascade forever.</summary>
+        public const float ZoneBRestitutionMax = 0.5f;
+
+        public const float ZoneBFriction = 0.05f;
+        public const float ZoneBFrictionAir = 0.008f;
+
+        /// <summary>
+        /// Freshly-split balls ignore gates briefly, or a copy born touching the bar it was just
+        /// split by would split again immediately and the cascade would run away.
+        /// </summary>
+        public const float SplitGraceMs = 300f;
+
+        /// <summary>Angular spread of a split fan (radians) and how far copies are offset from the hit.</summary>
+        public const float SplitSpread = 0.8f;
+        public const float SplitOffset = 18f;
+
+        /// <summary>Launch speed of a split copy, per step at 60 Hz.</summary>
+        public const float SplitSpeed = 3f;
+
+        /// <summary>
+        /// Hard cap on balls in flight. A deep cascade is the point, but a budget phone cannot
+        /// simulate an unbounded one — beyond this a split simply stops adding copies.
+        /// </summary>
+        public const int ZoneBMaxBalls = 200;
+
+        /// <summary>Levels a single cash-in may roll through before the excess is forfeited.</summary>
+        public const int MaxLevelsPerCashIn = 10;
+
         // --- Input -----------------------------------------------------------
 
         /// <summary>Brief lock-out after a drop so the next ball can't be slammed into the same spot.</summary>

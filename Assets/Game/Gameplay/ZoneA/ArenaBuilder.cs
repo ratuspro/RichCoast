@@ -38,6 +38,7 @@ namespace RichCoast.Gameplay.ZoneA
 
             var lineGo = new GameObject("Death Line");
             lineGo.transform.SetParent(parent, worldPositionStays: false);
+            lineGo.layer = PhysicsLayers.ZoneA;
             _deathLine = PlaceholderArt.AttachRenderer(lineGo, PlaceholderArt.Square, DeathLineColor, sortingOrder: 5);
             _deathLine.enabled = false;
 
@@ -74,7 +75,7 @@ namespace RichCoast.Gameplay.ZoneA
             {
                 var go = new GameObject(name);
                 go.transform.SetParent(parent, worldPositionStays: false);
-                go.layer = parent.gameObject.layer;
+                go.layer = PhysicsLayers.ZoneA;
                 _transform = go.transform;
                 _collider = go.AddComponent<BoxCollider2D>();
                 PlaceholderArt.AttachRenderer(go, PlaceholderArt.Square, WallColor, sortingOrder: 0);
