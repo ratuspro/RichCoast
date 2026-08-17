@@ -1,0 +1,21 @@
+{
+    "name": "RichCoast.Editor",
+    "rootNamespace": "RichCoast.EditorTools",
+    "references": [
+        "RichCoast.Core",
+        "RichCoast.Data",
+        "RichCoast.Gameplay",
+        "RichCoast.View"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

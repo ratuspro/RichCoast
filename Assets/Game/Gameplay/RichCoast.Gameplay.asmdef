@@ -1,0 +1,20 @@
+{
+    "name": "RichCoast.Gameplay",
+    "rootNamespace": "RichCoast.Gameplay",
+    "references": [
+        "RichCoast.Core",
+        "RichCoast.Data",
+        "RichCoast.View",
+        "Unity.InputSystem",
+        "GameAnalyticsSDK"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

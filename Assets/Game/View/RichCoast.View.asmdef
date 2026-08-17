@@ -1,0 +1,17 @@
+{
+    "name": "RichCoast.View",
+    "rootNamespace": "RichCoast.View",
+    "references": [
+        "RichCoast.Core",
+        "RichCoast.Data"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

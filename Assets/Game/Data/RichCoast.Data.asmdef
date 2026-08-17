@@ -1,0 +1,16 @@
+{
+    "name": "RichCoast.Data",
+    "rootNamespace": "RichCoast.Data",
+    "references": [
+        "RichCoast.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
