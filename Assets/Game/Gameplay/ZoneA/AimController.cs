@@ -44,7 +44,10 @@ namespace RichCoast.Gameplay.ZoneA
             if (pointer == null) return;
 
             var down = pointer.press.isPressed;
-            if (down) TrackAim(pointer.position.ReadValue());
+            // Only read the pointer while aiming is actually live. The arena camera is switched off
+            // during the Zone B phase, and asking a camera with no viewport to unproject a screen
+            // point is meaningless — it just warns, once per frame.
+            if (down && Enabled && _camera.isActiveAndEnabled) TrackAim(pointer.position.ReadValue());
 
             var released = _pressed && !down;
             _pressed = down;

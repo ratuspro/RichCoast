@@ -42,8 +42,18 @@ namespace RichCoast.Core
         /// screen, so the B-phase brings Zone B's bottom edge exactly flush with the screen
         /// bottom. On the design screen this is 1238 − 844 = 394.
         /// </summary>
-        public static float PanDistanceFor(float screenHeight) =>
-            Mathf.Max(0f, Layout.WorldHeight - screenHeight);
+        public static float PanDistanceFor(float screenHeight)
+        {
+            var overhang = Mathf.Max(0f, Layout.WorldHeight - screenHeight);
+            // Never pan so far that Zone A is cropped away entirely. On a portrait phone the
+            // overhang (394) is comfortably short of that, but a wide editor game view would
+            // otherwise leave the arena camera with a zero-height viewport — and a camera with no
+            // viewport cannot answer the screen-to-world question aiming depends on.
+            return Mathf.Min(overhang, ArenaViewHeightA - MinArenaViewportHeight);
+        }
+
+        /// <summary>Sliver of Zone A that stays on screen in the B phase, whatever the aspect.</summary>
+        public const float MinArenaViewportHeight = 40f;
 
         /// <summary>Pan distance on the authored design screen (394) — the value the tests pin.</summary>
         public static float DesignPanDistance => PanDistanceFor(Layout.DesignScreenHeight);

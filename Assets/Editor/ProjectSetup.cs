@@ -171,6 +171,20 @@ namespace RichCoast.EditorTools
             Debug.Log($"[RichCoast] Rebuilt {GameScenePath}.");
         }
 
+        /// <summary>
+        /// Open the game scene and start playing. Exists so a run can be launched from a terminal
+        /// (`-executeMethod RichCoast.EditorTools.ProjectSetup.PlayGame`) as well as from the menu.
+        /// </summary>
+        [MenuItem("Rich Coast/Play Game")]
+        public static void PlayGame()
+        {
+            if (EditorApplication.isPlaying) return;
+
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EditorSceneManager.OpenScene(GameScenePath, OpenSceneMode.Single);
+            EditorApplication.EnterPlaymode();
+        }
+
         /// <summary>Make the given scene the one and only scene in the build.</summary>
         private static void SetBuildScenes(string scenePath)
         {
