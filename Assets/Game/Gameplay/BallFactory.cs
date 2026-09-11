@@ -85,9 +85,13 @@ namespace RichCoast.Game
             body.constraints = RigidbodyConstraints2D.None;
             go.AddComponent<CircleCollider2D>();
 
+            // Body → View (squash pivot: rotates/scales in the contact frame) → Face (the sprite,
+            // counter-rotated so it only ever turns with the body; see BallView).
             var viewGo = new GameObject("View");
             viewGo.transform.SetParent(go.transform, false);
-            var sr = viewGo.AddComponent<SpriteRenderer>();
+            var faceGo = new GameObject("Face");
+            faceGo.transform.SetParent(viewGo.transform, false);
+            var sr = faceGo.AddComponent<SpriteRenderer>();
             sr.sortingLayerName = sortingLayer;
             sr.sortingOrder = 10;
             var view = viewGo.AddComponent<BallView>();

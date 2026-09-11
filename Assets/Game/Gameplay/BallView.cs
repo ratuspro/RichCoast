@@ -4,13 +4,21 @@ using UnityEngine;
 namespace RichCoast.Game
 {
     /// <summary>
-    /// The ball's face + juice, on a child of the physics body so its scale animations never touch
-    /// the collider. Owns landing squash & stretch (along the contact normal), the merge-birth pop,
+    /// The ball's juice, on a child of the physics body so its scale animations never touch the
+    /// collider. Owns landing squash & stretch (along the contact normal), the merge-birth pop,
     /// the blast punch, and a subtle idle breathing wobble — all driven by <see cref="GameFeelSO"/>.
+    /// <para>
+    /// This transform is the squash pivot: it turns to put its local y on the contact normal and
+    /// scales non-uniformly there. The sprite lives on a "Face" child that is counter-rotated by
+    /// the same angle, so the face's world rotation is always exactly the body's — the visible
+    /// roll comes from physics alone, and the squash reaches the face as a shear rather than a
+    /// snap to a new orientation.
+    /// </para>
     /// </summary>
     public sealed class BallView : MonoBehaviour
     {
         SpriteRenderer sprite;
+        Transform face;
         GameFeelSO feel;
         float diameter = 1f;
         Vector2 squash = Vector2.one;   // multiplicative squash/stretch, tweened back to 1
@@ -24,13 +32,20 @@ namespace RichCoast.Game
         public void Init(GameFeelSO feelSo)
         {
             feel = feelSo;
-            if (sprite == null) sprite = GetComponent<SpriteRenderer>();
+            FindFace();
             wobblePhase = Random.value * Mathf.PI * 2f;
+        }
+
+        void FindFace()
+        {
+            if (sprite != null) return;
+            sprite = GetComponentInChildren<SpriteRenderer>();
+            face = sprite != null ? sprite.transform : null;
         }
 
         public void SetTier(int tier, float radius)
         {
-            if (sprite == null) sprite = GetComponent<SpriteRenderer>();
+            FindFace();
             sprite.sprite = BallArt.SpriteForTier(tier);
             diameter = radius * 2f;
             squash = Vector2.one;
@@ -94,12 +109,15 @@ namespace RichCoast.Game
         {
             float wobble = feel != null ? 1f + Mathf.Sin(wobblePhase) * feel.idleWobble : 1f;
             float wobbleY = feel != null ? 1f - Mathf.Sin(wobblePhase) * feel.idleWobble : 1f;
-            // Squash is expressed in the contact frame: rotate the sprite so its local y aligns with
-            // the normal, then scale y by the "along" factor and x by the "across" factor.
-            // The parent body rolls, so express the world-space normal in the parent's frame.
+            // Squash is expressed in the contact frame: turn this pivot so its local y aligns with
+            // the (world-space) normal, then scale y by the "along" factor and x by the "across"
+            // factor. The parent body rolls, so express the normal in the parent's frame — and
+            // counter-rotate the face by the same angle so the sprite itself never turns except
+            // with the body.
             float angle = Mathf.Atan2(squashAxis.y, squashAxis.x) * Mathf.Rad2Deg - 90f;
             if (transform.parent != null) angle -= transform.parent.eulerAngles.z;
             transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+            if (face != null) face.localRotation = Quaternion.Euler(0f, 0f, -angle);
             transform.localScale = new Vector3(diameter * squash.x * punch * wobble, diameter * squash.y * punch * wobbleY, 1f);
         }
     }
