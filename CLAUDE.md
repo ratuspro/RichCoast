@@ -76,6 +76,12 @@ Two lanes; **they are mutually exclusive** (the editor holds a project lock):
    - `Tools/run-tests.sh [--platform EditMode|PlayMode] [--filter X]` — NUnit results parsed,
      non-zero on any failure. PlayMode keeps graphics (the screenshot test needs them).
    - `Tools/screenshot.sh` — renders a populated board to `Logs/game-scene.png` (1080×2340).
+   - `Tools/build-android.sh [--no-install]` — development APK to `Builds/Android/RichCoast.apk`
+     (`ProjectSetup.BuildAndroid`, `-buildTarget Android`), then `adb install` + launch + a
+     `logcat -s Unity` tail using the editor module's bundled SDK. `Assets/Editor/
+     AndroidManifestPatcher.cs` injects `VIBRATE` into the generated manifest (the JNI haptics
+     path doesn't trigger Unity's auto-permission). The Play-Core `AssetPackManager`
+     ClassNotFoundException at boot is benign Unity noise.
 2. **Editor open + Coplay MCP** (`check_compile_errors`, `play_game`, `capture_*`,
    `get_unity_logs`, `execute_script`) for live iteration and visual checks. Menu items:
    `RichCoast/Apply Project Setup`, `RichCoast/Build Data Assets + Main Scene`,
@@ -86,8 +92,11 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 
 ## Status
 
-**Milestone 1 (Zone A vertical slice + mobile UI shell) is implemented and green headlessly;
-it has not yet been played on a device.** The scene boots from one `GameBootstrap`: tray
+**Milestone 1 (Zone A vertical slice + mobile UI shell) is implemented, green headlessly, and
+runs on a Pixel 7 (Android 16, Vulkan) from `Tools/build-android.sh`** — boot, drops, merges
+with juice, the stub bank/level-up/refill loop and the safe-area HUD all verified via adb
+(2026-09-11); the user's hands-on feel sign-off (touch, haptics, audio, perf) and any resulting
+`GameFeel.asset` tuning are still pending. The scene boots from one `GameBootstrap`: tray
 (walls + V funnel, pine rails on paper), pooled procedurally-painted material balls, drag-to-aim
 ghost with a dashed drop guide, finite ball buffer (`ProgressionCurve.BufferForLevel`), merges
 with blast/pop/sparks/flash/SFX/haptics, death line with proximity warning, overflow + stalemate
@@ -101,8 +110,9 @@ theme moods are M3. EditMode: 57 tests. PlayMode: boot, merge, no-merge stacking
 
 Next: **M2** Zone C door + Zone B arena + phase pan (delete the stub) · **M3** progression
 milestones (arena growth as ortho-size tween, blacklist drains, palette cross-fades) · **M4**
-UI polish pass · **M5** analytics, perf, store prep. First real step: an Android Build & Run
-feel session, tuning `GameFeel.asset` on the device.
+UI polish pass · **M5** analytics, perf, store prep. First real step: the user's on-device feel
+session, tuning `GameFeel.asset` (values are live-editable in play mode, but a device rebuild
+is needed to feel them on the phone).
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's
 > state *now* — a single snapshot, not a changelog.

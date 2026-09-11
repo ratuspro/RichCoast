@@ -152,5 +152,35 @@ namespace RichCoast.EditorTools
             var ok = EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             Debug.Log($"[ProjectSetup] switch to Android: {(ok ? "ok" : "FAILED (module installed?)")}");
         }
+
+        /// <summary>
+        /// Headless Android build (<c>Tools/build-android.sh</c> →
+        /// <c>-executeMethod RichCoast.EditorTools.ProjectSetup.BuildAndroid</c>). Writes
+        /// <c>Builds/Android/RichCoast.apk</c> (a development build so the device log is readable)
+        /// and exits non-zero on failure so the script can stop before trying to install.
+        /// Pass <c>-buildTarget Android</c> on the command line so the target switch happens at
+        /// launch rather than mid-build.
+        /// </summary>
+        public static void BuildAndroid()
+        {
+            const string outPath = "Builds/Android/RichCoast.apk";
+            Directory.CreateDirectory(Path.GetDirectoryName(outPath));
+            EditorUserBuildSettings.buildAppBundle = false;
+
+            var options = new BuildPlayerOptions
+            {
+                scenes = new[] { "Assets/Scenes/Main.unity" },
+                locationPathName = outPath,
+                target = BuildTarget.Android,
+                targetGroup = BuildTargetGroup.Android,
+                options = BuildOptions.Development,
+            };
+            var report = BuildPipeline.BuildPlayer(options);
+            var summary = report.summary;
+            Debug.Log($"[ProjectSetup] android build {summary.result}: {summary.totalSize / (1024 * 1024)} MB, " +
+                      $"{summary.totalErrors} errors, {summary.totalWarnings} warnings → {outPath}");
+            if (summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded && Application.isBatchMode)
+                EditorApplication.Exit(1);
+        }
     }
 }

@@ -57,9 +57,11 @@ namespace RichCoast.Game
             col.sharedMaterial = BallArt.PhysicsMaterialForTier(tier, ladder);
             // Mass from density × area, tapered for big tiers, × the material's density feel.
             // Ladder density is per design-px²; scale into units² so the absolute masses stay sane.
+            // Auto-mass must be on BEFORE the density write — Physics2D rejects (and warns about)
+            // a density set on a collider whose body isn't yet using auto-mass.
             double designDensity = ladder.DensityForTier(tier) * Materials.ForTier(tier).Def.Physics.DensityMult;
-            col.density = (float)(designDensity / (DesignSpace.UnitsPerPixel * DesignSpace.UnitsPerPixel)) * 0.01f;
             body.useAutoMass = true;
+            col.density = (float)(designDensity / (DesignSpace.UnitsPerPixel * DesignSpace.UnitsPerPixel)) * 0.01f;
             return ball;
         }
 
