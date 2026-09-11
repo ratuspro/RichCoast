@@ -1,0 +1,25 @@
+{
+    "name": "RichCoast.EditorTools",
+    "rootNamespace": "RichCoast.EditorTools",
+    "references": [
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.TextMeshPro",
+        "Unity.TextMeshPro.Editor",
+        "RichCoast.Core",
+        "RichCoast.Game",
+        "RichCoast.UI",
+        "RichCoast.App"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

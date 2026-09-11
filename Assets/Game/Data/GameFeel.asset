@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 293aa68a6260d5443b8e4a5f212b1d99, type: 3}
+  m_Name: GameFeel
+  m_EditorClassIdentifier: RichCoast.Game::RichCoast.Game.GameFeelSO
+  gravityScale: 2.5
+  linearDamping: 0.15
+  angularDamping: 0.6
+  floorFriction: 0.02
+  maxBallSpeed: 24
+  blastRadius: 1.6
+  blastStrength: 2.6
+  restSpeed: 1.2
+  restMs: 1000
+  dropCooldownMs: 250
+  landSquash: 0.22
+  landSquashFullSpeed: 12
+  landSquashMinSpeed: 2.5
+  landSquashMs: 140
+  birthScaleFrom: 0.55
+  birthPopMs: 260
+  blastPunch: 0.1
+  idleWobble: 0.012
+  idleWobbleHz: 0.9
+  burstParticles: 12
+  burstSpeedMin: 1.2
+  burstSpeedMax: 3.4
+  burstLifeMs: 380
+  flashRingScale: 1.9
+  flashRingMs: 240
+  comboWindowMs: 1500
+  comboMaxStep: 8
+  masterVolume: 0.6
+  mergeHapticMs: 12
+  mergeHapticAmp: 90
+  heavyHapticFromTier: 5
+  heavyHapticMs: 28
+  heavyHapticAmp: 200
+  dropHapticMs: 6
+  dropHapticAmp: 45
+  bufferTickMs: 130
+  bufferTickMinMs: 55
+  scoreFlyMs: 620
+  scoreCountUpMs: 420

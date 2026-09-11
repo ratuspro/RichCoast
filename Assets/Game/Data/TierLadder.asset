@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9161ba10e1d95094e89e81345677ab8b, type: 3}
+  m_Name: TierLadder
+  m_EditorClassIdentifier: RichCoast.Game::RichCoast.Game.TierLadderSO
+  radii:
+  - 17
+  - 22
+  - 28
+  - 34
+  - 41
+  - 50
+  - 60
+  - 71
+  - 84
+  - 99
+  radiusGrowth: 1.18
+  frictionBase: 0.4
+  frictionStep: 0.025
+  frictionMax: 0.5
+  density: 0.02
+  densityTaperTier: 8
+  densityMassExp: 1
+  restitution: 0.2
+  tailMilestoneZoom: 1.2

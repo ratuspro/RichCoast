@@ -1,0 +1,25 @@
+{
+    "name": "RichCoast.Tests.PlayMode",
+    "rootNamespace": "RichCoast.Tests.PlayMode",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "RichCoast.Core",
+        "RichCoast.Game",
+        "RichCoast.UI",
+        "RichCoast.App"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
