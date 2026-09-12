@@ -39,8 +39,6 @@ namespace RichCoast.Game
         public int BallCount => balls.Count;
         public bool IsOver => over;
         public IEnumerable<Ball> Balls => balls;
-        /// <summary>The arena growth factor world speeds scale with (impact/rest thresholds divide by it).</summary>
-        public float SpeedScale => geometry.Scale;
 
         /// <summary>A ball taken off the board by the blacklist drain: where it was and how big it looked.</summary>
         public readonly struct DrainedBall
@@ -86,10 +84,10 @@ namespace RichCoast.Game
             ScanOverflow(deltaMs);
         }
 
-        /// <summary>Per-physics-step: the anti-tunnel speed cap (scaled with the arena).</summary>
+        /// <summary>Per-physics-step: the anti-tunnel speed cap.</summary>
         public void FixedTick()
         {
-            float cap = feel.maxBallSpeed * geometry.Scale;
+            float cap = feel.maxBallSpeed;
             float capSq = cap * cap;
             foreach (var ball in balls)
             {
@@ -100,12 +98,12 @@ namespace RichCoast.Game
 
         /// <summary>
         /// True when nothing on the board is still in motion: no merges waiting, every body asleep or
-        /// below the (scale-normalized) rest speed. Drives the depletion settle gate.
+        /// below the rest speed. Drives the depletion settle gate.
         /// </summary>
         public bool IsSettled()
         {
             if (pending.Count > 0) return false;
-            float restSpeed = feel.restSpeed * geometry.Scale;
+            float restSpeed = feel.restSpeed;
             foreach (var ball in balls)
             {
                 if (!ball.Body.IsSleeping() && ball.Speed >= restSpeed) return false;
@@ -165,16 +163,6 @@ namespace RichCoast.Game
             return drained;
         }
 
-        /// <summary>The arena scale changed (milestone growth): re-normalise every live body's gravity.</summary>
-        public void OnArenaScaled()
-        {
-            foreach (var ball in balls)
-            {
-                ball.Body.gravityScale = factory.GravityScale;
-                ball.Body.WakeUp();
-            }
-        }
-
         /// <summary>Freeze the board (game over): bodies stop simulating, nothing more resolves.</summary>
         public void Freeze()
         {
@@ -222,8 +210,8 @@ namespace RichCoast.Game
         /// <summary>Push nearby balls outward from a merge point (additive velocity kick + a scale punch).</summary>
         void ApplyBlast(Vector2 origin, Ball exclude)
         {
-            float radius = feel.blastRadius * geometry.Scale;
-            float strength = feel.blastStrength * geometry.Scale;
+            float radius = feel.blastRadius;
+            float strength = feel.blastStrength;
             foreach (var ball in balls)
             {
                 if (ball == exclude) continue;
@@ -241,7 +229,7 @@ namespace RichCoast.Game
         {
             double line = DesignSpace.DeathLineY;
             double band = DesignSpace.WarnBand;
-            float restSpeed = feel.restSpeed * geometry.Scale;
+            float restSpeed = feel.restSpeed;
             bool near = false;
             foreach (var ball in balls)
             {

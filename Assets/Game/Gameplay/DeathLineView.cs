@@ -34,7 +34,7 @@ namespace RichCoast.Game
         public void Reposition()
         {
             line.transform.position = new Vector3(0f, geometry.DeathLineY, 0f);
-            line.transform.localScale = new Vector3(geometry.MaxX - geometry.MinX, Thickness * geometry.Scale, 1f);
+            line.transform.localScale = new Vector3(geometry.MaxX - geometry.MinX, Thickness, 1f);
         }
 
         public void SetDanger(bool on)

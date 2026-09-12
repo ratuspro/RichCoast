@@ -1,4 +1,3 @@
-using RichCoast.Core;
 using UnityEngine;
 
 namespace RichCoast.Game
@@ -7,27 +6,23 @@ namespace RichCoast.Game
     /// One orthographic camera that fits the BOARD WIDTH to the screen width: extra vertical room on
     /// taller phones becomes headroom, never letterboxing. Two framings, blended by <see cref="Pan"/>:
     /// <list type="bullet">
-    /// <item><b>A (pan 0)</b> — frames the grown tray (<c>10 × ViewScale</c> units wide) with its top
-    /// edge pinned just above the ceiling with room for the HUD bar (inset by the safe area); Zone C
-    /// and the top of Zone B show underneath, at 1/ViewScale once the arena has grown.</item>
-    /// <item><b>B (pan 1)</b> — frames Zone B at its native 10-unit width with its bottom edge (the
-    /// score bar) pinned to the screen bottom (inset by the safe area); a sliver of Zone A stays
-    /// visible under the HUD.</item>
+    /// <item><b>A (pan 0)</b> — the top edge is pinned just above the tray's ceiling with room for the
+    /// HUD bar (inset by the safe area); Zone C and the top of Zone B show underneath.</item>
+    /// <item><b>B (pan 1)</b> — Zone B's bottom edge (the score bar) is pinned to the screen bottom
+    /// (inset by the safe area); a sliver of Zone A stays visible under the HUD.</item>
     /// </list>
-    /// On the 390×844 design screen the two differ by exactly <c>DesignSpace.PanDistance</c> at scale 1.
-    /// <see cref="ViewScale"/> is the milestone zoom: <see cref="ArenaGrowth"/> tweens it up to the
-    /// new <see cref="BoardGeometry.Scale"/> while the physics have already snapped there, so the
-    /// zoom-out is one smooth ortho-size tween of this same camera.
+    /// On the 390×844 design screen the two differ by exactly <c>DesignSpace.PanDistance</c>; on a
+    /// taller phone the B framing simply reveals more of Zone A. The camera never zooms: milestone
+    /// arena growth shrinks Zone A's balls in place (<see cref="ArenaGrowth"/>), so every zone keeps
+    /// its screen size for the whole run.
     /// </summary>
     public sealed class CameraRig : MonoBehaviour
     {
         public Camera Cam { get; private set; }
         BoardGeometry geometry;
         float lastAspect = -1f;
-        float lastViewScale = -1f;
         float lastPan = -1f;
         float pan;
-        float viewScale = 1f;
 
         /// <summary>0 = A framing (top pinned), 1 = B framing (bottom pinned). Tweened by the PhaseDirector.</summary>
         public float Pan
@@ -36,38 +31,27 @@ namespace RichCoast.Game
             set => pan = Mathf.Clamp01(value);
         }
 
-        /// <summary>The arena scale the A framing currently shows (tweened toward <see cref="BoardGeometry.Scale"/> by the milestone zoom).</summary>
-        public float ViewScale
-        {
-            get => viewScale;
-            set => viewScale = Mathf.Max(0.01f, value);
-        }
-
         public void Init(Camera cam, BoardGeometry geometry)
         {
             Cam = cam;
             this.geometry = geometry;
             cam.orthographic = true;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            Themed.Bind(cam, ThemeKey.Paper);
-            viewScale = geometry.Scale;
+            Themed.Bind(cam, RichCoast.Core.ThemeKey.Paper);
             Apply();
         }
 
         void LateUpdate()
         {
             if (Cam == null) return;
-            if (!Mathf.Approximately(Cam.aspect, lastAspect) || !Mathf.Approximately(viewScale, lastViewScale) || !Mathf.Approximately(pan, lastPan)) Apply();
+            if (!Mathf.Approximately(Cam.aspect, lastAspect) || !Mathf.Approximately(pan, lastPan)) Apply();
         }
 
         public void Apply()
         {
             lastAspect = Cam.aspect;
-            lastViewScale = viewScale;
             lastPan = pan;
-            // Framed half-width: the grown tray in A, Zone B's native width in B.
-            float baseHalf = BoardGeometry.Units(DesignSpace.Width / 2);
-            float halfWidth = baseHalf * Mathf.Lerp(viewScale, 1f, pan);
+            float halfWidth = geometry.HalfWidth;
             Cam.orthographicSize = halfWidth / Cam.aspect;
             // Safe-area insets (screen px → world units at this framing).
             float unitsPerPx = (halfWidth * 2f) / Screen.width;
@@ -76,10 +60,10 @@ namespace RichCoast.Game
             Cam.transform.position = new Vector3(0f, Mathf.Lerp(FramingAY(safeTop), FramingBY(safeTop, safeBottom), pan), -10f);
         }
 
-        /// <summary>Camera y for the A framing: the top edge pinned above the (shown) tray + HUD.</summary>
+        /// <summary>Camera y for the A framing: the top edge pinned above the tray + HUD.</summary>
         float FramingAY(float safeTop)
         {
-            float top = (BoardGeometry.Units(DesignSpace.BoardHeight) + geometry.HudHeight) * viewScale + safeTop;
+            float top = geometry.CeilingY + geometry.HudHeight + safeTop;
             return top - Cam.orthographicSize;
         }
 

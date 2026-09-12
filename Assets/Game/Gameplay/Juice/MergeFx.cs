@@ -55,7 +55,6 @@ namespace RichCoast.Game
 
         public void Play(Vector2 origin, int mergedTier, float radius)
         {
-            float s = geometry.Scale;
             var accent = BallArt.Rgb(Materials.ForTier(mergedTier).Def.AccentColor);
 
             // Sparks along the merged ball's rim, flying outward.
@@ -64,8 +63,8 @@ namespace RichCoast.Game
                 float a = Random.value * Mathf.PI * 2f;
                 var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
                 emit.position = origin + dir * radius;
-                emit.velocity = dir * Random.Range(feel.burstSpeedMin, feel.burstSpeedMax) * s;
-                emit.startSize = Random.Range(0.12f, 0.22f) * s;
+                emit.velocity = dir * Random.Range(feel.burstSpeedMin, feel.burstSpeedMax);
+                emit.startSize = Random.Range(0.12f, 0.22f);
                 emit.startColor = Color.Lerp(accent, Color.white, Random.value * 0.5f);
                 emit.startLifetime = feel.burstLifeMs / 1000f * Random.Range(0.6f, 1f);
                 sparks.Emit(emit, 1);

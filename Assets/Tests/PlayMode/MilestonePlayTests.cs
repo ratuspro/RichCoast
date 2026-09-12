@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Linq;
 using NUnit.Framework;
 using RichCoast.App;
 using RichCoast.Core;
@@ -45,7 +46,7 @@ namespace RichCoast.Tests.PlayMode
             yield return new WaitForSeconds(0.5f);
             Assert.AreEqual(19, boot.ZoneA.Level);
             Assert.AreEqual(0, zooms, "no ArenaZoom before a draw-window milestone");
-            Assert.That(boot.Geometry.Scale, Is.EqualTo(1f).Within(1e-5f));
+            Assert.That(boot.ArenaScale, Is.EqualTo(1f).Within(1e-5f));
             Assert.IsTrue(Theme.Active.SameAs(Palettes.Workshop), "the workshop look holds until a milestone");
         }
 
@@ -54,14 +55,18 @@ namespace RichCoast.Tests.PlayMode
         {
             yield return LoadMain();
             var boot = Boot();
-            var rig = boot.Cam.GetComponent<CameraRig>();
             float orthoBefore = boot.Cam.orthographicSize;
 
-            // Two obsolete balls (tiers 1 and 2 are blacklisted once the window shifts to [5,8]), apart so they never merge.
-            boot.DebugDrop(-3f, 1);
-            boot.DebugDrop(3f, 2);
+            // Two obsolete balls (tiers 1 and 2 are blacklisted once the window shifts to [5,8]) plus one
+            // that survives (tier 5), spaced so none of them merge.
+            boot.DebugDrop(-3.5f, 1);
+            boot.DebugDrop(3.5f, 2);
+            boot.DebugDrop(0f, 5);
             yield return new WaitForSeconds(1.5f);
-            Assert.AreEqual(2, boot.Board.BallCount);
+            Assert.AreEqual(3, boot.Board.BallCount);
+            var keeper = boot.Board.Balls.First(b => b.Tier == 5);
+            float radiusBefore = keeper.Radius;
+            float massBefore = keeper.Body.mass;
 
             bool zoomStarted = false, zoomEnded = false, zoneBBusy = false;
             int themeTicks = 0;
@@ -76,19 +81,24 @@ namespace RichCoast.Tests.PlayMode
             Assert.IsTrue(boot.ZoneA.IsMilestoneZoomActive);
             Assert.IsFalse(boot.ZoneC.IsArmed, "the door is locked during the zoom");
 
-            // The physics snapped to the new scale up front: neutral growth 4→8 (71/34) × tightness 0.92.
+            // The arena scale is in force up front: neutral growth 4→8 (71/34) × tightness 0.92.
             var ladder = TierLadder.Default;
             float expected = (float)(ladder.NeutralGrowth(4, 8) * 0.92);
-            Assert.That(boot.Geometry.Scale, Is.EqualTo(expected).Within(1e-4f));
-            Assert.That(rig.ViewScale, Is.LessThan(expected), "the camera zoom is tweened, not snapped");
+            Assert.That(boot.ArenaScale, Is.EqualTo(expected).Within(1e-4f));
+            Assert.That(keeper.Radius, Is.GreaterThan(radiusBefore / expected), "the balls shrink over the tween, not in one snap");
+            Assert.IsFalse(keeper.Body.simulated, "Zone A bodies are frozen while they re-seat");
 
             yield return WaitUntil(() => zoomEnded, 8f);
             Assert.IsTrue(zoomEnded, "ArenaZoom(false) must follow once the drain has landed");
             Assert.IsFalse(boot.ZoneA.IsMilestoneZoomActive);
-            Assert.That(rig.ViewScale, Is.EqualTo(expected).Within(1e-4f), "the camera landed on the new scale");
-            Assert.That(boot.Cam.orthographicSize, Is.GreaterThan(orthoBefore), "the A framing zoomed out");
+            Assert.That(boot.Cam.orthographicSize, Is.EqualTo(orthoBefore).Within(1e-4f), "the camera never zooms — the balls recede instead");
 
-            Assert.AreEqual(0, boot.Board.BallCount, "both blacklisted balls drained off the board");
+            Assert.AreEqual(1, boot.Board.BallCount, "both blacklisted balls drained off the board; the tier-5 ball stays");
+            Assert.IsTrue(keeper.Body.simulated, "physics resumes once the balls have re-seated");
+            Assert.That(keeper.Radius, Is.EqualTo(radiusBefore / expected).Within(1e-4f), "the survivor is 1/scale of its ladder size");
+            Assert.That(keeper.Collider.radius, Is.EqualTo(keeper.Radius).Within(1e-4f));
+            Assert.That(keeper.Body.mass, Is.EqualTo(massBefore).Within(massBefore * 0.02f), "a shrunken ball keeps its ladder weight (density × scale²)");
+            Assert.That(boot.Board.Balls.First().Radius, Is.EqualTo(keeper.Radius).Within(1e-4f));
             Assert.IsTrue(zoneBBusy, "the drain signals Zone B busy up front");
             Assert.That(boot.ZoneB.InFlight + (boot.ZoneB.Total > 0 ? 1 : 0), Is.GreaterThan(0), "the drained balls entered Zone B");
 

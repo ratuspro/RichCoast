@@ -230,9 +230,9 @@ namespace RichCoast.Game
 
         /// <summary>
         /// Run a milestone zoom-out: freeze Zone A input and lock Zone C (via <c>ArenaZoom</c>), grow the
-        /// arena + tween the camera, then — once it settles — drain the freshly-blacklisted tiers into
-        /// Zone B, and only restore input / Zone C when that finishes. The death line and aim ball are
-        /// re-seated to the grown arena up front so they animate with the camera.
+        /// arena (the balls recede — see <see cref="ArenaGrowth"/>), then — once they've re-seated —
+        /// drain the freshly-blacklisted tiers into Zone B, and only restore input / Zone C when that
+        /// finishes. The aim ghost re-reads its (now smaller) radius up front.
         /// </summary>
         void BeginMilestoneZoom(float factor, int newMinTier)
         {
@@ -250,7 +250,6 @@ namespace RichCoast.Game
                 GameEvents.RaiseArenaZoom(false);
                 RunDeferredCashIn();
             }));
-            deathLine.Reposition();
             aim.RefreshQueue();
         }
 

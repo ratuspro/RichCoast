@@ -31,8 +31,11 @@ namespace RichCoast.App
         public BoardGeometry Geometry { get; private set; }
         public Camera Cam { get; private set; }
         public HudView Hud { get; private set; }
+        /// <summary>The milestone arena-growth factor in force (balls are 1/this of their ladder size).</summary>
+        public float ArenaScale => factory.ArenaScale;
 
         AimController aim;
+        BallFactory factory;
         Canvas overlayCanvas;
         bool restarting;
 
@@ -62,14 +65,14 @@ namespace RichCoast.App
             var arena = new ArenaBuilder(world, Geometry, feel);
             arena.Build();
 
-            var factory = new BallFactory(world, ladder, feel, Geometry);
+            factory = new BallFactory(world, ladder, feel);
             Board = new Board(factory, Geometry, feel);
             var deathLine = new DeathLineView(world, Geometry);
             var queue = new BallQueue();
             aim = new AimController(world, Cam, Geometry, factory, feel, queue, () => Time.unscaledTime * 1000.0);
             var mergeFx = new MergeFx(world, feel, Geometry);
             var highlight = new DropHighlight(world);
-            var growth = new ArenaGrowth(Geometry, arena, rig, Board, feel);
+            var growth = new ArenaGrowth(factory, Board, feel);
             Sfx.Create(feel);
 
             ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, ladder, feel, mergeFx, factory, highlight, growth, Geometry, world);

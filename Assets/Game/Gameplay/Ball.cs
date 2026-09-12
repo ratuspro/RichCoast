@@ -38,14 +38,22 @@ namespace RichCoast.Game
             View.SetTier(tier, radius);
         }
 
-        public float Speed => Body.linearVelocity.magnitude;
-        public Vector2 Position => Body.position;
+        /// <summary>Resize a live ball (the milestone shrink): collider + view, tier unchanged.</summary>
+        public void SetRadius(float radius)
+        {
+            Radius = radius;
+            Collider.radius = radius;
+            View.Resize(radius);
+        }
+
+        public float Speed => Body.simulated ? Body.linearVelocity.magnitude : 0f;
+        /// <summary>Body position, or the transform's while the body is frozen for a milestone re-seat.</summary>
+        public Vector2 Position => Body.simulated ? Body.position : (Vector2)transform.position;
 
         void OnCollisionEnter2D(Collision2D collision)
         {
             if (board == null) return;
-            // World speeds grow with the arena scale (normalised gravity); the squash reads on-screen speed.
-            float impact = collision.relativeVelocity.magnitude / board.SpeedScale;
+            float impact = collision.relativeVelocity.magnitude;
             View.OnImpact(impact, collision.GetContact(0).normal);
             var other = collision.rigidbody != null ? collision.rigidbody.GetComponent<Ball>() : null;
             if (other != null) board.ReportContact(this, other);

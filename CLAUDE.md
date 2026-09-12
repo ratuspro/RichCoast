@@ -50,7 +50,9 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   the tray + HUD, inset by the safe area. uGUI canvases are ScreenSpaceCamera on that camera
   (so render-texture captures include them), CanvasScaler 1080×2340 match 0.5, HUD under a
   `SafeArea` container. `CameraRig.Pan` blends the A framing (top pinned) with the B framing
-  (Zone B's bottom pinned) for the phase pan. Physics2D (Box2D): Zone A balls on layer 8,
+  (Zone B's bottom pinned) for the phase pan. The camera never zooms and the tray never
+  grows: milestone arena growth shrinks Zone A's balls in place (`BallFactory.ArenaScale`),
+  so every zone keeps its screen size for the whole run. Physics2D (Box2D): Zone A balls on layer 8,
   walls 9 (shared by both zones), Zone B balls 10, fresh split copies 11, gates 12 — layers are
   physics only, never render routing.
 - **Juice:** `BallView` (child of the body: landing squash along the contact normal, merge-birth
@@ -102,8 +104,8 @@ milestone tests: plain level-ups never zoom, the level-20 milestone grows/drains
 milestone cash-in that arrives in phase B defers until the pan lands in A; screenshots of the A
 framing, the B framing and the first milestone in `Logs/game-scene*.png`). M1 ran on a Pixel 7
 (2026-09-11); **M2 and M3 have not yet been built to the device** — the user's hands-on feel
-sign-off (touch, haptics, audio, perf, door timing, zoom/drain pacing, the single-camera
-framing consequence below) and any resulting `GameFeel.asset` tuning are pending.
+sign-off (touch, haptics, audio, perf, door timing, milestone shrink/drain pacing) and any
+resulting `GameFeel.asset` tuning are pending.
 
 The full loop runs from one `GameBootstrap`:
 - **Zone A** — tray, pooled material balls, drag-to-aim, finite buffer, merges with juice, death
@@ -114,21 +116,20 @@ The full loop runs from one `GameBootstrap`:
   while the buffer is spent.
 - **Milestones (M3)** — every 20 levels the draw window shifts (`Core.ProgressionCurve`) and
   `ZoneASystem` runs master's cash-in sequence: `TierLadder.MilestoneZoomFactor` (neutral
-  growth × stage tightness; flat ×1.2 tail) → `ArenaGrowth.Grow` snaps `BoardGeometry.Scale`,
-  rebuilds the tray outward (`ArenaBuilder`; wall bodies keep a CONSTANT thickness — Zone A
-  balls use continuous collision, and a ×s floor would reach through the shared wall layer
-  into Zone B), re-normalises ball gravity (`BallFactory.GravityScale` = feel × s, master's
-  supplemental gravity; blast/rest/speed-cap/impact-squash are all ÷/× s too) and tweens
-  `CameraRig.ViewScale` over `GameFeel.milestoneZoomMs`. When the camera lands,
-  `DrainBlacklisted` takes every ball below the new window floor (`Board.TakeBallsBelow`),
-  raises `ZoneBBusy` up front, slides throwaway sprites to the Zone B entry (column clamped 12
-  design px inside the walls) and raises `BallDropped` per landing; `ArenaZoom(false)` only
-  after the last one. The queue re-rolls off blacklisted tiers before the zoom.
-- **Single camera zoom** — `CameraRig` frames `10 × ViewScale` units in the A framing and Zone
-  B's native 10 units in the B framing; `Pan` blends both position AND width. Consequence (vs
-  master's second Zone-A camera): in the A framing Zone C and Zone B appear at 1/s once the
-  arena has grown, and the pan to B doubles as a zoom-in on Zone B. Tray paint below the apex
-  clamps to Zone C's divider so the grown tray never paints into Zone B.
+  growth × stage tightness; flat ×1.2 tail) → `ArenaGrowth.Grow`. Master grew the walls and
+  zoomed a second camera out; here the tray, camera, death line and Zone C/B are FIXED and the
+  board's contents recede instead: `BallFactory.ArenaScale` multiplies by the factor (radius =
+  ladder radius ÷ scale for every future spawn/merge), and each live ball is frozen
+  (`simulated = false`), tweened toward the funnel apex and down to 1/factor of its size over
+  `GameFeel.milestoneZoomMs` (the funnel V is linear through the apex, so scaling about it maps
+  the floor onto itself), then re-seated with physics resumed. Mass is compensated —
+  `BallFactory.ApplyMass` writes density × scale² — so a shrunken ball keeps its ladder weight
+  and the tier mass hierarchy never drifts. Live tiers therefore stay in the same world-size
+  band forever (Box2D's comfort zone); no gravity/blast/speed normalisation is needed. When the
+  balls land, `DrainBlacklisted` takes every ball below the new window floor
+  (`Board.TakeBallsBelow`), raises `ZoneBBusy` up front, slides throwaway sprites to the Zone B
+  entry (column clamped 12 design px inside the walls) and raises `BallDropped` per landing;
+  `ArenaZoom(false)` only after the last one. The queue re-rolls off blacklisted tiers first.
 - **Palettes** — `Core.Palettes` (workshop → dusk → night → dawn → gilded, verbatim from
   master's `Theme.ts`, + `ColorMath`/`Palette.Lerp`). `Game.Theme` is the ACTIVE palette
   (`Theme.Apply`); baked colours are bound with `Themed.Bind(renderer, ThemeKey)` (or the
@@ -153,13 +154,13 @@ The full loop runs from one `GameBootstrap`:
 - **Phase pan** — `PhaseDirector` runs `Core.PhaseMachine` (A ⇄ B with the queued-refill
   bounce) and tweens `CameraRig.Pan` 0→1: A pins the top edge above the tray + HUD, B pins Zone
   B's bottom (score bar) to the screen bottom, both safe-area inset; on the 390×844 design
-  screen the two differ by exactly `DesignSpace.PanDistance` (394 px) at scale 1.
+  screen the two differ by exactly `DesignSpace.PanDistance` (394 px).
 - Physics layers: Zone A balls 8, walls 9 (shared), Zone B balls 10, grace 11, gates 12 —
   ignores set in `GameBootstrap.ConfigurePhysicsLayers`. Sfx gained transition / multiply
   (combo-pitched) / collect cues.
 
-Next: **on-device M2 + M3 feel session** (`Tools/build-android.sh`; judge the single-camera
-framing at the first milestone) · **M4** UI polish (buffer particles, cash-in sequence, phase
+Next: **on-device M2 + M3 feel session** (`Tools/build-android.sh`; judge the milestone
+shrink beat and drain pacing) · **M4** UI polish (buffer particles, cash-in sequence, phase
 transitions) · **M5** analytics, perf, store prep.
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's

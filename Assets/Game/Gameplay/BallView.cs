@@ -55,6 +55,13 @@ namespace RichCoast.Game
             Apply();
         }
 
+        /// <summary>Change the drawn size in place (milestone shrink) — keeps any running squash/punch.</summary>
+        public void Resize(float radius)
+        {
+            diameter = radius * 2f;
+            Apply();
+        }
+
         /// <summary>Landing/collision squash: compress along the contact normal, stretch across it, spring back.</summary>
         public void OnImpact(float impactSpeed, Vector2 normal)
         {

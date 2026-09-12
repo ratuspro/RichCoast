@@ -108,7 +108,7 @@ namespace RichCoast.Tests.PlayMode
             while (boot.ZoneA.Level < 20) GameEvents.RaiseScoreBarFilled();
             yield return new WaitForSeconds(2.5f); // zoom + cross-fade + (empty) drain
 
-            float[] xs = { -5f, -2.5f, 0f, 2.5f, 5f, -3.5f, 3.5f, 1f };
+            float[] xs = { -3.8f, -2f, 0f, 2f, 3.8f, -3f, 3f, 1f };
             for (int i = 0; i < xs.Length; i++)
             {
                 boot.DebugDrop(xs[i], 5 + i % 4);

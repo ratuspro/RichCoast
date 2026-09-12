@@ -9,6 +9,12 @@ namespace RichCoast.Game
     /// per-tier radius, Box2D material (friction/bounce), and density (mass) from the
     /// <see cref="TierLadder"/> × the material's physics feel. Ball objects are recycled so merges
     /// don't churn the GC on mobile.
+    ///
+    /// <see cref="ArenaScale"/> is the milestone arena growth: the tray is fixed, so "the arena got
+    /// roomier by ×s" is realised as every ball being 1/s of its ladder size. Because the draw
+    /// window shifts up as fast as the balls shrink, the live tiers stay in the same world-size band
+    /// for the whole run. Mass is compensated (density × s²) so a shrunken ball keeps the weight its
+    /// ladder entry gives it — the tier mass hierarchy never drifts with the scale.
     /// </summary>
     public sealed class BallFactory
     {
@@ -17,27 +23,24 @@ namespace RichCoast.Game
         readonly Transform parent;
         readonly TierLadder ladder;
         readonly GameFeelSO feel;
-        readonly BoardGeometry geometry;
         readonly Stack<Ball> pool = new Stack<Ball>();
         readonly string sortingLayer;
 
-        public BallFactory(Transform parent, TierLadder ladder, GameFeelSO feel, BoardGeometry geometry, string sortingLayer = "Default")
+        /// <summary>The milestone arena-growth factor in force (1 at boot; the product of every milestone's zoom factor).</summary>
+        public float ArenaScale { get; private set; } = 1f;
+
+        public BallFactory(Transform parent, TierLadder ladder, GameFeelSO feel, string sortingLayer = "Default")
         {
             this.parent = parent;
             this.ladder = ladder;
             this.feel = feel;
-            this.geometry = geometry;
             this.sortingLayer = sortingLayer;
         }
 
-        /// <summary>
-        /// Gravity for a Zone A ball at the current arena scale. Balls should feel gravity × scale (the
-        /// camera zoom is 1/scale, so on-screen fall speed stays milestone-invariant — master's
-        /// supplemental gravity); world gravity is shared with Zone B, so it's applied per body.
-        /// </summary>
-        public float GravityScale => feel.gravityScale * geometry.Scale;
+        public void SetArenaScale(float scale) => ArenaScale = Mathf.Max(0.01f, scale);
 
-        public float RadiusForTier(int tier) => BoardGeometry.Units(ladder.RadiusForTier(tier));
+        /// <summary>World radius of a tier at the current arena scale (ladder radius ÷ scale).</summary>
+        public float RadiusForTier(int tier) => BoardGeometry.Units(ladder.RadiusForTier(tier)) / ArenaScale;
 
         /// <summary>Create (or recycle) a live, physics-driven ball at a world position.</summary>
         public Ball Spawn(Board board, Vector2 position, int tier)
@@ -54,30 +57,39 @@ namespace RichCoast.Game
             ball.Configure(board, tier, radius);
 
             var body = ball.Body;
+            body.simulated = true;
             body.linearVelocity = Vector2.zero;
             body.angularVelocity = 0f;
-            body.gravityScale = GravityScale;
+            body.gravityScale = feel.gravityScale;
             body.linearDamping = feel.linearDamping;
             body.angularDamping = feel.angularDamping;
             body.sleepMode = RigidbodySleepMode2D.StartAwake;
             body.WakeUp();
 
-            var col = ball.Collider;
-            col.sharedMaterial = BallArt.PhysicsMaterialForTier(tier, ladder);
-            // Mass from density × area, tapered for big tiers, × the material's density feel.
-            // Ladder density is per design-px²; scale into units² so the absolute masses stay sane.
-            // Auto-mass must be on BEFORE the density write — Physics2D rejects (and warns about)
-            // a density set on a collider whose body isn't yet using auto-mass.
-            double designDensity = ladder.DensityForTier(tier) * Materials.ForTier(tier).Def.Physics.DensityMult;
-            body.useAutoMass = true;
-            col.density = (float)(designDensity / (DesignSpace.UnitsPerPixel * DesignSpace.UnitsPerPixel)) * 0.01f;
+            ball.Collider.sharedMaterial = BallArt.PhysicsMaterialForTier(tier, ladder);
+            ApplyMass(ball);
             return ball;
+        }
+
+        /// <summary>
+        /// (Re)apply a ball's mass for the current arena scale. Mass comes from density × area, tapered
+        /// for big tiers, × the material's density feel; ladder density is per design-px², scaled into
+        /// units². The extra × scale² cancels the shrunken area, so the ball weighs what its ladder
+        /// entry says at every milestone. Auto-mass must be on BEFORE the density write — Physics2D
+        /// rejects (and warns about) a density set on a collider whose body isn't using auto-mass.
+        /// </summary>
+        public void ApplyMass(Ball ball)
+        {
+            double designDensity = ladder.DensityForTier(ball.Tier) * Materials.ForTier(ball.Tier).Def.Physics.DensityMult;
+            ball.Body.useAutoMass = true;
+            ball.Collider.density = (float)(designDensity / (DesignSpace.UnitsPerPixel * DesignSpace.UnitsPerPixel)) * 0.01f * ArenaScale * ArenaScale;
         }
 
         /// <summary>Return a ball to the pool (hidden, physics-inert).</summary>
         public void Despawn(Ball ball)
         {
             if (ball == null) return;
+            ball.Body.simulated = true;
             ball.Body.linearVelocity = Vector2.zero;
             ball.gameObject.SetActive(false);
             pool.Push(ball);

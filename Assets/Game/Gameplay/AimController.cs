@@ -133,10 +133,10 @@ namespace RichCoast.Game
             float bottom = geometry.RampYAt(aimX);
             guide.SetPosition(0, new Vector3(aimX, top, 0f));
             guide.SetPosition(1, new Vector3(aimX, bottom, 0f));
-            float w = 0.08f * geometry.Scale;
+            const float w = 0.08f;
             guide.startWidth = guide.endWidth = w;
             // Tile the dash texture along the length: one texture repeat per ~0.5 units.
-            guide.material.mainTextureScale = new Vector2(1f / (0.5f * geometry.Scale) * w, 1f);
+            guide.material.mainTextureScale = new Vector2(1f / 0.5f * w, 1f);
         }
 
         void SyncQueueVisuals()
