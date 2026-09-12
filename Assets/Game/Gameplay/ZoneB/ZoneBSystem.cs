@@ -58,7 +58,8 @@ namespace RichCoast.Game
         SpriteRenderer barGroove, barFill;
         TextMeshPro barLabel, haulLabel;
         float barFillLeft, barFillWidth, barMidY, barFillHeight;
-        Tween haulPop;
+        Vector3 grooveBaseScale;
+        Tween haulPop, grooveThrob, labelThrob;
 
         public int InFlight => inFlight;
         public double Total => total;
@@ -502,6 +503,7 @@ namespace RichCoast.Game
 
             WorldArt.Rect(root, "BarOutline", x0, x1, bottom, barTop, Theme.Ink, 10);
             barGroove = WorldArt.Rect(root, "BarGroove", x0 + stroke, x1 - stroke, bottom + stroke, barTop - stroke, Theme.Groove, 11);
+            grooveBaseScale = barGroove.transform.localScale;
             barFill = WorldArt.Rect(root, "BarFill", new Vector2(barFillLeft, barMidY), new Vector2(0f, barFillHeight), Theme.Brass, 12);
             barLabel = WorldArt.Text(root, "BarLabel", "", 11f, Theme.Ink, 13);
             barLabel.transform.localPosition = new Vector3(0f, barMidY, 0f);
@@ -564,10 +566,15 @@ namespace RichCoast.Game
             Sfx.Instance?.Goal();
             Haptics.Pulse(feel.heavyHapticMs, feel.heavyHapticAmp);
 
-            // Vertical throb of the groove (centred on its own midline, so it puffs in place).
-            var grooveScale = barGroove.transform.localScale;
-            Tween.Scale(barGroove.transform, new Vector3(grooveScale.x, grooveScale.y * 1.6f, 1f), 0.13f, Ease.InOutSine, cycles: 2, CycleMode.Yoyo);
-            Tween.Scale(barLabel.transform, 1.3f, 0.13f, Ease.InOutSine, cycles: 2, CycleMode.Yoyo);
+            // Vertical throb of the groove (centred on its own midline, so it puffs in place). Wraps
+            // can arrive faster than a throb lasts, so restart from the BASE scale every time — a
+            // throb that read the current (mid-throb) scale would compound 1.6× per wrap.
+            grooveThrob.Stop();
+            barGroove.transform.localScale = grooveBaseScale;
+            grooveThrob = Tween.Scale(barGroove.transform, new Vector3(grooveBaseScale.x, grooveBaseScale.y * 1.6f, 1f), 0.13f, Ease.InOutSine, cycles: 2, CycleMode.Yoyo);
+            labelThrob.Stop();
+            barLabel.transform.localScale = Vector3.one;
+            labelThrob = Tween.Scale(barLabel.transform, 1.3f, 0.13f, Ease.InOutSine, cycles: 2, CycleMode.Yoyo);
 
             // Brass sparkle rising off the full bar.
             float x0 = geometry.ZoneBMinX, x1 = geometry.ZoneBMaxX;

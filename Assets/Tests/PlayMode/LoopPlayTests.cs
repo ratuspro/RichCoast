@@ -53,6 +53,27 @@ namespace RichCoast.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator ScoreBarThrobReturnsToItsBaseSizeAfterARapidMultiLevelRoll()
+        {
+            yield return LoadMain();
+            var boot = Boot();
+            var groove = GameObject.Find("BarGroove").transform;
+            var label = GameObject.Find("BarLabel").transform;
+            var baseScale = groove.localScale;
+
+            // A tier-8 ball (2187 points) rolls the level-1 bar through many targets in one drain,
+            // so the wrap celebrations fire faster (150 ms apart) than each throb lasts (260 ms).
+            GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(8), DesignSpace.Width / 2));
+            yield return WaitUntil(() => boot.ZoneB.Total > 0, 15f);
+            Assert.That(boot.ZoneB.Total, Is.GreaterThan(0), "the ball should have drained");
+            yield return new WaitForSeconds(4f); // every owed wrap + throb has finished
+
+            Assert.That(groove.localScale.y, Is.EqualTo(baseScale.y).Within(1e-3f), "the groove throb must settle back to its base height");
+            Assert.That(groove.localScale.x, Is.EqualTo(baseScale.x).Within(1e-3f));
+            Assert.That(label.localScale.y, Is.EqualTo(1f).Within(1e-3f), "the label throb must settle back to 1");
+        }
+
+        [UnityTest]
         public IEnumerator DepletingTheBufferPansToPhaseBAndTheDoorHandsABallToZoneB()
         {
             yield return LoadMain();
