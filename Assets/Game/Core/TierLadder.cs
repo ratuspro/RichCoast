@@ -115,6 +115,24 @@ namespace RichCoast.Core
         /// <summary>Px below the death line within which a resting ball flags the warning.</summary>
         public const double WarnBand = 28;
 
+        /// <summary>Zone C trap-door band height, directly under Zone A's funnel apex.</summary>
+        public const double ZoneCHeight = 44;
+        /// <summary>Zone B split-arena band height, directly under Zone C.</summary>
+        public const double ZoneBHeight = 687;
+        /// <summary>
+        /// How far the camera scrolls between the A and B framings: the world is taller than the
+        /// screen by this much (HUD + board + C + B − screen), so the B-phase brings Zone B's
+        /// bottom edge flush with the screen bottom.
+        /// </summary>
+        public const double PanDistance = HudHeight + BoardHeight + ZoneCHeight + ZoneBHeight - Height; // 394
+
+        /// <summary>Zone B balls are one fixed size (radius, design px) regardless of tier.</summary>
+        public const double ZoneBBallRadius = 10;
+        /// <summary>Inset of the trap-door sweep from each Zone B edge (~one ball radius + wall slack).</summary>
+        public const double SweepMargin = 18;
+        /// <summary>Evenly-spaced positions the lit trap-door marker steps between.</summary>
+        public const int SweepPositions = 9;
+
         /// <summary>World units per design pixel: the 390px board is 10 world units wide.</summary>
         public const double UnitsPerPixel = 10.0 / Width;
 

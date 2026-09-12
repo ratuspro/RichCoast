@@ -39,6 +39,27 @@ namespace RichCoast.Game
         public Vector2 FloorApex => new Vector2(0f, ApexY);
         public Vector2 FloorRight => new Vector2(MaxX, ApexY + FunnelDrop);
 
+        // --- Zones C and B: fixed (unscaled) bands hanging below the funnel apex ------------------
+
+        /// <summary>Zone C (the trap-door band) runs from the apex down to this y.</summary>
+        public float ZoneCBottomY => -Units(DesignSpace.ZoneCHeight);
+        /// <summary>Centre line of the door band — where the sweep markers sit.</summary>
+        public float DoorMouthY => ZoneCBottomY / 2f;
+        public float ZoneBTopY => ZoneCBottomY;
+        public float ZoneBBottomY => ZoneBTopY - Units(DesignSpace.ZoneBHeight);
+        /// <summary>Zone B's fixed side walls (the design width, never scaled).</summary>
+        public float ZoneBMinX => -Units(DesignSpace.Width / 2);
+        public float ZoneBMaxX => Units(DesignSpace.Width / 2);
+        public float ZoneBBallRadius => Units(DesignSpace.ZoneBBallRadius);
+
+        /// <summary>A design-space x (0..390) as a world x.</summary>
+        public float DesignXToWorld(double designX) => Units(designX - DesignSpace.Width / 2);
+        /// <summary>A world x as a design-space column (0..390).</summary>
+        public double WorldXToDesign(float x) => DesignSpace.ToPixels(x) + DesignSpace.Width / 2;
+        /// <summary>A Zone B layout point (design px, y DOWN from the band top) as a world position.</summary>
+        public Vector2 ZoneBToWorld(double designX, double designYFromTop) =>
+            new Vector2(DesignXToWorld(designX), ZoneBTopY - Units(designYFromTop));
+
         public void SetScale(float s) => Scale = s;
 
         /// <summary>Y of the funnel ramp surface directly under world-x <paramref name="x"/>.</summary>

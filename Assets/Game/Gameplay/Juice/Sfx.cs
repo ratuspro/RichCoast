@@ -18,8 +18,9 @@ namespace RichCoast.Game
         GameFeelSO feel;
         AudioSource[] voices;
         int nextVoice;
-        AudioClip drop, merge, mergeHigh, tick, goal, gameOver;
+        AudioClip drop, merge, mergeHigh, tick, goal, gameOver, transition, multiply, collect;
         readonly ComboState mergeCombo = new ComboState();
+        readonly ComboState multiplyCombo = new ComboState();
         bool muted;
 
         public static Sfx Instance => instance;
@@ -51,6 +52,27 @@ namespace RichCoast.Game
             tick = Synth("tick", 784f, 784f, Wave.Sine, 0.003f, 0.1f, 0.16f);
             goal = Arpeggio("goal", new[] { 659.25f, 830.61f, 987.77f }, 0.09f, 0.28f, 0.5f);
             gameOver = Layer("gameOver", Synth("g1", 220f, 110f, Wave.Triangle, 0.01f, 0.6f, 0.3f), Synth("g2", 164.8f, 82.4f, Wave.Sine, 0.01f, 0.7f, 0.25f));
+            transition = Synth("transition", 520f, 180f, Wave.Triangle, 0.004f, 0.2f, 0.22f);
+            multiply = Synth("multiply", 392f, 392f, Wave.Triangle, 0.003f, 0.16f, 0.2f);
+            collect = Synth("collect", 880f, 880f, Wave.Sine, 0.002f, 0.07f, 0.09f);
+        }
+
+        /// <summary>Zone C: the trap-door sucks a ball through. Downward whoosh.</summary>
+        public void Transition() => Play(transition, 1f);
+
+        /// <summary>Zone B: a ball splits into <paramref name="n"/> copies. Bright pluck that climbs through a fast chain.</summary>
+        public void Multiply(int n)
+        {
+            if (n <= 1) return;
+            double mult = ComboPitch.Next(multiplyCombo, Time.unscaledTime * 1000.0, feel.comboWindowMs, feel.comboMaxStep).Mult;
+            Play(multiply, (float)mult);
+        }
+
+        /// <summary>Zone B: a ball drains. Quiet coin tick, tinted up with value — happens often, must not dominate.</summary>
+        public void Collect(double value)
+        {
+            double semis = System.Math.Min(12, System.Math.Log(System.Math.Max(1, value), 2));
+            Play(collect, Mathf.Pow(2f, (float)semis / 12f));
         }
 
         public void SetMuted(bool on) => muted = on;

@@ -104,6 +104,25 @@ namespace RichCoast.Game
             return total;
         }
 
+        /// <summary>
+        /// Take a ball OFF the board without merging it (the trap-door suck). Any merge it was queued
+        /// for is cancelled and its partner released, so the partner can merge again later.
+        /// Fires <see cref="Emptied"/> if the board is now empty.
+        /// </summary>
+        public bool Extract(Ball ball)
+        {
+            if (ball == null || !balls.Contains(ball)) return false;
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                var (a, b) = pending[i];
+                if (a != ball && b != ball) continue;
+                (a == ball ? b : a).Consumed = false;
+                pending.RemoveAt(i);
+            }
+            Remove(ball);
+            return true;
+        }
+
         /// <summary>Freeze the board (game over): bodies stop simulating, nothing more resolves.</summary>
         public void Freeze()
         {

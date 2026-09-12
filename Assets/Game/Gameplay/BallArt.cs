@@ -67,6 +67,33 @@ namespace RichCoast.Game
             }
         }
 
+        /// <summary>A crisp anti-aliased white disc (1 unit across) — for markers, studs and hard dots.</summary>
+        public static Sprite Disc
+        {
+            get
+            {
+                if (disc != null) return disc;
+                const int n = 64;
+                var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { name = "disc", filterMode = FilterMode.Bilinear };
+                var px = new Color[n * n];
+                float r = n / 2f;
+                for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                    float a = Mathf.Clamp01(r - d); // one-texel AA edge
+                    px[y * n + x] = new Color(1, 1, 1, a);
+                }
+                tex.SetPixels(px);
+                tex.Apply();
+                disc = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+                disc.name = "disc";
+                return disc;
+            }
+        }
+
+        static Sprite disc;
+
         /// <summary>The cached face sprite for a tier (1 unit diameter at scale 1).</summary>
         public static Sprite SpriteForTier(int tier)
         {

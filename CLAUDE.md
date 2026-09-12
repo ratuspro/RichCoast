@@ -26,8 +26,9 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   all design math — `TierMath`/`MergeLogic`, `TierLadder` (radii/friction/density tables +
   neutral-growth/milestone-zoom math), `BallMath`, `Materials` (the 20-material ladder),
   `ProgressionCurve` (anchor-interpolated targets, buffer oscillation, tail growth, window
-  stepping), `ComboPitch`, `NumberFormat.Compact`, `BallQueue`, and the typed static
-  **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
+  stepping), `ComboPitch`, `NumberFormat.Compact`, `BallQueue`, `PhaseMachine` (A ⇄ B flow),
+  `ScoreBar`, `ZoneBLayouts` (the two authored arenas), `DoorMath` (nearest-ball / sweep /
+  split fan), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
   gameplay layer; `RichCoast.UI` (`Assets/Game/UI`) the uGUI shell; `RichCoast.App`
   (`Assets/Game/App/GameBootstrap.cs`) the composition root — the ONLY component the scene
   holds. `RichCoast.EditorTools` (`Assets/Editor`) = project setup + scene/asset builder.
@@ -48,7 +49,9 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   (extra height on tall phones is headroom, never letterboxing) with the top edge pinned above
   the tray + HUD, inset by the safe area. uGUI canvases are ScreenSpaceCamera on that camera
   (so render-texture captures include them), CanvasScaler 1080×2340 match 0.5, HUD under a
-  `SafeArea` container. Physics2D (Box2D): balls on layer 8, walls on layer 9 — layers are
+  `SafeArea` container. `CameraRig.Pan` blends the A framing (top pinned) with the B framing
+  (Zone B's bottom pinned) for the phase pan. Physics2D (Box2D): Zone A balls on layer 8,
+  walls 9 (shared by both zones), Zone B balls 10, fresh split copies 11, gates 12 — layers are
   physics only, never render routing.
 - **Juice:** `BallView` (child of the body: landing squash along the contact normal, merge-birth
   pop, blast punch, idle wobble), `MergeFx` (rim sparks + flash ring), `Sfx` (procedural
@@ -75,7 +78,8 @@ Two lanes; **they are mutually exclusive** (the editor holds a project lock):
      Fails loudly on compile errors.
    - `Tools/run-tests.sh [--platform EditMode|PlayMode] [--filter X]` — NUnit results parsed,
      non-zero on any failure. PlayMode keeps graphics (the screenshot test needs them).
-   - `Tools/screenshot.sh` — renders a populated board to `Logs/game-scene.png` (1080×2340).
+   - `Tools/screenshot.sh` — renders a populated board to `Logs/game-scene.png` (A framing) and
+     `Logs/game-scene-b.png` (B framing, Zone B mid-cascade), 1080×2340.
    - `Tools/build-android.sh [--no-install]` — development APK to `Builds/Android/RichCoast.apk`
      (`ProjectSetup.BuildAndroid`, `-buildTarget Android`), then `adb install` + launch + a
      `logcat -s Unity` tail using the editor module's bundled SDK. `Assets/Editor/
@@ -92,27 +96,43 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 
 ## Status
 
-**Milestone 1 (Zone A vertical slice + mobile UI shell) is implemented, green headlessly, and
-runs on a Pixel 7 (Android 16, Vulkan) from `Tools/build-android.sh`** — boot, drops, merges
-with juice, the stub bank/level-up/refill loop and the safe-area HUD all verified via adb
-(2026-09-11); the user's hands-on feel sign-off (touch, haptics, audio, perf) and any resulting
-`GameFeel.asset` tuning are still pending. The scene boots from one `GameBootstrap`: tray
-(walls + V funnel, pine rails on paper), pooled procedurally-painted material balls, drag-to-aim
-ghost with a dashed drop guide, finite ball buffer (`ProgressionCurve.BufferForLevel`), merges
-with blast/pop/sparks/flash/SFX/haptics, death line with proximity warning, overflow + stalemate
-game-over with a full-screen RESTART overlay, and the HUD (milestone bar · compact score ·
-"N left" + next-ball preview). **Zones B and C do not exist yet:** `Assets/Game/Gameplay/Dev/
-ZoneBStub.cs` stands in for both — on `ZoneADepleted` it banks the board's total value ×4,
-rolls the score bar through any levels crossed (real `ScoreBarFilled` level-ups → ticked
-buffer refill), and fires `ScoreHarvested` so the fly-up plays; balls stay on the board, so
-the tray fills and the death line ends the run. Milestone arena growth / window-shift drains /
-theme moods are M3. EditMode: 57 tests. PlayMode: boot, merge, no-merge stacking, screenshot.
+**Milestones 1 + 2 are implemented and green headlessly** (EditMode 80 tests · PlayMode 6, incl.
+a Zone B drain test and a full depletion → pan → door-tap → Zone B handoff test; screenshots of
+both framings in `Logs/game-scene.png` / `game-scene-b.png`). M1 ran on a Pixel 7 (2026-09-11);
+**M2 has not yet been built to the device** — the user's hands-on feel sign-off (touch, haptics,
+audio, perf, door-timing feel) and any resulting `GameFeel.asset` tuning are pending for both.
 
-Next: **M2** Zone C door + Zone B arena + phase pan (delete the stub) · **M3** progression
-milestones (arena growth as ortho-size tween, blacklist drains, palette cross-fades) · **M4**
-UI polish pass · **M5** analytics, perf, store prep. First real step: the user's on-device feel
-session, tuning `GameFeel.asset` (values are live-editable in play mode, but a device rebuild
-is needed to feel them on the phone).
+The full loop now runs from one `GameBootstrap`:
+- **Zone A** — tray, pooled material balls, drag-to-aim, finite buffer, merges with juice, death
+  line, game over + RESTART. Aiming is frozen outside phase A; a cash-in that arrives in phase
+  B defers its ticked refill until the pan lands back in A. A brass `DropHighlight` breathes
+  under the ball the door would grab while the buffer is spent.
+- **Zone C** (`Gameplay/ZoneC/ZoneCSystem.cs`) — pine door band under the funnel apex; nine
+  brass markers, the lit one ping-pongs at `GameFeel.sweepMs`; armed only in phase B and while
+  Zone B is empty (+ `ArenaZoom` lock, game-over lock). A tap anywhere grabs the nearest ball by
+  edge distance (`DoorTarget` → `Core.DoorMath`, shared with the highlight), raises `ZoneBBusy`
+  up front, `Board.Extract`s it, plays suck→pop (PrimeTween) and only then raises `BallDropped`
+  with the frozen column (design-px x).
+- **Zone B** (`Gameplay/ZoneB/`) — one of `Core.ZoneBLayouts` (LAYOUT_1/2, a 1:1 port, design
+  px rebased to the band) built in world space below Zone C: capsule-collider pine rails,
+  static/kinematic gate slabs (`ZoneBGate`, painted sign + world-space TMP `X N`), trigger
+  collectors, invisible containment. Small pooled `ZoneBBall`s (10 design px, layer 10; fresh
+  split copies on layer 11 ignore gates for `splitGraceMs`); contacts are reported and resolved
+  once per frame. Owns scoring via `Core.ScoreBar`: live per-level `ScoreBarFilled` wraps, the
+  world-space bar + `+N` haul label, then `ScoreHarvested` → `ZoneBEmpty` → `ScoreBarCashedIn`
+  after the wraps + dwell. Safety: `maxBallsInFlight` cap and a stuck-ball nudge.
+- **Phase pan** — `PhaseDirector` runs `Core.PhaseMachine` (A ⇄ B with the queued-refill
+  bounce) and tweens `CameraRig.Pan` 0→1: A pins the top edge above the tray + HUD, B pins Zone
+  B's bottom (score bar) to the screen bottom, both safe-area inset; on the 390×844 design
+  screen the two differ by exactly `DesignSpace.PanDistance` (394 px).
+- Physics layers: Zone A balls 8, walls 9 (shared), Zone B balls 10, grace 11, gates 12 —
+  ignores set in `GameBootstrap.ConfigurePhysicsLayers`. Sfx gained transition / multiply
+  (combo-pitched) / collect cues.
+
+Next: **on-device M2 feel session** (`Tools/build-android.sh`), then **M3** progression
+milestones (arena growth as ortho-size tween, blacklist drains, palette cross-fades — `ArenaZoom`
+is already honoured by the door lock) · **M4** UI polish (buffer particles, cash-in sequence,
+phase transitions) · **M5** analytics, perf, store prep.
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's
 > state *now* — a single snapshot, not a changelog.

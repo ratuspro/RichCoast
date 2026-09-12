@@ -35,18 +35,19 @@ namespace RichCoast.UI
             rt.anchoredPosition = start;
 
             int frame = 0;
-            Tween.Custom(0f, 1f, durationS, t =>
+            // The token is the tween's target, so a scene unload mid-flight silently ends the flight
+            // (no landing on a HUD that no longer exists).
+            Tween.Custom(rt, 0f, 1f, durationS, (r, t) =>
             {
-                if (rt == null) return;
                 var p = Bezier(start, control, end, t);
-                rt.anchoredPosition = p;
-                rt.localScale = Vector3.one * Mathf.Lerp(1f, 0.55f, t);
+                r.anchoredPosition = p;
+                r.localScale = Vector3.one * Mathf.Lerp(1f, 0.55f, t);
                 if (frame++ % 3 == 0) ShedTrail(overlay, p, Theme.BrassBright);
             }, Ease.InOutSine).OnComplete(() =>
             {
                 if (rt != null) UnityEngine.Object.Destroy(rt.gameObject);
                 onArrive?.Invoke();
-            });
+            }, warnIfTargetDestroyed: false);
         }
 
         static Vector2 ToLocal(RectTransform overlay, Vector2 screen, Camera cam)
@@ -68,7 +69,7 @@ namespace RichCoast.UI
             rt.sizeDelta = new Vector2(22f, 22f);
             rt.anchoredPosition = at;
             Tween.Alpha(mote, 0f, TrailFadeS);
-            Tween.Scale(rt, 0.3f, TrailFadeS).OnComplete(() => { if (rt != null) UnityEngine.Object.Destroy(rt.gameObject); });
+            Tween.Scale(rt, 0.3f, TrailFadeS).OnComplete(() => { if (rt != null) UnityEngine.Object.Destroy(rt.gameObject); }, warnIfTargetDestroyed: false);
         }
     }
 }

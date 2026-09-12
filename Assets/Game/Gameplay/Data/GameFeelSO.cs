@@ -80,6 +80,49 @@ namespace RichCoast.Game
         public int dropHapticMs = 6;
         public int dropHapticAmp = 45;
 
+        [Header("Zone B arena")]
+        [Tooltip("Gravity scale on the small Zone B balls (they fall a long way — lighter than Zone A reads better).")]
+        public float zoneBGravityScale = 1.6f;
+        [Tooltip("Base bounciness of Zone B balls (× the tier material's restitution feel, capped at 0.5).")]
+        public float zoneBBounce = 0.35f;
+        [Tooltip("Base friction of Zone B balls (× the tier material's friction feel).")]
+        public float zoneBFriction = 0.05f;
+        public float zoneBLinearDamping = 0.1f;
+        [Tooltip("Hard speed cap for Zone B balls (units/s).")]
+        public float zoneBMaxSpeed = 30f;
+        [Tooltip("Bounciness of gate slabs.")]
+        public float gateBounce = 0.4f;
+        [Tooltip("Split fan: total angular spread of the copies (radians).")]
+        public float splitSpread = 0.8f;
+        [Tooltip("Split fan: outward kick given to each copy (units/s).")]
+        public float splitKick = 4.5f;
+        [Tooltip("Freshly-split copies ignore gates for this long so they don't re-trigger instantly (ms).")]
+        public float splitGraceMs = 300f;
+        [Tooltip("Safety cap: beyond this many balls in flight, gates stop splitting (balls just bounce).")]
+        public int maxBallsInFlight = 48;
+        [Tooltip("A Zone B ball resting this long without draining gets a small random nudge (ms). Keeps the door from locking forever.")]
+        public float stuckNudgeMs = 2500f;
+
+        [Header("Zone C trap-door")]
+        [Tooltip("One edge→edge leg of the marker sweep (ms). The difficulty knob for column timing.")]
+        public float sweepMs = 880f;
+        [Tooltip("Suck: the grabbed ball slides to the door mouth in this long (ms).")]
+        public float suckMs = 150f;
+        [Tooltip("Pop: the ball re-inflates at the Zone B entry in this long (ms).")]
+        public float popMs = 110f;
+
+        [Header("Phase pan")]
+        [Tooltip("Camera pan between the A and B framings (ms). Snappier than a reward beat — it's a scene change.")]
+        public float panMs = 650f;
+
+        [Header("Score bar")]
+        [Tooltip("Per-16ms fraction the shown fill closes toward the logical value (glide, not snap).")]
+        public float barFillLerp = 0.2f;
+        [Tooltip("A live level wrap sweeps the bar to full in this long before snapping empty (ms).")]
+        public float wrapFillMs = 150f;
+        [Tooltip("Beat the settled final bar holds after the last ball drains, before the pan up (ms).")]
+        public float settleDwellMs = 350f;
+
         [Header("HUD")]
         [Tooltip("Buffer refill: one slot every this many ms (≤10 slots); larger refills tighten the gap.")]
         public float bufferTickMs = 130f;

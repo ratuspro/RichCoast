@@ -82,13 +82,30 @@ namespace RichCoast.Tests.PlayMode
             }
             yield return new WaitForSeconds(2f);
 
+            var cam = boot.Cam;
+            var rig = cam.GetComponent<RichCoast.Game.CameraRig>();
+            Capture(cam, rig, "game-scene.png");
+
+            // B framing: pan the camera to Zone B with a few balls mid-cascade and a live score bar.
+            rig.Pan = 1f;
+            for (int i = 0; i < 3; i++)
+            {
+                GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(2 + i), 60 + 130 * i));
+                yield return new WaitForSeconds(0.4f);
+            }
+            yield return new WaitForSeconds(0.6f);
+            Capture(cam, rig, "game-scene-b.png");
+        }
+
+        /// <summary>Render the camera (plus its screen-space canvases) into Logs/<paramref name="file"/> at the portrait target size.</summary>
+        static void Capture(Camera cam, RichCoast.Game.CameraRig rig, string file)
+        {
             const int w = 1080, h = 2340;
             var rt = new RenderTexture(w, h, 24);
-            var cam = boot.Cam;
             cam.targetTexture = rt;
             // The rig fitted board width to the batch game view's aspect; re-fit for the portrait target.
-            cam.GetComponent<RichCoast.Game.CameraRig>().Apply();
-            foreach (var canvas in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None)) Canvas.ForceUpdateCanvases();
+            rig.Apply();
+            Canvas.ForceUpdateCanvases();
             cam.Render();
             var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
             RenderTexture.active = rt;
@@ -99,7 +116,7 @@ namespace RichCoast.Tests.PlayMode
 
             var dir = Path.Combine(Application.dataPath, "..", "Logs");
             Directory.CreateDirectory(dir);
-            var path = Path.GetFullPath(Path.Combine(dir, "game-scene.png"));
+            var path = Path.GetFullPath(Path.Combine(dir, file));
             File.WriteAllBytes(path, tex.EncodeToPNG());
             Debug.Log($"[ScreenshotCapture] wrote {path}");
             Assert.IsTrue(File.Exists(path));

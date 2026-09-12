@@ -26,6 +26,7 @@ namespace RichCoast.Game
         readonly GameFeelSO feel;
         readonly MergeFx mergeFx;
         readonly BallFactory factory;
+        readonly DropHighlight highlight;
 
         int level = 1;
         int ballBuffer;
@@ -35,6 +36,9 @@ namespace RichCoast.Game
         bool scoreBarCashingIn;
         bool zoneBEmpty = true;
         double score;
+        /// <summary>Current gameplay phase. Aiming is live only in A; the reward sequence waits for A.</summary>
+        GamePhase phase = GamePhase.A;
+        bool deferredCashIn;
 
         // Depletion settle gate.
         bool gateArmed;
@@ -50,7 +54,7 @@ namespace RichCoast.Game
         public bool IsOver => over;
         public double Score => score;
 
-        public ZoneASystem(Board board, AimController aim, DeathLineView deathLine, BallQueue queue, ProgressionCurve curve, GameFeelSO feel, MergeFx mergeFx, BallFactory factory)
+        public ZoneASystem(Board board, AimController aim, DeathLineView deathLine, BallQueue queue, ProgressionCurve curve, GameFeelSO feel, MergeFx mergeFx, BallFactory factory, DropHighlight highlight)
         {
             this.board = board;
             this.aim = aim;
@@ -60,6 +64,7 @@ namespace RichCoast.Game
             this.feel = feel;
             this.mergeFx = mergeFx;
             this.factory = factory;
+            this.highlight = highlight;
 
             ApplyStage();
             aim.RefreshQueue();
@@ -76,6 +81,19 @@ namespace RichCoast.Game
             GameEvents.ScoreBarFilled += OnScoreBarFilled;
             GameEvents.ZoneBBusy += () => zoneBEmpty = false;
             GameEvents.ZoneBEmpty += () => { zoneBEmpty = true; CheckLoss(); };
+            GameEvents.PhaseChanged += OnPhaseChanged;
+        }
+
+        /// <summary>Aiming is live only in phase A; a cash-in that arrived elsewhere runs its reward beat once the pan lands back in A.</summary>
+        void OnPhaseChanged(GamePhase next)
+        {
+            phase = next;
+            aim.SetFrozen(phase != GamePhase.A);
+            if (phase == GamePhase.A && deferredCashIn)
+            {
+                deferredCashIn = false;
+                RunCashInSequence();
+            }
         }
 
         /// <summary>Announce the initial state (after every listener has subscribed).</summary>
@@ -92,6 +110,9 @@ namespace RichCoast.Game
             AdvanceDepletionGate(deltaMs);
             AdvanceRefill(deltaMs);
             AdvanceStalemate(deltaMs);
+            // The door-candidate glow shows while the buffer is spent — the "out of balls" window that
+            // opens as the last drop settles, rides the pan, and covers the whole B phase.
+            highlight.Track(ballBuffer == 0 ? DoorTarget.Find(board) : null, deltaMs);
         }
 
         /// <summary>Debug/test hook: drop a specific tier at a world x, bypassing input (still spends the buffer).</summary>
@@ -132,8 +153,10 @@ namespace RichCoast.Game
             ApplyStage();
             aim.RefreshQueue();
             EmitProgression();
-            // Milestone zoom / blacklist drain = M3. M1 runs the refill beat straight away (phase A).
-            RunCashInSequence();
+            // Deferred half: the visible reward (ticked refill; milestone zoom / drain in M3) runs only
+            // in phase A. A cash-in normally arrives in phase B and runs when the pan lands back in A.
+            if (phase == GamePhase.A) RunCashInSequence();
+            else deferredCashIn = true;
         }
 
         void RunCashInSequence()
@@ -203,7 +226,7 @@ namespace RichCoast.Game
             gateSettledMs = board.IsSettled() ? gateSettledMs + deltaMs : 0f;
             if (gateSettledMs < SettleMs && gateElapsedMs < SettleTimeoutMs) return;
             gateArmed = false;
-            if (over || cashInPending) return;
+            if (over || phase != GamePhase.A || cashInPending) return;
             if (board.BallCount == 0 && zoneBEmpty) return; // stalemate path owns this
             GameEvents.RaiseZoneADepleted();
         }

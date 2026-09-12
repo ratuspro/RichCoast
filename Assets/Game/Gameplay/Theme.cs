@@ -11,6 +11,11 @@ namespace RichCoast.Game
     {
         public static readonly Color Paper = BallArt.Rgb(0xf2e7d5);
         public static readonly Color PaperZoneA = BallArt.Rgb(0xf7efe0);
+        public static readonly Color PaperZoneC = BallArt.Rgb(0xe9dcc4);
+        /// <summary>High-multiplier gate sign paint (low multipliers are brass).</summary>
+        public static readonly Color GatePaint = BallArt.Rgb(0x6aa84f);
+        /// <summary>Zone B score-bar groove background.</summary>
+        public static readonly Color Groove = BallArt.Rgb(0xe0d2b8);
         public static readonly Color Pine = BallArt.Rgb(0xd9b07c);
         public static readonly Color PineDark = BallArt.Rgb(0xa87e4f);
         public static readonly Color PineShadow = BallArt.Rgb(0x7d5a33);

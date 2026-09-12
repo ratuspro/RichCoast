@@ -4,6 +4,7 @@
     "references": [
         "RichCoast.Core",
         "Unity.InputSystem",
+        "Unity.TextMeshPro",
         "PrimeTween.Runtime"
     ],
     "includePlatforms": [],

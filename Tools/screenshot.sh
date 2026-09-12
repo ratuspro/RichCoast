@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Render the running game to Logs/game-scene.png.
+# Render the running game to Logs/game-scene.png (A framing) and Logs/game-scene-b.png (B framing,
+# Zone B mid-cascade).
 #
 # Runs the explicit ScreenshotCapture PlayMode test with graphics enabled — a -nographics run
 # has no framebuffer to capture. Unity must not have the project open elsewhere.

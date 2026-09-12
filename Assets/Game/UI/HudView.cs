@@ -139,7 +139,7 @@ namespace RichCoast.UI
             countUp = Tween.Custom(this, 0f, 1f, feel.scoreCountUpMs / 1000f, (self, t) =>
             {
                 self.scoreText.text = NumberFormat.Compact(System.Math.Round(from + (to - from) * t));
-            }, Ease.OutCubic).OnComplete(() => scoreText.text = NumberFormat.Compact(to));
+            }, Ease.OutCubic).OnComplete(() => scoreText.text = NumberFormat.Compact(to), warnIfTargetDestroyed: false);
             scorePop.Stop();
             var rt = (RectTransform)scoreText.transform;
             rt.localScale = Vector3.one;

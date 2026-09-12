@@ -1,7 +1,6 @@
 using PrimeTween;
 using RichCoast.Core;
 using RichCoast.Game;
-using RichCoast.Game.Dev;
 using RichCoast.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -12,8 +11,10 @@ namespace RichCoast.App
 {
     /// <summary>
     /// The composition root: the ONLY MonoBehaviour the scene needs. Builds the camera rig, the Zone A
-    /// tray, the ball factory/board/aim/death line, the juice + audio, the M1 Zone B stand-in, and
-    /// the uGUI shell — all from three ScriptableObjects — then ticks the plain-C# systems.
+    /// tray, the ball factory/board/aim/death line, the juice + audio, the Zone C trap-door, the Zone
+    /// B split arena, the phase director and the uGUI shell — all from three ScriptableObjects — then
+    /// ticks the plain-C# systems. Zones never see each other here; they share only
+    /// <see cref="GameEvents"/>.
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
@@ -23,11 +24,13 @@ namespace RichCoast.App
 
         public Board Board { get; private set; }
         public ZoneASystem ZoneA { get; private set; }
+        public ZoneBSystem ZoneB { get; private set; }
+        public ZoneCSystem ZoneC { get; private set; }
+        public PhaseDirector Phases { get; private set; }
         public BoardGeometry Geometry { get; private set; }
         public Camera Cam { get; private set; }
         public HudView Hud { get; private set; }
 
-        ZoneBStub zoneBStub;
         AimController aim;
         Canvas overlayCanvas;
         bool restarting;
@@ -46,10 +49,10 @@ namespace RichCoast.App
             Cam = Camera.main != null ? Camera.main : new GameObject("Main Camera", typeof(Camera), typeof(AudioListener)) { tag = "MainCamera" }.GetComponent<Camera>();
             var rig = Cam.gameObject.GetComponent<CameraRig>() ?? Cam.gameObject.AddComponent<CameraRig>();
             rig.Init(Cam, Geometry);
+            ConfigurePhysicsLayers();
 
             var world = new GameObject("ZoneA").transform;
             new ArenaBuilder(world, Geometry, feel).Build();
-            Physics2D.IgnoreLayerCollision(BallFactory.BallLayer, ArenaBuilder.WallLayer, false);
 
             var factory = new BallFactory(world, ladder, feel);
             Board = new Board(factory, Geometry, feel);
@@ -57,17 +60,39 @@ namespace RichCoast.App
             var queue = new BallQueue();
             aim = new AimController(world, Cam, Geometry, factory, feel, queue, () => Time.unscaledTime * 1000.0);
             var mergeFx = new MergeFx(world, feel, Geometry);
+            var highlight = new DropHighlight(world);
             Sfx.Create(feel);
 
-            ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, feel, mergeFx, factory);
-            zoneBStub = new ZoneBStub(Board, Geometry, Cam);
+            ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, feel, mergeFx, factory, highlight);
+            // One of the two layouts per run — every restart reloads the scene, so this re-rolls.
+            ZoneB = new ZoneBSystem(transform, Geometry, feel, Cam, ZoneBLayouts.Pick(Random.value), curve.ScoreBarTargetForLevel(1));
+            ZoneC = new ZoneCSystem(transform, Board, Geometry, feel);
+            Phases = new PhaseDirector(rig, feel);
 
             BuildUi();
             aim.QueueChanged += () => Hud.SetNextTier(aim.Queue.NextTier);
             Hud.SetNextTier(aim.Queue.NextTier);
             GameEvents.GameOver += finalScore => GameOverView.Show(overlayCanvas, finalScore, Restart);
 
+            // Announce initial state LAST, after every system has subscribed.
             ZoneA.Start();
+            Phases.Start();
+        }
+
+        /// <summary>
+        /// Physics layers are physics only, never render routing: Zone A balls (8) never touch Zone B's
+        /// balls or gates; fresh split copies (11) ignore gates for their grace window. Walls (9) are
+        /// shared — both zones' balls collide with them.
+        /// </summary>
+        static void ConfigurePhysicsLayers()
+        {
+            Physics2D.IgnoreLayerCollision(BallFactory.BallLayer, ArenaBuilder.WallLayer, false);
+            Physics2D.IgnoreLayerCollision(BallFactory.BallLayer, ZoneBSystem.BallLayer, true);
+            Physics2D.IgnoreLayerCollision(BallFactory.BallLayer, ZoneBSystem.GraceLayer, true);
+            Physics2D.IgnoreLayerCollision(BallFactory.BallLayer, ZoneBSystem.GateLayer, true);
+            Physics2D.IgnoreLayerCollision(ZoneBSystem.GraceLayer, ZoneBSystem.GateLayer, true);
+            Physics2D.IgnoreLayerCollision(ZoneBSystem.BallLayer, ZoneBSystem.GateLayer, false);
+            Physics2D.IgnoreLayerCollision(ZoneBSystem.BallLayer, ZoneBSystem.GraceLayer, false);
         }
 
         void BuildUi()
@@ -87,12 +112,17 @@ namespace RichCoast.App
             float deltaMs = Time.deltaTime * 1000f;
             aim.Tick();
             ZoneA.Tick(deltaMs);
-            zoneBStub.Tick(deltaMs);
+            ZoneC.Tick(deltaMs);
+            ZoneB.Tick(deltaMs);
             if (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.mKey.wasPressedThisFrame)
                 Sfx.Instance?.ToggleMute();
         }
 
-        void FixedUpdate() => Board.FixedTick();
+        void FixedUpdate()
+        {
+            Board.FixedTick();
+            ZoneB.FixedTick();
+        }
 
         public void Restart()
         {

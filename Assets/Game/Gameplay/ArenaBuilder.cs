@@ -83,10 +83,9 @@ namespace RichCoast.Game
         {
             float s = geometry.Scale;
             // Paper band behind the tray (the "workbench top").
-            var band = Rect("Band", geometry.MinX, geometry.MaxX, geometry.ApexY - geometry.FunnelDrop - 1.5f * s, geometry.CeilingY + geometry.HudHeight, Theme.PaperZoneA, -20);
-            band.name = "Band";
+            WorldArt.Rect(visuals, "Band", geometry.MinX, geometry.MaxX, geometry.ApexY - geometry.FunnelDrop - 1.5f * s, geometry.CeilingY + geometry.HudHeight, Theme.PaperZoneA, -20);
             // Solid wood under the funnel V: a quad from the ramp edges down past the apex.
-            Quad("FunnelFill", new[]
+            WorldArt.Quad(visuals, "FunnelFill", new[]
             {
                 new Vector2(geometry.MinX, geometry.FloorLeft.y),
                 new Vector2(geometry.FloorApex.x, geometry.FloorApex.y),
@@ -95,66 +94,15 @@ namespace RichCoast.Game
                 new Vector2(geometry.MinX, geometry.ApexY - 1.2f * s),
             }, Theme.Pine, -10);
             // Rails: side walls + the funnel V, a thick pine stroke with a dark seam.
-            Rail(new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, RailWidth * s, Theme.Pine, -8);
-            Rail(new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, RailWidth * s, Theme.Pine, -8);
-            Rail(geometry.FloorLeft, geometry.FloorApex, RailWidth * s, Theme.Pine, -8);
-            Rail(geometry.FloorApex, geometry.FloorRight, RailWidth * s, Theme.Pine, -8);
+            WorldArt.Rail(visuals, new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, RailWidth * s, Theme.Pine, -8);
+            WorldArt.Rail(visuals, new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, RailWidth * s, Theme.Pine, -8);
+            WorldArt.Rail(visuals, geometry.FloorLeft, geometry.FloorApex, RailWidth * s, Theme.Pine, -8);
+            WorldArt.Rail(visuals, geometry.FloorApex, geometry.FloorRight, RailWidth * s, Theme.Pine, -8);
             float seam = RailWidth * 0.25f * s;
-            Rail(new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, seam, Theme.PineShadow, -7);
-            Rail(new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, seam, Theme.PineShadow, -7);
-            Rail(geometry.FloorLeft, geometry.FloorApex, seam, Theme.PineShadow, -7);
-            Rail(geometry.FloorApex, geometry.FloorRight, seam, Theme.PineShadow, -7);
-        }
-
-        GameObject Rect(string name, float x0, float x1, float y0, float y1, Color color, int order)
-        {
-            var go = new GameObject(name);
-            go.transform.SetParent(visuals, false);
-            go.transform.position = new Vector3((x0 + x1) / 2f, (y0 + y1) / 2f, 0f);
-            go.transform.localScale = new Vector3(x1 - x0, y1 - y0, 1f);
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = BallArt.WhitePixel;
-            sr.color = color;
-            sr.sortingOrder = order;
-            return go;
-        }
-
-        void Rail(Vector2 a, Vector2 b, float width, Color color, int order)
-        {
-            var d = b - a;
-            var go = new GameObject("Rail");
-            go.transform.SetParent(visuals, false);
-            go.transform.position = (a + b) / 2f;
-            go.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
-            go.transform.localScale = new Vector3(d.magnitude + width, width, 1f);
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = BallArt.WhitePixel;
-            sr.color = color;
-            sr.sortingOrder = order;
-        }
-
-        void Quad(string name, Vector2[] points, Color color, int order)
-        {
-            var go = new GameObject(name);
-            go.transform.SetParent(visuals, false);
-            var mf = go.AddComponent<MeshFilter>();
-            var mr = go.AddComponent<MeshRenderer>();
-            var mesh = new Mesh { name = name };
-            var verts = new Vector3[points.Length];
-            for (int i = 0; i < points.Length; i++) verts[i] = points[i];
-            var tris = new int[(points.Length - 2) * 3];
-            for (int i = 0; i < points.Length - 2; i++)
-            {
-                tris[i * 3] = 0;
-                tris[i * 3 + 1] = i + 2;
-                tris[i * 3 + 2] = i + 1;
-            }
-            mesh.vertices = verts;
-            mesh.triangles = tris;
-            mesh.RecalculateBounds();
-            mf.mesh = mesh;
-            mr.material = new Material(Shader.Find("Sprites/Default")) { color = color };
-            mr.sortingOrder = order;
+            WorldArt.Rail(visuals, new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, seam, Theme.PineShadow, -7);
+            WorldArt.Rail(visuals, new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, seam, Theme.PineShadow, -7);
+            WorldArt.Rail(visuals, geometry.FloorLeft, geometry.FloorApex, seam, Theme.PineShadow, -7);
+            WorldArt.Rail(visuals, geometry.FloorApex, geometry.FloorRight, seam, Theme.PineShadow, -7);
         }
     }
 }
