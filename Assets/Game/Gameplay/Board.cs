@@ -39,6 +39,23 @@ namespace RichCoast.Game
         public int BallCount => balls.Count;
         public bool IsOver => over;
         public IEnumerable<Ball> Balls => balls;
+        /// <summary>The arena growth factor world speeds scale with (impact/rest thresholds divide by it).</summary>
+        public float SpeedScale => geometry.Scale;
+
+        /// <summary>A ball taken off the board by the blacklist drain: where it was and how big it looked.</summary>
+        public readonly struct DrainedBall
+        {
+            public readonly Vector2 Position;
+            public readonly int Tier;
+            public readonly float Diameter;
+
+            public DrainedBall(Vector2 position, int tier, float diameter)
+            {
+                Position = position;
+                Tier = tier;
+                Diameter = diameter;
+            }
+        }
 
         /// <summary>Drop a fresh ball into the board at the spawn row.</summary>
         public Ball SpawnDropped(float x, int tier)
@@ -121,6 +138,41 @@ namespace RichCoast.Game
             }
             Remove(ball);
             return true;
+        }
+
+        /// <summary>How many board balls sit below <paramref name="minTier"/> (the newly-blacklisted ones).</summary>
+        public int CountBelow(int minTier)
+        {
+            int n = 0;
+            foreach (var ball in balls) if (ball.Tier < minTier) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Take every ball below the new draw-window floor OFF the board (the milestone blacklist
+        /// drain) without merging, returning where each was so the caller can animate its slide into
+        /// Zone B. Pending merges involving them are cancelled like <see cref="Extract"/>.
+        /// </summary>
+        public List<DrainedBall> TakeBallsBelow(int minTier)
+        {
+            var drained = new List<DrainedBall>();
+            foreach (var ball in new List<Ball>(balls))
+            {
+                if (ball.Tier >= minTier) continue;
+                drained.Add(new DrainedBall(ball.Position, ball.Tier, ball.Radius * 2f));
+                Extract(ball);
+            }
+            return drained;
+        }
+
+        /// <summary>The arena scale changed (milestone growth): re-normalise every live body's gravity.</summary>
+        public void OnArenaScaled()
+        {
+            foreach (var ball in balls)
+            {
+                ball.Body.gravityScale = factory.GravityScale;
+                ball.Body.WakeUp();
+            }
         }
 
         /// <summary>Freeze the board (game over): bodies stop simulating, nothing more resolves.</summary>

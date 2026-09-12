@@ -1,3 +1,4 @@
+using RichCoast.Core;
 using TMPro;
 using UnityEngine;
 
@@ -40,6 +41,40 @@ namespace RichCoast.Game
         /// <summary>A rectangle spanning [x0,x1] × [y0,y1].</summary>
         public static SpriteRenderer Rect(Transform parent, string name, float x0, float x1, float y0, float y1, Color color, int order) =>
             Rect(parent, name, new Vector2((x0 + x1) / 2f, (y0 + y1) / 2f), new Vector2(x1 - x0, y1 - y0), color, order);
+
+        // --- Themed variants: the colour follows the active palette through milestone cross-fades. ---
+
+        public static SpriteRenderer Rect(Transform parent, string name, Vector2 centre, Vector2 size, ThemeKey key, int order, float alpha = 1f)
+        {
+            var sr = Rect(parent, name, centre, size, Theme.Get(key), order);
+            sr.color = new Color(sr.color.r, sr.color.g, sr.color.b, alpha);
+            Themed.Bind(sr, key);
+            return sr;
+        }
+
+        public static SpriteRenderer Rect(Transform parent, string name, float x0, float x1, float y0, float y1, ThemeKey key, int order, float alpha = 1f) =>
+            Rect(parent, name, new Vector2((x0 + x1) / 2f, (y0 + y1) / 2f), new Vector2(x1 - x0, y1 - y0), key, order, alpha);
+
+        public static SpriteRenderer Rail(Transform parent, Vector2 a, Vector2 b, float width, ThemeKey key, int order, string name = "Rail")
+        {
+            var sr = Rail(parent, a, b, width, Theme.Get(key), order, name);
+            Themed.Bind(sr, key);
+            return sr;
+        }
+
+        public static MeshRenderer Quad(Transform parent, string name, Vector2[] points, ThemeKey key, int order)
+        {
+            var mr = Quad(parent, name, points, Theme.Get(key), order);
+            Themed.Bind(mr, key);
+            return mr;
+        }
+
+        public static TextMeshPro Text(Transform parent, string name, string text, float designPx, ThemeKey key, int order, FontStyles style = FontStyles.Bold)
+        {
+            var tmp = Text(parent, name, text, designPx, Theme.Get(key), order, style);
+            Themed.Bind(tmp, key);
+            return tmp;
+        }
 
         /// <summary>A thick stroke from a to b (the ends extend by half the width, so joints overlap cleanly).</summary>
         public static SpriteRenderer Rail(Transform parent, Vector2 a, Vector2 b, float width, Color color, int order, string name = "Rail")

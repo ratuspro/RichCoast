@@ -46,6 +46,7 @@ namespace RichCoast.UI
         void BuildBar(RectTransform safe)
         {
             var bar = UiKit.Image(safe, "Bar", Theme.Cream);
+            UiKit.Themed(bar, ThemeKey.Cream);
             var barRt = (RectTransform)bar.transform;
             barRt.anchorMin = new Vector2(0f, 1f);
             barRt.anchorMax = new Vector2(1f, 1f);
@@ -55,12 +56,14 @@ namespace RichCoast.UI
 
             // Base rule: a wood line with a thin brass accent above it.
             var rule = UiKit.Image(barRt, "BaseRule", Theme.PineDark);
+            UiKit.Themed(rule, ThemeKey.PineDark);
             var ruleRt = (RectTransform)rule.transform;
             ruleRt.anchorMin = new Vector2(0f, 0f);
             ruleRt.anchorMax = new Vector2(1f, 0f);
             ruleRt.pivot = new Vector2(0.5f, 0f);
             ruleRt.sizeDelta = new Vector2(0f, 6f);
             var brass = UiKit.Image(barRt, "BrassRule", new Color(Theme.Brass.r, Theme.Brass.g, Theme.Brass.b, 0.8f));
+            UiKit.Themed(brass, ThemeKey.Brass);
             var brassRt = (RectTransform)brass.transform;
             brassRt.anchorMin = new Vector2(0f, 0f);
             brassRt.anchorMax = new Vector2(1f, 0f);
@@ -70,11 +73,14 @@ namespace RichCoast.UI
 
             // Milestone bar (left): pine track, brass fill, no numbers.
             var track = UiKit.Image(barRt, "MilestoneTrack", Theme.PineShadow);
+            UiKit.Themed(track, ThemeKey.PineShadow);
             UiKit.Place((RectTransform)track.transform, new Vector2(0f, 0.5f), new Vector2(MilestoneW, MilestoneH), new Vector2(38f, 0f));
             var trackOutline = track.gameObject.AddComponent<Outline>();
             trackOutline.effectColor = Theme.Ink;
             trackOutline.effectDistance = new Vector2(2f, -2f);
+            UiKit.Themed(trackOutline, ThemeKey.Ink);
             var fill = UiKit.Image(track.transform, "MilestoneFill", Theme.BrassBright);
+            UiKit.Themed(fill, ThemeKey.BrassBright);
             milestoneFill = (RectTransform)fill.transform;
             milestoneFill.anchorMin = new Vector2(0f, 0f);
             milestoneFill.anchorMax = new Vector2(0f, 1f);
@@ -85,6 +91,7 @@ namespace RichCoast.UI
 
             // Score (centre, hero).
             scoreText = UiKit.Text(barRt, "Score", "0", 78f, Theme.Ink);
+            Game.Themed.Bind(scoreText, ThemeKey.Ink);
             UiKit.Place((RectTransform)scoreText.transform, new Vector2(0.5f, 0.5f), new Vector2(500f, BarHeight), Vector2.zero);
 
             // Queue row (right): "N left" then the next-ball preview at the edge.
@@ -92,6 +99,7 @@ namespace RichCoast.UI
             UiKit.Place((RectTransform)previewImage.transform, new Vector2(1f, 0.5f), new Vector2(66f, 66f), new Vector2(-38f, 0f));
             previewImage.preserveAspect = true;
             countText = UiKit.Text(barRt, "BallsLeft", "", 40f, Theme.Ink, TextAlignmentOptions.MidlineRight);
+            Game.Themed.Bind(countText, ThemeKey.Ink);
             UiKit.Place((RectTransform)countText.transform, new Vector2(1f, 0.5f), new Vector2(300f, BarHeight), new Vector2(-126f, 0f));
         }
 

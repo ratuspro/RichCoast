@@ -72,9 +72,9 @@ namespace RichCoast.Game
         void BuildBand()
         {
             float x0 = geometry.ZoneBMinX - 0.5f, x1 = geometry.ZoneBMaxX + 0.5f;
-            WorldArt.Rect(root, "Band", x0, x1, geometry.ZoneCBottomY, 0f, Theme.Pine, -9);
+            WorldArt.Rect(root, "Band", x0, x1, geometry.ZoneCBottomY, 0f, ThemeKey.Pine, -9);
             float t = BoardGeometry.Units(2);
-            WorldArt.Rect(root, "Divider", x0, x1, geometry.ZoneCBottomY - t / 2f, geometry.ZoneCBottomY + t / 2f, Theme.PineShadow, -5);
+            WorldArt.Rect(root, "Divider", x0, x1, geometry.ZoneCBottomY - t / 2f, geometry.ZoneCBottomY + t / 2f, ThemeKey.PineShadow, -5);
         }
 
         /// <summary>Nine markers along the band, inset one ball radius from each Zone B edge so a ball can never spawn into a side wall.</summary>
@@ -94,6 +94,7 @@ namespace RichCoast.Game
                 rings[i] = ring.AddComponent<SpriteRenderer>();
                 rings[i].sprite = BallArt.Disc;
                 rings[i].color = Theme.Cream;
+                Themed.Bind(rings[i], ThemeKey.Cream);
                 rings[i].sortingOrder = MarkerOrder - 1;
 
                 var dot = new GameObject($"Marker{i}");
@@ -115,6 +116,7 @@ namespace RichCoast.Game
             if (active)
             {
                 dots[i].color = Theme.BrassBright;
+                Themed.Bind(dots[i], ThemeKey.BrassBright);
                 dots[i].transform.localScale = new Vector3(d * 1.3f, d * 1.3f, 1f);
                 rings[i].enabled = true;
             }
@@ -122,6 +124,7 @@ namespace RichCoast.Game
             {
                 var c = Theme.Brass;
                 dots[i].color = new Color(c.r, c.g, c.b, 0.45f);
+                Themed.Bind(dots[i], ThemeKey.Brass);
                 dots[i].transform.localScale = new Vector3(d, d, 1f);
                 rings[i].enabled = false;
             }

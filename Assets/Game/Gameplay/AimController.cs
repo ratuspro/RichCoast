@@ -59,6 +59,7 @@ namespace RichCoast.Game
             guide.textureMode = LineTextureMode.Tile;
             guide.material = new Material(Shader.Find("Sprites/Default")) { mainTexture = DashTexture() };
             guide.startColor = guide.endColor = new Color(Theme.InkSoft.r, Theme.InkSoft.g, Theme.InkSoft.b, 0.55f);
+            Themed.Bind(guide, ThemeKey.InkSoft);
             guide.sortingOrder = 9;
             guide.alignment = LineAlignment.TransformZ;
 

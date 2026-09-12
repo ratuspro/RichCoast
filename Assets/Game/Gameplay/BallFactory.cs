@@ -17,16 +17,25 @@ namespace RichCoast.Game
         readonly Transform parent;
         readonly TierLadder ladder;
         readonly GameFeelSO feel;
+        readonly BoardGeometry geometry;
         readonly Stack<Ball> pool = new Stack<Ball>();
         readonly string sortingLayer;
 
-        public BallFactory(Transform parent, TierLadder ladder, GameFeelSO feel, string sortingLayer = "Default")
+        public BallFactory(Transform parent, TierLadder ladder, GameFeelSO feel, BoardGeometry geometry, string sortingLayer = "Default")
         {
             this.parent = parent;
             this.ladder = ladder;
             this.feel = feel;
+            this.geometry = geometry;
             this.sortingLayer = sortingLayer;
         }
+
+        /// <summary>
+        /// Gravity for a Zone A ball at the current arena scale. Balls should feel gravity × scale (the
+        /// camera zoom is 1/scale, so on-screen fall speed stays milestone-invariant — master's
+        /// supplemental gravity); world gravity is shared with Zone B, so it's applied per body.
+        /// </summary>
+        public float GravityScale => feel.gravityScale * geometry.Scale;
 
         public float RadiusForTier(int tier) => BoardGeometry.Units(ladder.RadiusForTier(tier));
 
@@ -47,7 +56,7 @@ namespace RichCoast.Game
             var body = ball.Body;
             body.linearVelocity = Vector2.zero;
             body.angularVelocity = 0f;
-            body.gravityScale = feel.gravityScale;
+            body.gravityScale = GravityScale;
             body.linearDamping = feel.linearDamping;
             body.angularDamping = feel.angularDamping;
             body.sleepMode = RigidbodySleepMode2D.StartAwake;

@@ -21,7 +21,7 @@ set +e
   -batchmode \
   -projectPath "$(native_path "$PROJECT_DIR")" \
   -runTests -testPlatform PlayMode \
-  -testFilter "RichCoast.Tests.PlayMode.ScreenshotCapture.CaptureGameScene" \
+  -testFilter "RichCoast.Tests.PlayMode.ScreenshotCapture" \
   -testResults "$(native_path "$PROJECT_DIR/Logs/screenshot-results.xml")" \
   -logFile "$(native_path "$LOG")"
 set -e

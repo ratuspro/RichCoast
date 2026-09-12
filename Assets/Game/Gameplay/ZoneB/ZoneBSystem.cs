@@ -389,7 +389,7 @@ namespace RichCoast.Game
         void BuildBackdrop()
         {
             float x0 = geometry.ZoneBMinX - 0.5f, x1 = geometry.ZoneBMaxX + 0.5f;
-            WorldArt.Rect(root, "Paper", x0, x1, geometry.ZoneBBottomY - 2f, geometry.ZoneBTopY, Theme.Paper, -20);
+            WorldArt.Rect(root, "Paper", x0, x1, geometry.ZoneBBottomY - 2f, geometry.ZoneBTopY, ThemeKey.Paper, -20);
         }
 
         /// <summary>Invisible left/right/bottom border so balls are always contained within the band.</summary>
@@ -425,10 +425,10 @@ namespace RichCoast.Game
             if (wall.FillBelow)
             {
                 float bottom = geometry.ZoneBBottomY;
-                WorldArt.Quad(root, "RampFill", new[] { a, b, new Vector2(b.x, bottom), new Vector2(a.x, bottom) }, Theme.Pine, 2);
+                WorldArt.Quad(root, "RampFill", new[] { a, b, new Vector2(b.x, bottom), new Vector2(a.x, bottom) }, ThemeKey.Pine, 2);
             }
-            WorldArt.Rail(root, a, b, thickness + BoardGeometry.Units(2), Theme.PineShadow, 3);
-            WorldArt.Rail(root, a, b, thickness, Theme.Pine, 4);
+            WorldArt.Rail(root, a, b, thickness + BoardGeometry.Units(2), ThemeKey.PineShadow, 3);
+            WorldArt.Rail(root, a, b, thickness, ThemeKey.Pine, 4);
         }
 
         /// <summary>A painted wooden sign — green for high multipliers, brass for low — with a stencilled "X N" and a wood-shadow edge. Moving kinds ride a kinematic body.</summary>
@@ -450,11 +450,11 @@ namespace RichCoast.Game
             gate.Multiplier = def.Multiplier;
             if (def.Kind != GateKind.Static) movingGates.Add((gate, def, body));
 
-            var paint = def.Multiplier >= 4 ? Theme.GatePaint : Theme.Brass;
+            var paint = def.Multiplier >= 4 ? ThemeKey.GatePaint : ThemeKey.Brass;
             float edge = BoardGeometry.Units(2);
-            WorldArt.Rect(go.transform, "Edge", Vector2.zero, new Vector2(length + 2f * edge, thickness + 2f * edge), Theme.PineShadow, 4);
+            WorldArt.Rect(go.transform, "Edge", Vector2.zero, new Vector2(length + 2f * edge, thickness + 2f * edge), ThemeKey.PineShadow, 4);
             WorldArt.Rect(go.transform, "Paint", Vector2.zero, new Vector2(length, thickness), paint, 5);
-            WorldArt.Text(go.transform, "Label", $"X{def.Multiplier}", 15f, Theme.Ink, 6);
+            WorldArt.Text(go.transform, "Label", $"X{def.Multiplier}", 15f, ThemeKey.Ink, 6);
         }
 
         /// <summary>An invisible sensor (the funnel ramps already read as the mouth); a scored collector labels its multiplier.</summary>
@@ -471,7 +471,7 @@ namespace RichCoast.Game
             box.isTrigger = true;
             var collector = go.AddComponent<ZoneBCollector>();
             collector.ScoreMultiplier = def.ScoreMultiplier;
-            if (def.ScoreMultiplier != 1) WorldArt.Text(go.transform, "Label", $"x{def.ScoreMultiplier}", 11f, Theme.Ink, 5, FontStyles.Normal);
+            if (def.ScoreMultiplier != 1) WorldArt.Text(go.transform, "Label", $"x{def.ScoreMultiplier}", 11f, ThemeKey.Ink, 5, FontStyles.Normal);
         }
 
         void StaticBox(string name, Vector2 centre, Vector2 size, float angleDeg, PhysicsMaterial2D material, int layer)
@@ -501,15 +501,15 @@ namespace RichCoast.Game
             barFillWidth = (x1 - x0) - 2f * stroke;
             barFillHeight = barH - 2f * stroke;
 
-            WorldArt.Rect(root, "BarOutline", x0, x1, bottom, barTop, Theme.Ink, 10);
-            barGroove = WorldArt.Rect(root, "BarGroove", x0 + stroke, x1 - stroke, bottom + stroke, barTop - stroke, Theme.Groove, 11);
+            WorldArt.Rect(root, "BarOutline", x0, x1, bottom, barTop, ThemeKey.Ink, 10);
+            barGroove = WorldArt.Rect(root, "BarGroove", x0 + stroke, x1 - stroke, bottom + stroke, barTop - stroke, ThemeKey.Groove, 11);
             grooveBaseScale = barGroove.transform.localScale;
-            barFill = WorldArt.Rect(root, "BarFill", new Vector2(barFillLeft, barMidY), new Vector2(0f, barFillHeight), Theme.Brass, 12);
-            barLabel = WorldArt.Text(root, "BarLabel", "", 11f, Theme.Ink, 13);
+            barFill = WorldArt.Rect(root, "BarFill", new Vector2(barFillLeft, barMidY), new Vector2(0f, barFillHeight), ThemeKey.Brass, 12);
+            barLabel = WorldArt.Text(root, "BarLabel", "", 11f, ThemeKey.Ink, 13);
             barLabel.transform.localPosition = new Vector3(0f, barMidY, 0f);
 
             // Hovering haul label — centred just above the bar, hidden until the round earns its first points.
-            haulLabel = WorldArt.Text(root, "Haul", "", 18f, Theme.BrassBright, 40);
+            haulLabel = WorldArt.Text(root, "Haul", "", 18f, ThemeKey.BrassBright, 40);
             haulLabel.transform.localPosition = new Vector3(0f, barTop + BoardGeometry.Units(16f), 0f);
             haulLabel.outlineWidth = 0.25f;
             haulLabel.outlineColor = Theme.Ink;

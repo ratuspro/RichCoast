@@ -115,6 +115,12 @@ namespace RichCoast.Game
         [Tooltip("Camera pan between the A and B framings (ms). Snappier than a reward beat — it's a scene change.")]
         public float panMs = 650f;
 
+        [Header("Milestone")]
+        [Tooltip("Arena zoom-out (and the palette cross-fade that rides it) at a draw-window milestone (ms).")]
+        public float milestoneZoomMs = 1200f;
+        [Tooltip("Blacklist drain: how long each obsolete ball slides from Zone A down into Zone B (ms).")]
+        public float drainMs = 280f;
+
         [Header("Score bar")]
         [Tooltip("Per-16ms fraction the shown fill closes toward the logical value (glide, not snap).")]
         public float barFillLerp = 0.2f;

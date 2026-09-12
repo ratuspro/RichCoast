@@ -1,30 +1,51 @@
+using RichCoast.Core;
 using UnityEngine;
 
 namespace RichCoast.Game
 {
     /// <summary>
-    /// The environment palette (the Phaser "Bright Workshop" base look, ported as a static table).
-    /// Ball materials are NOT here — they're the tier-identity signal and never theme. Milestone
-    /// palette cross-fades are M3; M1 keeps the single workshop mood.
+    /// The ACTIVE environment palette (port of the Phaser <c>Theme</c>): every player-facing surface
+    /// colour that isn't a ball material (those are the tier-identity signal and never theme).
+    /// Mutable — <see cref="ThemeDirector"/> re-writes it through <see cref="Apply"/> as the run
+    /// crosses milestones, cross-fading between the authored <see cref="Palettes"/>. Consumers read
+    /// <c>Theme.Brass</c> etc. at use time; anything that BAKES a colour into a renderer binds it with
+    /// <see cref="Themed"/> so <c>GameEvents.ThemeChanged</c> restyles it in step with the fade.
     /// </summary>
     public static class Theme
     {
-        public static readonly Color Paper = BallArt.Rgb(0xf2e7d5);
-        public static readonly Color PaperZoneA = BallArt.Rgb(0xf7efe0);
-        public static readonly Color PaperZoneC = BallArt.Rgb(0xe9dcc4);
+        static readonly Color[] colors = new Color[Palette.KeyCount];
+        static Palette active;
+
+        static Theme() => Apply(Palettes.Workshop);
+
+        /// <summary>The palette currently applied (compare with <c>Palette.SameAs</c>).</summary>
+        public static Palette Active => active;
+
+        /// <summary>Re-point the active palette; every <see cref="Theme"/> property reads the new values at once.</summary>
+        public static void Apply(Palette palette)
+        {
+            active = palette;
+            for (int i = 0; i < Palette.KeyCount; i++) colors[i] = BallArt.Rgb(palette[(ThemeKey)i]);
+        }
+
+        public static Color Get(ThemeKey key) => colors[(int)key];
+
+        public static Color Paper => colors[(int)ThemeKey.Paper];
+        public static Color PaperZoneA => colors[(int)ThemeKey.PaperZoneA];
+        public static Color PaperZoneC => colors[(int)ThemeKey.PaperZoneC];
+        public static Color Pine => colors[(int)ThemeKey.Pine];
+        public static Color PineDark => colors[(int)ThemeKey.PineDark];
+        public static Color PineShadow => colors[(int)ThemeKey.PineShadow];
+        public static Color Brass => colors[(int)ThemeKey.Brass];
+        public static Color BrassBright => colors[(int)ThemeKey.BrassBright];
+        public static Color Ink => colors[(int)ThemeKey.Ink];
+        public static Color InkSoft => colors[(int)ThemeKey.InkSoft];
+        public static Color Cream => colors[(int)ThemeKey.Cream];
+        public static Color Danger => colors[(int)ThemeKey.Danger];
+        public static Color Scrim => colors[(int)ThemeKey.Scrim];
         /// <summary>High-multiplier gate sign paint (low multipliers are brass).</summary>
-        public static readonly Color GatePaint = BallArt.Rgb(0x6aa84f);
+        public static Color GatePaint => colors[(int)ThemeKey.GatePaint];
         /// <summary>Zone B score-bar groove background.</summary>
-        public static readonly Color Groove = BallArt.Rgb(0xe0d2b8);
-        public static readonly Color Pine = BallArt.Rgb(0xd9b07c);
-        public static readonly Color PineDark = BallArt.Rgb(0xa87e4f);
-        public static readonly Color PineShadow = BallArt.Rgb(0x7d5a33);
-        public static readonly Color Brass = BallArt.Rgb(0xc9973f);
-        public static readonly Color BrassBright = BallArt.Rgb(0xf0c060);
-        public static readonly Color Ink = BallArt.Rgb(0x3f3428);
-        public static readonly Color InkSoft = BallArt.Rgb(0x8a7a64);
-        public static readonly Color Cream = BallArt.Rgb(0xfdf6ea);
-        public static readonly Color Danger = BallArt.Rgb(0xd64545);
-        public static readonly Color Scrim = BallArt.Rgb(0x2b2115);
+        public static Color Groove => colors[(int)ThemeKey.Groove];
     }
 }

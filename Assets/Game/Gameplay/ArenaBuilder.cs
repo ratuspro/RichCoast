@@ -1,16 +1,20 @@
+using RichCoast.Core;
 using UnityEngine;
 
 namespace RichCoast.Game
 {
     /// <summary>
     /// Builds Zone A's tray: static Box2D walls (ceiling, sides, the V funnel floor) plus the
-    /// visible pine rails and paper backdrop, from <see cref="BoardGeometry"/>. Rebuildable at a new
-    /// scale for the M3 milestone growth (walls only ever move outward).
+    /// visible pine rails and paper backdrop, from <see cref="BoardGeometry"/>. Rebuilt at each new
+    /// scale by the milestone growth (walls only ever move outward). Wall bodies keep a CONSTANT
+    /// thickness: Zone A balls use continuous collision, so unlike the Phaser build the walls needn't
+    /// thicken with the arena — and a scaled floor would reach through the shared wall layer into
+    /// Zone B's space. Every painted surface is theme-bound, so palette cross-fades restyle it.
     /// </summary>
     public sealed class ArenaBuilder
     {
         public const int WallLayer = 9;
-        /// <summary>Static-body wall thickness in units (scaled with the arena so fast balls never tunnel).</summary>
+        /// <summary>Static-body wall thickness in units (constant — see the class note).</summary>
         const float WallThickness = 1.0f;
         const float RailWidth = 0.26f;
 
@@ -41,7 +45,7 @@ namespace RichCoast.Game
             wallMaterial ??= new PhysicsMaterial2D("wall") { friction = 0.3f, bounciness = 0.05f };
             floorMaterial ??= new PhysicsMaterial2D("floor") { friction = feel.floorFriction, bounciness = 0.05f };
 
-            float t = WallThickness * geometry.Scale;
+            float t = WallThickness;
             float left = geometry.MinX, right = geometry.MaxX, top = geometry.CeilingY;
             float midY = (top + geometry.ApexY) / 2f;
             float spanY = top - geometry.ApexY + 2f * t;
@@ -82,27 +86,29 @@ namespace RichCoast.Game
         void BuildVisuals()
         {
             float s = geometry.Scale;
+            // Paint below the apex stops at Zone C's divider: the tray grows UP and OUT, never into Zone B.
+            float below = geometry.ZoneCBottomY;
             // Paper band behind the tray (the "workbench top").
-            WorldArt.Rect(visuals, "Band", geometry.MinX, geometry.MaxX, geometry.ApexY - geometry.FunnelDrop - 1.5f * s, geometry.CeilingY + geometry.HudHeight, Theme.PaperZoneA, -20);
-            // Solid wood under the funnel V: a quad from the ramp edges down past the apex.
+            WorldArt.Rect(visuals, "Band", geometry.MinX, geometry.MaxX, below, geometry.CeilingY + geometry.HudHeight * s, ThemeKey.PaperZoneA, -20);
+            // Solid wood under the funnel V: a quad from the ramp edges down to the Zone C divider.
             WorldArt.Quad(visuals, "FunnelFill", new[]
             {
                 new Vector2(geometry.MinX, geometry.FloorLeft.y),
                 new Vector2(geometry.FloorApex.x, geometry.FloorApex.y),
                 new Vector2(geometry.MaxX, geometry.FloorRight.y),
-                new Vector2(geometry.MaxX, geometry.ApexY - 1.2f * s),
-                new Vector2(geometry.MinX, geometry.ApexY - 1.2f * s),
-            }, Theme.Pine, -10);
+                new Vector2(geometry.MaxX, below),
+                new Vector2(geometry.MinX, below),
+            }, ThemeKey.Pine, -10);
             // Rails: side walls + the funnel V, a thick pine stroke with a dark seam.
-            WorldArt.Rail(visuals, new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, RailWidth * s, Theme.Pine, -8);
-            WorldArt.Rail(visuals, new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, RailWidth * s, Theme.Pine, -8);
-            WorldArt.Rail(visuals, geometry.FloorLeft, geometry.FloorApex, RailWidth * s, Theme.Pine, -8);
-            WorldArt.Rail(visuals, geometry.FloorApex, geometry.FloorRight, RailWidth * s, Theme.Pine, -8);
+            WorldArt.Rail(visuals, new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, RailWidth * s, ThemeKey.Pine, -8);
+            WorldArt.Rail(visuals, new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, RailWidth * s, ThemeKey.Pine, -8);
+            WorldArt.Rail(visuals, geometry.FloorLeft, geometry.FloorApex, RailWidth * s, ThemeKey.Pine, -8);
+            WorldArt.Rail(visuals, geometry.FloorApex, geometry.FloorRight, RailWidth * s, ThemeKey.Pine, -8);
             float seam = RailWidth * 0.25f * s;
-            WorldArt.Rail(visuals, new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, seam, Theme.PineShadow, -7);
-            WorldArt.Rail(visuals, new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, seam, Theme.PineShadow, -7);
-            WorldArt.Rail(visuals, geometry.FloorLeft, geometry.FloorApex, seam, Theme.PineShadow, -7);
-            WorldArt.Rail(visuals, geometry.FloorApex, geometry.FloorRight, seam, Theme.PineShadow, -7);
+            WorldArt.Rail(visuals, new Vector2(geometry.MinX, geometry.CeilingY), geometry.FloorLeft, seam, ThemeKey.PineShadow, -7);
+            WorldArt.Rail(visuals, new Vector2(geometry.MaxX, geometry.CeilingY), geometry.FloorRight, seam, ThemeKey.PineShadow, -7);
+            WorldArt.Rail(visuals, geometry.FloorLeft, geometry.FloorApex, seam, ThemeKey.PineShadow, -7);
+            WorldArt.Rail(visuals, geometry.FloorApex, geometry.FloorRight, seam, ThemeKey.PineShadow, -7);
         }
     }
 }

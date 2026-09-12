@@ -97,6 +97,31 @@ namespace RichCoast.Tests.PlayMode
             Capture(cam, rig, "game-scene-b.png");
         }
 
+        /// <summary>The M3 look: the board at the first milestone — arena grown ×1.92, dusk palette, window [5,8].</summary>
+        [UnityTest]
+        public IEnumerator CaptureMilestoneScene()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            var boot = Object.FindFirstObjectByType<GameBootstrap>();
+            Assert.IsNotNull(boot);
+            while (boot.ZoneA.Level < 20) GameEvents.RaiseScoreBarFilled();
+            yield return new WaitForSeconds(2.5f); // zoom + cross-fade + (empty) drain
+
+            float[] xs = { -5f, -2.5f, 0f, 2.5f, 5f, -3.5f, 3.5f, 1f };
+            for (int i = 0; i < xs.Length; i++)
+            {
+                boot.DebugDrop(xs[i], 5 + i % 4);
+                yield return new WaitForSeconds(0.35f);
+            }
+            yield return new WaitForSeconds(2.5f);
+
+            var cam = boot.Cam;
+            var rig = cam.GetComponent<RichCoast.Game.CameraRig>();
+            rig.Pan = 0f;
+            Capture(cam, rig, "game-scene-m3.png");
+        }
+
         /// <summary>Render the camera (plus its screen-space canvases) into Logs/<paramref name="file"/> at the portrait target size.</summary>
         static void Capture(Camera cam, RichCoast.Game.CameraRig rig, string file)
         {

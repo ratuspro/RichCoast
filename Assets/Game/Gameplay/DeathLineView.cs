@@ -1,4 +1,5 @@
 using PrimeTween;
+using RichCoast.Core;
 using UnityEngine;
 
 namespace RichCoast.Game
@@ -24,6 +25,7 @@ namespace RichCoast.Game
             line = go.AddComponent<SpriteRenderer>();
             line.sprite = BallArt.WhitePixel;
             line.color = Theme.Danger;
+            Themed.Bind(line, ThemeKey.Danger);
             line.sortingOrder = 5;
             line.enabled = false;
             Reposition();

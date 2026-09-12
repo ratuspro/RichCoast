@@ -96,17 +96,46 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 
 ## Status
 
-**Milestones 1 + 2 are implemented and green headlessly** (EditMode 80 tests · PlayMode 6, incl.
-a Zone B drain test and a full depletion → pan → door-tap → Zone B handoff test; screenshots of
-both framings in `Logs/game-scene.png` / `game-scene-b.png`). M1 ran on a Pixel 7 (2026-09-11);
-**M2 has not yet been built to the device** — the user's hands-on feel sign-off (touch, haptics,
-audio, perf, door-timing feel) and any resulting `GameFeel.asset` tuning are pending for both.
+**Milestones 1, 2 + 3 are implemented and green headlessly** (EditMode 88 tests · PlayMode 11,
+incl. a Zone B drain test, a full depletion → pan → door-tap → Zone B handoff test, and three
+milestone tests: plain level-ups never zoom, the level-20 milestone grows/drains/recolours, a
+milestone cash-in that arrives in phase B defers until the pan lands in A; screenshots of the A
+framing, the B framing and the first milestone in `Logs/game-scene*.png`). M1 ran on a Pixel 7
+(2026-09-11); **M2 and M3 have not yet been built to the device** — the user's hands-on feel
+sign-off (touch, haptics, audio, perf, door timing, zoom/drain pacing, the single-camera
+framing consequence below) and any resulting `GameFeel.asset` tuning are pending.
 
-The full loop now runs from one `GameBootstrap`:
+The full loop runs from one `GameBootstrap`:
 - **Zone A** — tray, pooled material balls, drag-to-aim, finite buffer, merges with juice, death
-  line, game over + RESTART. Aiming is frozen outside phase A; a cash-in that arrives in phase
-  B defers its ticked refill until the pan lands back in A. A brass `DropHighlight` breathes
-  under the ball the door would grab while the buffer is spent.
+  line, game over + RESTART. Aiming is frozen outside phase A and during a milestone zoom
+  (one `ApplyFreeze` sink). A cash-in that arrives in phase B (or mid-zoom) defers its reward
+  beat until the pan lands back in A; a roll-through burst composes its zoom factors by product
+  into that deferred slot. A brass `DropHighlight` breathes under the ball the door would grab
+  while the buffer is spent.
+- **Milestones (M3)** — every 20 levels the draw window shifts (`Core.ProgressionCurve`) and
+  `ZoneASystem` runs master's cash-in sequence: `TierLadder.MilestoneZoomFactor` (neutral
+  growth × stage tightness; flat ×1.2 tail) → `ArenaGrowth.Grow` snaps `BoardGeometry.Scale`,
+  rebuilds the tray outward (`ArenaBuilder`; wall bodies keep a CONSTANT thickness — Zone A
+  balls use continuous collision, and a ×s floor would reach through the shared wall layer
+  into Zone B), re-normalises ball gravity (`BallFactory.GravityScale` = feel × s, master's
+  supplemental gravity; blast/rest/speed-cap/impact-squash are all ÷/× s too) and tweens
+  `CameraRig.ViewScale` over `GameFeel.milestoneZoomMs`. When the camera lands,
+  `DrainBlacklisted` takes every ball below the new window floor (`Board.TakeBallsBelow`),
+  raises `ZoneBBusy` up front, slides throwaway sprites to the Zone B entry (column clamped 12
+  design px inside the walls) and raises `BallDropped` per landing; `ArenaZoom(false)` only
+  after the last one. The queue re-rolls off blacklisted tiers before the zoom.
+- **Single camera zoom** — `CameraRig` frames `10 × ViewScale` units in the A framing and Zone
+  B's native 10 units in the B framing; `Pan` blends both position AND width. Consequence (vs
+  master's second Zone-A camera): in the A framing Zone C and Zone B appear at 1/s once the
+  arena has grown, and the pan to B doubles as a zoom-in on Zone B. Tray paint below the apex
+  clamps to Zone C's divider so the grown tray never paints into Zone B.
+- **Palettes** — `Core.Palettes` (workshop → dusk → night → dawn → gilded, verbatim from
+  master's `Theme.ts`, + `ColorMath`/`Palette.Lerp`). `Game.Theme` is the ACTIVE palette
+  (`Theme.Apply`); baked colours are bound with `Themed.Bind(renderer, ThemeKey)` (or the
+  `WorldArt`/`UiKit` ThemeKey overloads) and one `GameEvents.ThemeChanged` restyles them all,
+  preserving each target's live alpha. `ThemeDirector` targets `curve.PaletteNameForLevel` on
+  `ProgressionChanged` and cross-fades on `ArenaZoom(true)` over the zoom duration. Every run
+  boots in workshop (`GameBootstrap.Awake` applies it and `Tween.StopAll()`s stale fades).
 - **Zone C** (`Gameplay/ZoneC/ZoneCSystem.cs`) — pine door band under the funnel apex; nine
   brass markers, the lit one ping-pongs at `GameFeel.sweepMs`; armed only in phase B and while
   Zone B is empty (+ `ArenaZoom` lock, game-over lock). A tap anywhere grabs the nearest ball by
@@ -124,15 +153,14 @@ The full loop now runs from one `GameBootstrap`:
 - **Phase pan** — `PhaseDirector` runs `Core.PhaseMachine` (A ⇄ B with the queued-refill
   bounce) and tweens `CameraRig.Pan` 0→1: A pins the top edge above the tray + HUD, B pins Zone
   B's bottom (score bar) to the screen bottom, both safe-area inset; on the 390×844 design
-  screen the two differ by exactly `DesignSpace.PanDistance` (394 px).
+  screen the two differ by exactly `DesignSpace.PanDistance` (394 px) at scale 1.
 - Physics layers: Zone A balls 8, walls 9 (shared), Zone B balls 10, grace 11, gates 12 —
   ignores set in `GameBootstrap.ConfigurePhysicsLayers`. Sfx gained transition / multiply
   (combo-pitched) / collect cues.
 
-Next: **on-device M2 feel session** (`Tools/build-android.sh`), then **M3** progression
-milestones (arena growth as ortho-size tween, blacklist drains, palette cross-fades — `ArenaZoom`
-is already honoured by the door lock) · **M4** UI polish (buffer particles, cash-in sequence,
-phase transitions) · **M5** analytics, perf, store prep.
+Next: **on-device M2 + M3 feel session** (`Tools/build-android.sh`; judge the single-camera
+framing at the first milestone) · **M4** UI polish (buffer particles, cash-in sequence, phase
+transitions) · **M5** analytics, perf, store prep.
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's
 > state *now* — a single snapshot, not a changelog.

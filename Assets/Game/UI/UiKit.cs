@@ -1,3 +1,4 @@
+using RichCoast.Core;
 using RichCoast.Game;
 using TMPro;
 using UnityEngine;
@@ -101,6 +102,14 @@ namespace RichCoast.UI
             Stretch((RectTransform)text.transform);
             return button;
         }
+
+        /// <summary>Bind a uGUI graphic's colour to the active palette (restyled through milestone cross-fades).</summary>
+        public static Game.Themed Themed(Graphic graphic, ThemeKey key) =>
+            Game.Themed.Bind(graphic, key, () => graphic.color, c => graphic.color = c);
+
+        /// <summary>Bind an outline effect's colour to the active palette.</summary>
+        public static Game.Themed Themed(Outline outline, ThemeKey key) =>
+            Game.Themed.Bind(outline, key, () => outline.effectColor, c => outline.effectColor = c);
 
         /// <summary>Anchor a rect to an edge/corner: anchors + pivot to the same point, with a size and offset.</summary>
         public static RectTransform Place(RectTransform rt, Vector2 anchor, Vector2 size, Vector2 offset)

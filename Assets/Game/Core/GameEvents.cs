@@ -101,6 +101,8 @@ namespace RichCoast.Core
         public static event Action ZoneADepleted;
         /// <summary>Zone A → all: the run ended (final score). Replaces the Phaser build's in-zone overlay wiring.</summary>
         public static event Action<double> GameOver;
+        /// <summary>ThemeDirector → all: the active palette changed (fired per cross-fade tick); baked surfaces restyle.</summary>
+        public static event Action ThemeChanged;
 
         public static void RaiseBallDropped(BallDroppedEvent e) => BallDropped?.Invoke(e);
         public static void RaiseZoneBBusy() => ZoneBBusy?.Invoke();
@@ -116,6 +118,7 @@ namespace RichCoast.Core
         public static void RaisePhaseChanged(GamePhase phase) => PhaseChanged?.Invoke(phase);
         public static void RaiseZoneADepleted() => ZoneADepleted?.Invoke();
         public static void RaiseGameOver(double finalScore) => GameOver?.Invoke(finalScore);
+        public static void RaiseThemeChanged() => ThemeChanged?.Invoke();
 
         /// <summary>Drop every subscriber — call on scene reload and between tests so handlers never leak.</summary>
         public static void Reset()
@@ -134,6 +137,7 @@ namespace RichCoast.Core
             PhaseChanged = null;
             ZoneADepleted = null;
             GameOver = null;
+            ThemeChanged = null;
         }
     }
 }

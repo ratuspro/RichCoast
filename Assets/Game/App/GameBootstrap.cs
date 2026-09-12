@@ -12,9 +12,9 @@ namespace RichCoast.App
     /// <summary>
     /// The composition root: the ONLY MonoBehaviour the scene needs. Builds the camera rig, the Zone A
     /// tray, the ball factory/board/aim/death line, the juice + audio, the Zone C trap-door, the Zone
-    /// B split arena, the phase director and the uGUI shell — all from three ScriptableObjects — then
-    /// ticks the plain-C# systems. Zones never see each other here; they share only
-    /// <see cref="GameEvents"/>.
+    /// B split arena, the phase + theme directors and the uGUI shell — all from three
+    /// ScriptableObjects — then ticks the plain-C# systems. Zones never see each other here; they
+    /// share only <see cref="GameEvents"/>.
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
@@ -27,6 +27,7 @@ namespace RichCoast.App
         public ZoneBSystem ZoneB { get; private set; }
         public ZoneCSystem ZoneC { get; private set; }
         public PhaseDirector Phases { get; private set; }
+        public ThemeDirector Themes { get; private set; }
         public BoardGeometry Geometry { get; private set; }
         public Camera Cam { get; private set; }
         public HudView Hud { get; private set; }
@@ -38,9 +39,15 @@ namespace RichCoast.App
         void Awake()
         {
             GameEvents.Reset();
+            // A fresh scene owns fresh tweens: a cross-fade or zoom from a previous load (plain C# tween
+            // targets outlive scene unloads) must never keep writing into this run's Theme.
+            Tween.StopAll();
             PrimeTweenConfig.warnZeroDuration = false;
             PrimeTweenConfig.warnEndValueEqualsCurrent = false;
             Application.targetFrameRate = 60;
+            // Every run boots in the workshop look, before anything bakes a colour.
+            Theme.Apply(Palettes.Workshop);
+            GameEvents.ThemeChanged += Themed.RestyleAll;
 
             var ladder = tierLadder.ToLadder();
             var curve = progression.ToCurve();
@@ -52,22 +59,25 @@ namespace RichCoast.App
             ConfigurePhysicsLayers();
 
             var world = new GameObject("ZoneA").transform;
-            new ArenaBuilder(world, Geometry, feel).Build();
+            var arena = new ArenaBuilder(world, Geometry, feel);
+            arena.Build();
 
-            var factory = new BallFactory(world, ladder, feel);
+            var factory = new BallFactory(world, ladder, feel, Geometry);
             Board = new Board(factory, Geometry, feel);
             var deathLine = new DeathLineView(world, Geometry);
             var queue = new BallQueue();
             aim = new AimController(world, Cam, Geometry, factory, feel, queue, () => Time.unscaledTime * 1000.0);
             var mergeFx = new MergeFx(world, feel, Geometry);
             var highlight = new DropHighlight(world);
+            var growth = new ArenaGrowth(Geometry, arena, rig, Board, feel);
             Sfx.Create(feel);
 
-            ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, feel, mergeFx, factory, highlight);
+            ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, ladder, feel, mergeFx, factory, highlight, growth, Geometry, world);
             // One of the two layouts per run — every restart reloads the scene, so this re-rolls.
             ZoneB = new ZoneBSystem(transform, Geometry, feel, Cam, ZoneBLayouts.Pick(Random.value), curve.ScoreBarTargetForLevel(1));
             ZoneC = new ZoneCSystem(transform, Board, Geometry, feel);
             Phases = new PhaseDirector(rig, feel);
+            Themes = new ThemeDirector(curve, feel);
 
             BuildUi();
             aim.QueueChanged += () => Hud.SetNextTier(aim.Queue.NextTier);

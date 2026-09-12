@@ -44,7 +44,8 @@ namespace RichCoast.Game
         void OnCollisionEnter2D(Collision2D collision)
         {
             if (board == null) return;
-            float impact = collision.relativeVelocity.magnitude;
+            // World speeds grow with the arena scale (normalised gravity); the squash reads on-screen speed.
+            float impact = collision.relativeVelocity.magnitude / board.SpeedScale;
             View.OnImpact(impact, collision.GetContact(0).normal);
             var other = collision.rigidbody != null ? collision.rigidbody.GetComponent<Ball>() : null;
             if (other != null) board.ReportContact(this, other);
