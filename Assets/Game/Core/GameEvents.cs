@@ -107,6 +107,12 @@ namespace RichCoast.Core
         public static event Action<int> GoldenGateHit;
         /// <summary>ThemeDirector → all: the active palette changed (fired per cross-fade tick); baked surfaces restyle.</summary>
         public static event Action ThemeChanged;
+        /// <summary>
+        /// UI → zones: a modal dialog opened (true) / closed (false). Zone A freezes aiming and Zone C
+        /// disarms the trap-door. A uGUI scrim only blocks uGUI raycasts, and BOTH of those read
+        /// <c>Pointer.current</c> directly — so without this the game keeps playing under the dialog.
+        /// </summary>
+        public static event Action<bool> ModalOpen;
 
         public static void RaiseBallDropped(BallDroppedEvent e) => BallDropped?.Invoke(e);
         public static void RaiseZoneBBusy() => ZoneBBusy?.Invoke();
@@ -125,6 +131,7 @@ namespace RichCoast.Core
         public static void RaiseGameOver(double finalScore) => GameOver?.Invoke(finalScore);
         public static void RaiseGoldenGateHit(int multiplier) => GoldenGateHit?.Invoke(multiplier);
         public static void RaiseThemeChanged() => ThemeChanged?.Invoke();
+        public static void RaiseModalOpen(bool open) => ModalOpen?.Invoke(open);
 
         /// <summary>Drop every subscriber — call on scene reload and between tests so handlers never leak.</summary>
         public static void Reset()
@@ -146,6 +153,7 @@ namespace RichCoast.Core
             GameOver = null;
             GoldenGateHit = null;
             ThemeChanged = null;
+            ModalOpen = null;
         }
     }
 }

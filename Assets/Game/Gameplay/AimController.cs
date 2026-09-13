@@ -84,6 +84,9 @@ namespace RichCoast.Game
             SetVisible(!on && !disabled);
         }
 
+        /// <summary>Readback for tests and diagnostics; <see cref="SetFrozen"/> is the only writer.</summary>
+        public bool IsFrozen => frozen;
+
         /// <summary>Soft-lock: block drops without hiding the ghost or disabling aiming (buffer empty).</summary>
         public void SetDropLocked(bool locked) => dropLocked = locked;
 

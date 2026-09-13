@@ -9,6 +9,10 @@ namespace RichCoast.UI
     /// <summary>
     /// A two-button confirm scrim, used by the two irreversible actions in the game: NEW RUN (which
     /// discards a saved run) and QUIT. Returns the root so the caller can dismiss it.
+    /// <para>It raises <c>GameEvents.ModalOpen</c> ITSELF rather than leaving that to callers: the
+    /// scrim's <c>raycastTarget</c> only stops uGUI, while Zone A's aim and Zone C's trap-door both
+    /// read <c>Pointer.current</c> directly — so without the event the game keeps playing underneath,
+    /// and a caller that forgot to pair open/close would leave it that way.</para>
     /// </summary>
     public static class ConfirmView
     {
@@ -32,8 +36,19 @@ namespace RichCoast.UI
             UiKit.Place((RectTransform)no.transform, new Vector2(0.5f, 0.5f), new Vector2(390f, 130f), new Vector2(210f, -90f));
 
             var go = root.gameObject;
-            yes.onClick.AddListener(() => { UnityEngine.Object.Destroy(go); onConfirm?.Invoke(); });
-            no.onClick.AddListener(() => { UnityEngine.Object.Destroy(go); onCancel?.Invoke(); });
+            RichCoast.Core.GameEvents.RaiseModalOpen(true);
+            yes.onClick.AddListener(() =>
+            {
+                RichCoast.Core.GameEvents.RaiseModalOpen(false);
+                UnityEngine.Object.Destroy(go);
+                onConfirm?.Invoke();
+            });
+            no.onClick.AddListener(() =>
+            {
+                RichCoast.Core.GameEvents.RaiseModalOpen(false);
+                UnityEngine.Object.Destroy(go);
+                onCancel?.Invoke();
+            });
 
             group.localScale = Vector3.one * 0.85f;
             Tween.Scale(group, 1f, 0.3f, Ease.OutBack);

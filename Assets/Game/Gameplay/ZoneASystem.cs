@@ -56,8 +56,10 @@ namespace RichCoast.Game
         /// </summary>
         bool deferredCashIn;
         double deferredZoomFactor = 1;
-        /// <summary>True while the milestone zoom-out + drain runs — one of the two aim-freeze sources.</summary>
+        /// <summary>True while the milestone zoom-out + drain runs — one of the aim-freeze sources.</summary>
         bool milestoneZoomActive;
+        /// <summary>True while a modal dialog is up. The scrim only blocks uGUI; aiming reads the pointer directly.</summary>
+        bool modalOpen;
 
         // Depletion settle gate.
         bool gateArmed;
@@ -134,6 +136,7 @@ namespace RichCoast.Game
             GameEvents.ZoneBBusy += () => zoneBEmpty = false;
             GameEvents.ZoneBEmpty += () => { zoneBEmpty = true; CheckLoss(); };
             GameEvents.PhaseChanged += OnPhaseChanged;
+            GameEvents.ModalOpen += open => { modalOpen = open; ApplyFreeze(); };
         }
 
         /// <summary>Aiming is live only in phase A; a cash-in that arrived elsewhere runs its reward beat once the pan lands back in A.</summary>
@@ -334,7 +337,7 @@ namespace RichCoast.Game
         }
 
         /// <summary>One sink for the reversible aim freeze, composing its two sources: the milestone zoom-out and the game not being in phase A.</summary>
-        void ApplyFreeze() => aim.SetFrozen(milestoneZoomActive || phase != GamePhase.A);
+        void ApplyFreeze() => aim.SetFrozen(milestoneZoomActive || phase != GamePhase.A || modalOpen);
 
         void ApplyStage()
         {

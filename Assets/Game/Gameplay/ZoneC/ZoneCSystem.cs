@@ -29,6 +29,7 @@ namespace RichCoast.Game
 
         bool locked;          // Zone B has balls in flight (or a suck is in transit)
         bool zoomLocked;      // Zone A's milestone zoom-out is animating
+        bool modalLocked;     // a modal dialog is up (its scrim only blocks uGUI; the tap reads the pointer)
         bool phaseLocked = true; // armed only in phase B; the run boots in A
         bool over;
         float sweepMs;
@@ -36,7 +37,7 @@ namespace RichCoast.Game
         int styledIndex = -1;
 
         /// <summary>True when a tap would fire the door.</summary>
-        public bool IsArmed => !(locked || zoomLocked || phaseLocked || over);
+        public bool IsArmed => !(locked || zoomLocked || phaseLocked || modalLocked || over);
         public int ActiveIndex => activeIndex;
 
         public ZoneCSystem(Transform parent, Board board, BoardGeometry geometry, GameFeelSO feel)
@@ -63,6 +64,11 @@ namespace RichCoast.Game
                 if (!phaseLocked) sweepMs = 0f;
             };
             GameEvents.GameOver += _ => over = true;
+            GameEvents.ModalOpen += open =>
+            {
+                modalLocked = open;
+                if (!open) sweepMs = 0f; // restart the sweep from the edge when the dialog closes
+            };
         }
 
         /// <summary>

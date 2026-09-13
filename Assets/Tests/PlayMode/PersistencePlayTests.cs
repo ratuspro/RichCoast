@@ -346,6 +346,90 @@ namespace RichCoast.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator RequestQuitRaisesAConfirmAndIsIdempotent()
+        {
+            yield return LoadWith(AppIntent.Title);
+            var boot = Boot();
+            Assert.IsNull(GameObject.Find("Confirm"), "nothing should be asking yet");
+
+            boot.RequestQuit();
+            yield return null;
+            Assert.IsNotNull(GameObject.Find("Confirm"), "Back must raise a quit confirmation");
+
+            // A second Back while the dialog is up must not stack another copy.
+            boot.RequestQuit();
+            yield return null;
+            var confirms = 0;
+            foreach (var t in UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsSortMode.None))
+                if (t.name == "Confirm") confirms++;
+            Assert.AreEqual(1, confirms, "a second Back must not stack another dialog");
+        }
+
+        /// <summary>
+        /// Found on a Pixel 7: balls kept dropping while the quit dialog was up. A uGUI scrim blocks
+        /// only uGUI raycasts, and Zone A's aim and Zone C's trap-door both read Pointer.current
+        /// directly — so a modal has to freeze them explicitly.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AModalFreezesAimingAndDisarmsTheTrapDoor()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+            Assert.IsFalse(boot.Session.Aim.IsFrozen, "precondition: phase A aiming is live");
+
+            boot.RequestQuit();
+            yield return null;
+            Assert.IsTrue(boot.Session.Aim.IsFrozen, "a modal must freeze aiming — the scrim only stops uGUI");
+
+            GameEvents.RaiseModalOpen(false);
+            yield return null;
+            Assert.IsFalse(boot.Session.Aim.IsFrozen, "closing the modal must return the aim");
+        }
+
+        /// <summary>
+        /// The trap-door reads the pointer directly too, so a modal must disarm it. Checked in phase B,
+        /// where it is genuinely armed — asserting this in phase A would pass regardless of the fix.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AModalDisarmsTheTrapDoorInPhaseB()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+
+            GameEvents.RaisePhaseChanged(GamePhase.B);
+            yield return null;
+            Assert.IsTrue(boot.ZoneC.IsArmed, "precondition: the door arms in phase B with Zone B empty");
+
+            GameEvents.RaiseModalOpen(true);
+            yield return null;
+            Assert.IsFalse(boot.ZoneC.IsArmed, "a modal must disarm the trap-door");
+
+            GameEvents.RaiseModalOpen(false);
+            yield return null;
+            Assert.IsTrue(boot.ZoneC.IsArmed, "closing the modal must re-arm it");
+        }
+
+        [UnityTest]
+        public IEnumerator ClosingTheQuitConfirmReArmsTheGame()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+            boot.RequestQuit();
+            yield return null;
+
+            var cancel = GameObject.Find("ConfirmNo");
+            Assert.IsNotNull(cancel, "the confirm must offer CANCEL");
+            cancel.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+            yield return null;
+
+            Assert.IsNull(GameObject.Find("Confirm"), "CANCEL must dismiss the dialog");
+            boot.DebugDrop(0f, 1);
+            yield return null;
+            Assert.Less(boot.ZoneA.BallBuffer, ProgressionCurve.BufferForLevel(1),
+                "play must resume once the dialog is gone");
+        }
+
+        [UnityTest]
         public IEnumerator PausingPersistsASettledRun()
         {
             yield return LoadRun();

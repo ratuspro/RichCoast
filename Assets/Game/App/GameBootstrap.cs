@@ -160,18 +160,29 @@ namespace RichCoast.App
         }
 
         /// <summary>
-        /// Android's Back finishes the activity with no confirmation of its own, so veto the quit and
-        /// ask. Built on wantsToQuit rather than the Escape key because this sits downstream of however
-        /// the platform delivers Back — it works whether or not the Input System surfaces it.
+        /// Raise the quit confirmation (idempotent while it is already up). Verified on a Pixel 7 /
+        /// Android 16: Unity 6's activity CONSUMES the Back press without attempting to quit, so
+        /// <see cref="Application.wantsToQuit"/> never fires on its own and Back would otherwise be
+        /// completely inert. The Escape key is therefore the primary trigger — the manifest ships
+        /// <c>enableOnBackInvokedCallback=false</c>, so Back takes the legacy path and arrives here.
+        /// </summary>
+        public void RequestQuit()
+        {
+            if (quitDialog != null) return;
+            Flush();
+            quitDialog = ConfirmView.Show(overlayCanvas, "QUIT RICHCOAST?", "QUIT",
+                () => { quitConfirmed = true; Flush(); Application.Quit(); },
+                () => { quitDialog = null; });
+        }
+
+        /// <summary>
+        /// The secondary net: anything that DOES reach Unity's quit path (a platform where the
+        /// activity really does finish, or our own Application.Quit) is vetoed until confirmed.
         /// </summary>
         bool WantsToQuit()
         {
             if (quitConfirmed) return true;
-            Flush();
-            if (quitDialog != null) return false; // already asking
-            quitDialog = ConfirmView.Show(overlayCanvas, "QUIT RICHCOAST?", "QUIT",
-                () => { quitConfirmed = true; Flush(); Application.Quit(); },
-                () => { quitDialog = null; });
+            RequestQuit();
             return false;
         }
 
@@ -232,8 +243,14 @@ namespace RichCoast.App
 
         void Update()
         {
-            if (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.mKey.wasPressedThisFrame)
-                ToggleSound();
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.mKey.wasPressedThisFrame) ToggleSound();
+                // Android's Back arrives as Escape. See RequestQuit: Unity consumes Back itself, so
+                // without this the button does nothing at all on device.
+                if (keyboard.escapeKey.wasPressedThisFrame) RequestQuit();
+            }
             if (State != AppState.Run || Session == null) return;
             Session.Tick(Time.deltaTime * 1000f);
         }
