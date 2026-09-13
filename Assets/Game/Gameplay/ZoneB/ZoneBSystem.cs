@@ -98,6 +98,23 @@ namespace RichCoast.Game
         /// <summary>The design-space column a drop must hit to take the golden path.</summary>
         public double GoldenMouthX => layout.Golden.MouthX;
         public int GoldenMultiplier => layout.Golden.Multiplier;
+        public double BarFilled => scoreBar.Filled;
+        public double BarTarget => scoreBar.Target;
+
+        /// <summary>
+        /// Seed a restored run's banked total and score-bar fill. The arena itself is NOT restored — it
+        /// reshuffles on every drain anyway, so the freshly generated one is exactly as valid.
+        /// </summary>
+        public void Restore(double restoredTotal, double barFilled, double barTarget)
+        {
+            total = restoredTotal;
+            scoreBar.SetTarget(barTarget);
+            scoreBar.Add(barFilled - scoreBar.Filled);
+            displayFraction = (float)scoreBar.Progress;
+            barMode = BarMode.Live;
+            GameEvents.RaiseScoreChanged(total);
+            GameEvents.RaiseScoreBarChanged(scoreBar.Filled, scoreBar.Target);
+        }
 
         /// <summary>
         /// <paramref name="entryXs"/> are the columns a ball can be dropped down — the trap-door's

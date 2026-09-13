@@ -30,6 +30,20 @@ namespace RichCoast.Game
             GameEvents.ArenaZoom += active => { if (active) BeginFade(); };
         }
 
+        /// <summary>
+        /// Jump straight to a level's palette with no cross-fade — a restored run boots mid-progression.
+        /// Without this the board would stay painted workshop until the next milestone zoom, because
+        /// <see cref="BeginFade"/> is the only thing that ever moves <see cref="current"/>.
+        /// Call AFTER the progression has been announced: that announcement is what sets <c>target</c>.
+        /// </summary>
+        public void SnapTo(int level)
+        {
+            tween.Stop();
+            current = target = curve.PaletteNameForLevel(level);
+            Theme.Apply(Palettes.Get(current));
+            GameEvents.RaiseThemeChanged();
+        }
+
         void BeginFade()
         {
             if (target == current) return;

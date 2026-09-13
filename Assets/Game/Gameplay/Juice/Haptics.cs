@@ -16,9 +16,15 @@ namespace RichCoast.Game
         static int sdkInt;
 #endif
 
+        /// <summary>
+        /// The haptics setting's single sink. False makes every pulse a no-op without touching the JNI
+        /// path, so the player's choice and platform support stay independent concerns.
+        /// </summary>
+        public static bool Enabled = true;
+
         public static void Pulse(int ms, int amplitude)
         {
-            if (ms <= 0) return;
+            if (!Enabled || ms <= 0) return;
             Init();
             if (!supported) return;
 #if UNITY_ANDROID && !UNITY_EDITOR

@@ -91,6 +91,10 @@ namespace RichCoast.Game
         public void SetMuted(bool on) => muted = on;
         public void ToggleMute() => muted = !muted;
 
+        /// <summary>Readback for the settings UI and tests; <see cref="SetMuted"/> is the only writer
+        /// the M-key shortcut and the saved setting both go through.</summary>
+        public bool IsMuted => muted;
+
         /// <summary>Zone A: a ball is released. Soft low thunk.</summary>
         public void Drop() => Play(drop, 1f);
 

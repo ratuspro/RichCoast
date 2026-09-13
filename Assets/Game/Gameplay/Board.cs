@@ -64,6 +64,21 @@ namespace RichCoast.Game
             return ball;
         }
 
+        /// <summary>
+        /// Put a ball back at an exact resting position (save restore) rather than at the spawn row.
+        /// Captures only ever happen with the board settled, so it starts at rest and stays there.
+        /// </summary>
+        public Ball Restore(float x, float y, int tier)
+        {
+            if (over) return null;
+            var ball = factory.Spawn(this, new Vector2(x, y), tier);
+            ball.Body.linearVelocity = Vector2.zero;
+            ball.Body.angularVelocity = 0f;
+            ball.RestMs = 0f;
+            balls.Add(ball);
+            return ball;
+        }
+
         /// <summary>Flag a mergeable contact; the actual world mutation is deferred to <see cref="Tick"/>.</summary>
         public void ReportContact(Ball a, Ball b)
         {

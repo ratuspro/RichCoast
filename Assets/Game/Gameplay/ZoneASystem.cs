@@ -76,6 +76,32 @@ namespace RichCoast.Game
         public double Score => score;
         public bool IsMilestoneZoomActive => milestoneZoomActive;
 
+        /// <summary>
+        /// The run is provably AT REST: phase A, nothing animating, Zone B empty, board settled. This
+        /// is the only moment a save snapshot is meaningful — every other state carries tween-bound
+        /// data that cannot be serialised. Edge-triggered by <see cref="GameSession"/>, once per turn.
+        /// </summary>
+        public bool IsQuiescent =>
+            !over && phase == GamePhase.A && !gateArmed
+            && !cashInPending && !scoreBarCashingIn && !deferredCashIn && !milestoneZoomActive
+            && launchesRemaining == 0 && inFlightMs.Count == 0
+            && zoneBEmpty && board.IsSettled();
+
+        /// <summary>
+        /// Seed a restored run. Mirrors what the constructor does at initialisation: set the level,
+        /// then <see cref="ApplyStage"/> to install the draw window, buffer capacity and bar target.
+        /// Announcement is deliberately left to <see cref="Start"/>, which the caller runs only after
+        /// every other system has been restored and subscribed.
+        /// </summary>
+        public void Restore(int restoredLevel, int restoredBuffer, double restoredScore)
+        {
+            level = restoredLevel;
+            ballBuffer = restoredBuffer;
+            score = restoredScore;
+            ApplyStage();
+            aim.SetDropLocked(ballBuffer == 0);
+        }
+
         public ZoneASystem(Board board, AimController aim, DeathLineView deathLine, BallQueue queue, ProgressionCurve curve, TierLadder ladder, GameFeelSO feel, MergeFx mergeFx, BallFactory factory, DropHighlight highlight, ArenaGrowth growth, BoardGeometry geometry, Transform fxRoot)
         {
             this.board = board;
