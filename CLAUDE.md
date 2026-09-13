@@ -32,7 +32,8 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   `ScoreBar`, `ZoneBGenerator` + `ZoneBGenParams` (the seeded arena grammar and its `Validate`
   contract) over `ZoneBLayouts` (the data model + the fixed funnel/collector), `DoorMath`
   (nearest-ball / sweep / split fan), the save model + its contract (`SaveModel`/`SaveNum`,
-  `SaveSchema.ValidateRun`), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
+  `SaveSchema.ValidateRun`), the analytics primitives (`AnalyticsEvent`, `IAnalyticsSink`,
+  `RunTelemetry`, `PrivacyPolicy`), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
   gameplay layer (incl. `GameSession`, one live run, and `SaveStore`, the file I/O);
   `RichCoast.UI` (`Assets/Game/UI`) the uGUI shell; `RichCoast.App`
   (`Assets/Game/App/GameBootstrap.cs`) the composition root — the ONLY component the scene
@@ -43,7 +44,7 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   same names/meanings as the Phaser bus: `BallDropped`, `ZoneBBusy/Empty`, `ScoreChanged`,
   `ScoreBarFilled/CashedIn/Changed`, `ScoreHarvested`, `BallBufferChanged`,
   `BufferSlotLaunched`, `ProgressionChanged`, `ArenaZoom`, `PhaseChanged`, `ZoneADepleted`,
-  `GoldenGateHit`, plus `GameOver`).
+  `GoldenGateHit`, `DoorTapped`, plus `GameOver`).
   `GameEvents.Reset()` runs on every scene load and in test setup.
 - **Tuning is ScriptableObjects**, editable live in play mode (`Assets/Game/Data`, created by
   the scene builder if missing): `TierLadder.asset`, `Progression.asset` (port of
@@ -107,10 +108,11 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 ## Status
 
 **Milestones 1–4, the Zone B procedural revamp, and M5's persistence + settings layer are
-implemented, green headlessly, and SIGNED OFF ON DEVICE** (EditMode 117 · PlayMode 43; run BOTH —
+implemented, green headlessly, and SIGNED OFF ON DEVICE; M5's analytics layer is implemented and
+green headlessly but NOT yet device-verified** (EditMode 146 · PlayMode 57; run BOTH —
 `Tools/run-tests.sh` defaults to EditMode alone, PlayMode needs `--platform PlayMode`).
-Screenshots of the A framing, the B framing, the first milestone and both title states in
-`Logs/game-scene*.png`. The Pixel 7 session (2026-09-13) confirmed the feel across M2–M4 and the
+Screenshots of the A framing, the B framing, the first milestone, the privacy gate and both title
+states in `Logs/game-scene*.png`. The Pixel 7 session (2026-09-13) confirmed the feel across M2–M4 and the
 Zone B revamp, and verified the save layer end to end: checkpoint written on settle, a run
 surviving two full reinstalls, correct restore, Zone B reshuffling on resume, clean logs.
 `GameFeel.asset` and `ZoneBArena.asset` needed **no** tuning. Android Back works and raises the
@@ -242,10 +244,41 @@ The gameplay loop itself:
   buffer tick (climbing), goal, transition (door suck), multiply (combo-pitched), collect, pan
   down/up, game over.
 
+- **Analytics (M5)** — a measurement layer that no zone knows exists. `Core` holds the payload
+  (`AnalyticsEvent`: a six-slot inline param buffer, every value pre-formatted in invariant culture,
+  money as `G17` for the same reason `SaveNum` is), the `IAnalyticsSink` seam, and `RunTelemetry` —
+  the pure recorder, fed `deltaMs` rather than reading `Time`, so the counters and the per-level clock
+  are EditMode-testable. `Gameplay/Analytics/` wires it: `AnalyticsService` is a PURE `GameEvents`
+  subscriber, `RingBufferSink` keeps the last 128 events plus a capped `analytics.jsonl` tail, and
+  `GameAnalyticsSink` is the backend adapter. **Six events** — `run_start`, `run_end`, `level_up`,
+  `golden_gate_hit`, `door_tap`, `milestone` — chosen to answer what the game could not previously
+  say: where runs end, whether the golden mouth is ever hit, how deep the curve is played, and whether
+  the trap-door timing reads. Two seam additions were forced by that: `GameOver` now carries a
+  `GameOverCause` (death line vs stalemate funnel through one handler in Zone A, so it must be passed,
+  not inferred), and `DoorTapped` fires on MISSES too — `BallDropped` only ever reports the taps that
+  worked. A run left via MENU calls `AbandonRun` and emits NO `run_end`, so the cause funnel keeps
+  meaning what it says. Drops are counted from `BallDropped`, so the milestone drain counts like play.
+- **Consent + privacy** — `Settings.analyticsConsent` (`Unasked`/`Granted`/`Denied`; 0 is the default,
+  which is exactly right for a save written before the field existed, so no migration). `UI/ConsentView`
+  gates the first launch BEFORE the title and reopens from a quiet `PRIVACY` button on the title
+  cabinet; ALLOW and NO THANKS are the same size and weight, deliberately. The backend sink is
+  constructed ONLY on `Granted` — the gate is in `GameBootstrap`, so the object that could send data
+  does not exist otherwise; the local sink always runs (it never leaves the device). A grant applies
+  next launch; a revocation applies immediately and wipes the local tail. `UI/AnalyticsOverlay`
+  (A key, or a four-finger touch; development builds only) reads the ring buffer back on device.
+- **Not finished here:** the GameAnalytics package is NOT installed and there are no keys, so the
+  adapter sits behind `RICHCOAST_GAMEANALYTICS` and compiles to an inert sink — adding the package
+  must be re-verified against `Tools/build-android.sh`, since a batchmode break would surface at the
+  worst moment. `docs/privacy-policy.md` is written but UNHOSTED; `PrivacyPolicy.Url` is deliberately
+  empty until it has an address (an empty URL shows the short notice; a placeholder would ship a dead
+  link in a compliance surface).
+
 Next — the rest of **M5**, three independent sub-projects (spec:
 `docs/superpowers/specs/2026-09-13-m5-remaining-design.md`):
-1. **Analytics** — the local-vs-backend-SDK fork is still open and decides whether consent UI, a
-   privacy policy and a Play data-safety declaration come with it. `Records` already counts runs.
+1. **Analytics** — seam, sinks, consent and policy TEXT are done (above). What remains is external:
+   host the privacy policy and set `PrivacyPolicy.Url`, create the GameAnalytics game/secret keys, add
+   the package behind `RICHCOAST_GAMEANALYTICS`, re-verify the headless Android build, then fill in the
+   Play data-safety declaration from the event list. Device sign-off of the consent flow is pending.
 2. **Perf** — profile on the Pixel 7 against 60 fps; measure before changing anything.
 3. **Store prep** — release keystore + AAB (`ProjectSetup.BuildAndroid` hardcodes
    `buildAppBundle = false` and `BuildOptions.Development`, so it cannot yet produce one),

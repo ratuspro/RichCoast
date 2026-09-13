@@ -110,5 +110,42 @@ namespace RichCoast.Tests.EditMode
             Assert.AreEqual(400.25, round.run.board[0].yFromTop, 0.0);
             Assert.AreEqual(7, round.run.board[1].tier);
         }
+
+        [Test]
+        public void AnalyticsConsentDefaultsToUnasked()
+        {
+            Assert.AreEqual(ConsentState.Unasked, new Settings().Consent,
+                "silence is not consent: a fresh install has not been asked yet");
+        }
+
+        [Test]
+        public void ASaveWrittenBeforeConsentExistedReadsBackAsUnasked()
+        {
+            // The field is absent from the JSON entirely, exactly as an older save has it. It must come
+            // back as "never asked" rather than as a grant nobody gave.
+            var round = JsonUtility.FromJson<SaveData>("{\"schemaVersion\":1,\"settings\":{\"soundOn\":true,\"hapticsOn\":true}}");
+
+            Assert.AreEqual(ConsentState.Unasked, round.settings.Consent);
+        }
+
+        [Test]
+        public void ConsentSurvivesARoundTrip()
+        {
+            var save = new SaveData();
+            save.settings.Consent = ConsentState.Denied;
+
+            var round = JsonUtility.FromJson<SaveData>(JsonUtility.ToJson(save));
+
+            Assert.AreEqual(ConsentState.Denied, round.settings.Consent);
+        }
+
+        [Test]
+        public void AnOutOfRangeConsentValueReadsAsUnasked()
+        {
+            // A hand-edited file is the realistic source. Falling back to "ask again" is the only safe
+            // reading — anything else would treat corruption as permission.
+            var settings = new Settings { analyticsConsent = 99 };
+            Assert.AreEqual(ConsentState.Unasked, settings.Consent);
+        }
     }
 }

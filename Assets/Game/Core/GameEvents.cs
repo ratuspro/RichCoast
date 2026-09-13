@@ -66,6 +66,53 @@ namespace RichCoast.Core
     public enum GamePhase { A, AToB, B, BToA }
 
     /// <summary>
+    /// How a run ended. Both outcomes funnel through one handler in Zone A, so without this the two
+    /// are indistinguishable downstream — and "where do runs actually end" is the first question
+    /// analytics exists to answer.
+    /// </summary>
+    public enum GameOverCause
+    {
+        /// <summary>A ball came to rest above the death line.</summary>
+        DeathLine,
+        /// <summary>Buffer spent, board clear, Zone B empty — nothing left that could advance the run.</summary>
+        Stalemate,
+    }
+
+    /// <summary>Zone A → all: the run ended, and why.</summary>
+    public readonly struct GameOverEvent
+    {
+        public readonly double FinalScore;
+        public readonly GameOverCause Cause;
+
+        public GameOverEvent(double finalScore, GameOverCause cause)
+        {
+            FinalScore = finalScore;
+            Cause = cause;
+        }
+    }
+
+    /// <summary>
+    /// Zone C → all: the trap-door was tapped while armed. Raised for MISSES too (<see cref="Grabbed"/>
+    /// false, no ball in range), which is the whole point — <c>BallDropped</c> only ever reports the
+    /// taps that worked, so on its own it cannot say whether the door's timing reads.
+    /// </summary>
+    public readonly struct DoorTapEvent
+    {
+        public readonly bool Grabbed;
+        /// <summary>Which of the nine sweep positions was lit when the player committed.</summary>
+        public readonly int SweepIndex;
+        /// <summary>The design-px column the ball would enter Zone B at.</summary>
+        public readonly double DropX;
+
+        public DoorTapEvent(bool grabbed, int sweepIndex, double dropX)
+        {
+            Grabbed = grabbed;
+            SweepIndex = sweepIndex;
+            DropX = dropX;
+        }
+    }
+
+    /// <summary>
     /// THE SEAM between the game's halves — the typed replacement for the Phaser string event bus.
     /// Zones never reference each other; they publish and subscribe here. Static so any system can
     /// reach it without wiring, and <see cref="Reset"/> clears every subscriber on a restart /
@@ -101,8 +148,10 @@ namespace RichCoast.Core
         public static event Action<GamePhase> PhaseChanged;
         /// <summary>Zone A → PhaseDirector: buffer empty AND board settled — pan down.</summary>
         public static event Action ZoneADepleted;
-        /// <summary>Zone A → all: the run ended (final score). Replaces the Phaser build's in-zone overlay wiring.</summary>
-        public static event Action<double> GameOver;
+        /// <summary>Zone A → all: the run ended (score + cause). Replaces the Phaser build's in-zone overlay wiring.</summary>
+        public static event Action<GameOverEvent> GameOver;
+        /// <summary>Zone C → all: the trap-door was tapped while armed — hits AND misses.</summary>
+        public static event Action<DoorTapEvent> DoorTapped;
         /// <summary>Zone B → all: a ball threaded the golden mouth and struck the gilded gate (its multiplier).</summary>
         public static event Action<int> GoldenGateHit;
         /// <summary>ThemeDirector → all: the active palette changed (fired per cross-fade tick); baked surfaces restyle.</summary>
@@ -128,7 +177,8 @@ namespace RichCoast.Core
         public static void RaiseArenaZoom(bool active) => ArenaZoom?.Invoke(active);
         public static void RaisePhaseChanged(GamePhase phase) => PhaseChanged?.Invoke(phase);
         public static void RaiseZoneADepleted() => ZoneADepleted?.Invoke();
-        public static void RaiseGameOver(double finalScore) => GameOver?.Invoke(finalScore);
+        public static void RaiseGameOver(GameOverEvent e) => GameOver?.Invoke(e);
+        public static void RaiseDoorTapped(DoorTapEvent e) => DoorTapped?.Invoke(e);
         public static void RaiseGoldenGateHit(int multiplier) => GoldenGateHit?.Invoke(multiplier);
         public static void RaiseThemeChanged() => ThemeChanged?.Invoke();
         public static void RaiseModalOpen(bool open) => ModalOpen?.Invoke(open);
@@ -151,6 +201,7 @@ namespace RichCoast.Core
             PhaseChanged = null;
             ZoneADepleted = null;
             GameOver = null;
+            DoorTapped = null;
             GoldenGateHit = null;
             ThemeChanged = null;
             ModalOpen = null;

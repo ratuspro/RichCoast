@@ -147,6 +147,19 @@ namespace RichCoast.Tests.PlayMode
 
         static IEnumerator LoadRun() => LoadWith(AppIntent.NewRun);
 
+        /// <summary>
+        /// Boot to the TITLE with the privacy question already answered. A genuinely fresh install
+        /// meets the consent gate first (see <see cref="AFreshInstallIsAskedAboutPrivacyBeforeTheTitle"/>),
+        /// so a test about the title has to get past it or it is testing the wrong screen.
+        /// </summary>
+        static IEnumerator LoadTitleConsented(SaveData save = null)
+        {
+            save = save ?? new SaveData();
+            save.settings.Consent = ConsentState.Denied;
+            SaveStore.Save(save);
+            yield return LoadWith(AppIntent.Title);
+        }
+
         static IEnumerator WaitUntil(Func<bool> condition, float timeoutS)
         {
             float deadline = Time.time + timeoutS;
@@ -299,7 +312,7 @@ namespace RichCoast.Tests.PlayMode
         public IEnumerator AGameOverClearsTheSavedRunAndMergesRecords()
         {
             yield return LoadRun();
-            GameEvents.RaiseGameOver(5555);
+            GameEvents.RaiseGameOver(new GameOverEvent(5555, GameOverCause.DeathLine));
             yield return null;
 
             var loaded = SaveStore.Load(Curve());
@@ -312,7 +325,7 @@ namespace RichCoast.Tests.PlayMode
         public IEnumerator GameOverShowsTheRecordAndOffersTheMenu()
         {
             yield return LoadRun();
-            GameEvents.RaiseGameOver(1234);
+            GameEvents.RaiseGameOver(new GameOverEvent(1234, GameOverCause.DeathLine));
             yield return null;
             Assert.IsNotNull(GameObject.Find("Best"), "game over must show the record");
             Assert.IsNotNull(GameObject.Find("MenuButton"), "game over must offer a way back to the menu");
@@ -321,7 +334,7 @@ namespace RichCoast.Tests.PlayMode
         [UnityTest]
         public IEnumerator BootingWithoutAnIntentShowsTheTitleAndNoSession()
         {
-            yield return LoadWith(AppIntent.Title);
+            yield return LoadTitleConsented();
             var boot = Boot();
             Assert.AreEqual(GameBootstrap.AppState.Title, boot.State);
             Assert.IsNull(boot.Session, "no run may exist behind the title");
@@ -331,18 +344,51 @@ namespace RichCoast.Tests.PlayMode
         [UnityTest]
         public IEnumerator TheTitleOffersContinueOnlyWhenARunWasSaved()
         {
-            yield return LoadWith(AppIntent.Title);
+            yield return LoadTitleConsented();
             Assert.IsNull(GameObject.Find("Continue"), "a fresh install has nothing to continue");
             Assert.IsNotNull(GameObject.Find("Play"));
 
             var save = new SaveData();
             save.SetRun(new RunSnapshot { level = 2, ballBuffer = 3, barTarget = 100 });
-            SaveStore.Save(save);
 
-            yield return LoadWith(AppIntent.Title);
+            yield return LoadTitleConsented(save);
             Assert.IsNotNull(GameObject.Find("Continue"), "a saved run must be resumable from the title");
             Assert.IsNotNull(GameObject.Find("NewRun"));
             Assert.IsNull(GameObject.Find("Play"), "PLAY is replaced by CONTINUE + NEW RUN");
+        }
+
+        [UnityTest]
+        public IEnumerator AFreshInstallIsAskedAboutPrivacyBeforeTheTitle()
+        {
+            yield return LoadWith(AppIntent.Title);
+
+            Assert.IsNotNull(GameObject.Find("Consent"),
+                "a first launch must answer the privacy question before anything else");
+            Assert.IsNull(GameObject.Find("TitleScreen"), "and the title waits behind it");
+            Assert.IsFalse(Boot().Analytics.BackendActive,
+                "nothing may be sent while the question is still unanswered");
+        }
+
+        [UnityTest]
+        public IEnumerator AnAnsweredInstallGoesStraightToTheTitle()
+        {
+            yield return LoadTitleConsented();
+
+            Assert.IsNull(GameObject.Find("Consent"), "the question is asked once, not every launch");
+            Assert.IsNotNull(GameObject.Find("TitleScreen"));
+        }
+
+        [UnityTest]
+        public IEnumerator TheTitleCanReopenThePrivacyChoice()
+        {
+            yield return LoadTitleConsented();
+            var privacy = GameObject.Find("PrivacyButton");
+            Assert.IsNotNull(privacy, "Play requires consent be withdrawable, so it must be reachable");
+
+            privacy.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+            yield return null;
+
+            Assert.IsNotNull(GameObject.Find("Consent"));
         }
 
         [UnityTest]

@@ -40,6 +40,8 @@ namespace RichCoast.App
         public SaveData Save { get; private set; }
 
         public BoardGeometry Geometry { get; private set; }
+        /// <summary>The measurement seam. A pure GameEvents subscriber — nothing in a zone knows it exists.</summary>
+        public AnalyticsService Analytics { get; private set; }
         public Camera Cam { get; private set; }
         public HudView Hud { get; private set; }
 
@@ -58,8 +60,10 @@ namespace RichCoast.App
         Canvas overlayCanvas;
         GameObject titleUi;
         GameObject quitDialog;
+        AnalyticsOverlay analyticsOverlay;
         bool restarting;
         bool quitConfirmed;
+        bool overlayGesture;
 
         void Awake()
         {
@@ -86,16 +90,39 @@ namespace RichCoast.App
             Sfx.Create(feel);
             ApplySettings();
 
+            // Built from the SAVED consent, so the backend sink does not exist at all unless the
+            // player has already said yes — a consent granted this session takes effect next launch.
+            Analytics = new AnalyticsService(Save.settings.Consent);
+
             BuildUi();
 
             var intent = PendingIntent;
             PendingIntent = AppIntent.Title;
             if (intent == AppIntent.NewRun) StartRun(null);
+            else if (Save.settings.Consent == ConsentState.Unasked) ShowConsentThenTitle();
             else ShowTitle();
         }
 
         void OnEnable() => Application.wantsToQuit += WantsToQuit;
         void OnDisable() => Application.wantsToQuit -= WantsToQuit;
+
+        /// <summary>
+        /// First launch: the consent question comes BEFORE the title, because it is the one thing that
+        /// must be answered before any run can start. Answering it drops straight through to the title.
+        /// </summary>
+        void ShowConsentThenTitle()
+        {
+            ConsentView.Show(overlayCanvas, ConsentState.Unasked, SetConsent, ShowTitle);
+        }
+
+        /// <summary>Persist a consent answer, and honour a revocation immediately by wiping the local tail.</summary>
+        void SetConsent(ConsentState state)
+        {
+            bool revoked = Save.settings.Consent == ConsentState.Granted && state != ConsentState.Granted;
+            Save.settings.Consent = state;
+            SaveStore.Save(Save);
+            if (revoked) Analytics?.OnConsentRevoked();
+        }
 
         void ShowTitle()
         {
@@ -104,7 +131,8 @@ namespace RichCoast.App
             titleUi = TitleView.Show(overlayCanvas, Save,
                 run => StartRun(run),
                 on => { Save.settings.soundOn = on; ApplySettings(); SaveStore.Save(Save); },
-                on => { Save.settings.hapticsOn = on; ApplySettings(); SaveStore.Save(Save); });
+                on => { Save.settings.hapticsOn = on; ApplySettings(); SaveStore.Save(Save); },
+                () => ConsentView.Show(overlayCanvas, Save.settings.Consent, SetConsent));
         }
 
         /// <summary>Begin a run — fresh when <paramref name="restore"/> is null, otherwise resumed.</summary>
@@ -122,6 +150,7 @@ namespace RichCoast.App
             GameEvents.GameOver += OnGameOver;
 
             Session.Begin(restore);
+            Analytics?.StartRun(restore != null, Session.ZoneA.Level);
             Hud.SetNextTier(Session.Queue.NextTier);
         }
 
@@ -136,8 +165,9 @@ namespace RichCoast.App
             SaveStore.Save(Save);
         }
 
-        void OnGameOver(double finalScore)
+        void OnGameOver(GameOverEvent e)
         {
+            double finalScore = e.FinalScore;
             State = AppState.GameOver;
             bool newBest = Save.records.Merge(finalScore, Session != null ? Session.ZoneA.Level : 1);
             Save.ClearRun();
@@ -199,6 +229,7 @@ namespace RichCoast.App
             if (State == AppState.Run && Session != null && Session.ZoneA.IsQuiescent)
                 Save.SetRun(Session.Capture());
             SaveStore.Save(Save);
+            Analytics?.Flush();
         }
 
         /// <summary>
@@ -239,6 +270,8 @@ namespace RichCoast.App
             var hudCanvas = UiKit.Canvas("HUD", Cam, 10);
             overlayCanvas = UiKit.Canvas("Overlay", Cam, 20);
             Hud = HudView.Build(hudCanvas, overlayCanvas, feel);
+            // Its own canvas above everything: a debug view that a dialog could cover is useless.
+            analyticsOverlay = AnalyticsOverlay.Build(UiKit.Canvas("Debug", Cam, 30), Analytics);
         }
 
         void Update()
@@ -247,11 +280,23 @@ namespace RichCoast.App
             if (keyboard != null)
             {
                 if (keyboard.mKey.wasPressedThisFrame) ToggleSound();
+                if (keyboard.aKey.wasPressedThisFrame) analyticsOverlay?.Toggle();
                 // Android's Back arrives as Escape. See RequestQuit: Unity consumes Back itself, so
                 // without this the button does nothing at all on device.
                 if (keyboard.escapeKey.wasPressedThisFrame) RequestQuit();
             }
+            if (analyticsOverlay != null && UnityEngine.InputSystem.Touchscreen.current != null)
+            {
+                int down = 0;
+                foreach (var t in UnityEngine.InputSystem.Touchscreen.current.touches)
+                    if (t.press.isPressed) down++;
+                if (down >= 4 && !overlayGesture) analyticsOverlay.Toggle();
+                overlayGesture = down >= 4;
+            }
             if (State != AppState.Run || Session == null) return;
+            // Unscaled: time spent frozen under a dialog is still time the player spent on this run.
+            Analytics.ArenaScale = Session.ArenaScale;
+            Analytics.Tick(Time.unscaledDeltaTime * 1000f);
             Session.Tick(Time.deltaTime * 1000f);
         }
 
@@ -273,12 +318,17 @@ namespace RichCoast.App
         {
             if (restarting) return;
             restarting = true;
+            // Left, not lost: emitting a run_end here would put a third, invisible outcome into the
+            // cause funnel and make "where do runs end" unanswerable all over again.
+            if (State == AppState.Run) Analytics?.AbandonRun();
             PendingIntent = AppIntent.Title;
             Reload();
         }
 
         void Reload()
         {
+            Analytics?.Dispose();
+            Analytics = null;
             Tween.StopAll();
             GameEvents.Reset();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);

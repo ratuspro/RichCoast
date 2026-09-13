@@ -180,11 +180,16 @@ namespace RichCoast.Game
         {
             if (!IsArmed) return;
             var ball = DoorTarget.Find(board);
-            if (ball == null) return; // nothing to suck yet
 
             // Freeze the sweep the instant the player commits — the lit position's column is where
             // the ball will enter Zone B. Capture it before SetLocked() hides the markers.
             double spawnX = positionsDesignX[activeIndex];
+
+            // Announce the tap BEFORE the early-out, so a tap that grabbed nothing is measured too:
+            // BallDropped only ever reports the taps that worked, which is exactly the half that
+            // cannot say whether the door's timing reads.
+            GameEvents.RaiseDoorTapped(new DoorTapEvent(ball != null, activeIndex, spawnX));
+            if (ball == null) return; // nothing to suck yet
 
             // Signal busy up front so Zone A's stalemate check can't read a stalemate mid-transit.
             SetLocked(true);

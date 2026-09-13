@@ -121,6 +121,12 @@ namespace RichCoast.Tests.PlayMode
             RichCoast.Game.SaveStore.PathOverride = Path.Combine(dir, "save.json");
             RichCoast.Game.SaveStore.Delete();
 
+            // A genuinely fresh install meets the privacy gate before the title, so without an answer
+            // here this would quietly frame the consent screen instead of the screen it is named for.
+            var answered = new RichCoast.Core.SaveData();
+            answered.settings.Consent = RichCoast.Core.ConsentState.Granted;
+            RichCoast.Game.SaveStore.Save(answered);
+
             GameBootstrap.PendingIntent = AppIntent.Title;
             yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             yield return new WaitForSeconds(0.6f); // let the group's OutBack settle
@@ -130,6 +136,7 @@ namespace RichCoast.Tests.PlayMode
 
             var save = new RichCoast.Core.SaveData();
             save.records.Merge(1_284_000, 37);
+            save.settings.Consent = RichCoast.Core.ConsentState.Granted;
             save.SetRun(new RichCoast.Core.RunSnapshot { level = 12, ballBuffer = 4, barTarget = 500, barFilled = 120 });
             RichCoast.Game.SaveStore.Save(save);
 
@@ -138,6 +145,29 @@ namespace RichCoast.Tests.PlayMode
             yield return new WaitForSeconds(0.6f);
             boot = Object.FindFirstObjectByType<GameBootstrap>();
             Capture(boot.Cam, boot.Cam.GetComponent<RichCoast.Game.CameraRig>(), "game-scene-title-saved.png");
+
+            RichCoast.Game.SaveStore.PathOverride = null;
+            Directory.Delete(dir, true);
+        }
+
+        /// <summary>
+        /// The privacy gate as a first launch actually meets it. Worth its own shot: it is the first
+        /// screen a new player sees and the only one a Play reviewer is guaranteed to look at.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CaptureConsentScene()
+        {
+            var dir = Path.Combine(Application.temporaryCachePath, "consentshot");
+            Directory.CreateDirectory(dir);
+            RichCoast.Game.SaveStore.PathOverride = Path.Combine(dir, "save.json");
+            RichCoast.Game.SaveStore.Delete();
+
+            GameBootstrap.PendingIntent = AppIntent.Title;
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return new WaitForSeconds(0.6f);
+            var boot = Object.FindFirstObjectByType<GameBootstrap>();
+            Assert.IsNotNull(GameObject.Find("Consent"), "a fresh install must land on the privacy gate");
+            Capture(boot.Cam, boot.Cam.GetComponent<RichCoast.Game.CameraRig>(), "game-scene-consent.png");
 
             RichCoast.Game.SaveStore.PathOverride = null;
             Directory.Delete(dir, true);

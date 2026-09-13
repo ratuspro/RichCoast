@@ -86,12 +86,31 @@ namespace RichCoast.Core
         }
     }
 
+    /// <summary>Whether the player has been asked about analytics, and what they said.</summary>
+    public enum ConsentState { Unasked = 0, Granted = 1, Denied = 2 }
+
     /// <summary>The player's persisted preferences. Each one has exactly one sink in the Game layer.</summary>
     [Serializable]
     public sealed class Settings
     {
         public bool soundOn = true;
         public bool hapticsOn = true;
+
+        /// <summary>
+        /// Analytics consent, as the <see cref="ConsentState"/> ordinal. An int rather than the enum
+        /// because JsonUtility writes an enum it does not recognise as 0 anyway, and 0 is exactly the
+        /// right answer for a save written before this field existed — an older file reads back as
+        /// "never asked", which is the truth.
+        /// <para>Settings survive a schema-version mismatch (only the run is dropped), so this needs
+        /// no migration: the default IS the correct value for every older save.</para>
+        /// </summary>
+        public int analyticsConsent = (int)ConsentState.Unasked;
+
+        public ConsentState Consent
+        {
+            get => analyticsConsent >= 0 && analyticsConsent <= 2 ? (ConsentState)analyticsConsent : ConsentState.Unasked;
+            set => analyticsConsent = (int)value;
+        }
     }
 
     /// <summary>

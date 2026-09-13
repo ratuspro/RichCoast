@@ -18,7 +18,7 @@ namespace RichCoast.UI
     public static class TitleView
     {
         public static GameObject Show(Canvas overlayCanvas, SaveData save,
-            Action<RunSnapshot> onStart, Action<bool> onSound, Action<bool> onHaptics)
+            Action<RunSnapshot> onStart, Action<bool> onSound, Action<bool> onHaptics, Action onPrivacy = null)
         {
             var root = UiKit.Stretch(UiKit.Panel(overlayCanvas.transform, "TitleScreen"));
 
@@ -90,6 +90,12 @@ namespace RichCoast.UI
             UiKit.Place((RectTransform)sound.transform, Mid, new Vector2(450f, 120f), new Vector2(-235f, -560f));
             var haptics = UiKit.Toggle(root, "HapticsToggle", "HAPTICS", save.settings.hapticsOn, onHaptics);
             UiKit.Place((RectTransform)haptics.transform, Mid, new Vector2(450f, 120f), new Vector2(235f, -560f));
+
+            // Quieter than the toggles and set apart from them: withdrawing consent is a thing you go
+            // looking for, not a switch you flip by accident — but Play requires it be reachable at all.
+            var privacy = UiKit.Button(root, "PrivacyButton", "PRIVACY", Theme.PineShadow, Theme.PineShadow, Theme.Brass, 34f);
+            UiKit.Place((RectTransform)privacy.transform, Mid, new Vector2(320f, 80f), new Vector2(0f, -700f));
+            privacy.onClick.AddListener(() => onPrivacy?.Invoke());
 
             // One orchestrated moment: the panel seats itself, the plate lands a beat later.
             group.localScale = Vector3.one * 0.94f;

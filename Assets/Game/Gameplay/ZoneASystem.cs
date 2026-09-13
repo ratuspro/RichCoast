@@ -124,7 +124,7 @@ namespace RichCoast.Game
             aim.RefreshQueue();
             ballBuffer = ProgressionCurve.BufferForLevel(level);
 
-            board.GameOver += HandleGameOver;
+            board.GameOver += () => HandleGameOver(GameOverCause.DeathLine);
             board.Emptied += CheckLoss;
             board.DangerChanged += deathLine.SetDanger;
             board.Merged += OnMerged;
@@ -451,7 +451,7 @@ namespace RichCoast.Game
             stalemateMs += deltaMs;
             if (stalemateMs < StalemateGraceMs) return;
             stalemateMs = -1f;
-            if (IsStalemate()) HandleGameOver();
+            if (IsStalemate()) HandleGameOver(GameOverCause.Stalemate);
         }
 
         void EmitBuffer() => GameEvents.RaiseBallBufferChanged(ballBuffer);
@@ -462,7 +462,12 @@ namespace RichCoast.Game
             GameEvents.RaiseProgressionChanged(new ProgressionChangedEvent(level, window.min, window.max, ProgressionCurve.BufferForLevel(level), curve.ScoreBarTargetForLevel(level)));
         }
 
-        void HandleGameOver()
+        /// <summary>
+        /// The one exit. Both routes in — a ball resting above the death line, and the stalemate
+        /// sweep — land here, so the CAUSE has to be passed rather than inferred: from inside this
+        /// method the two are identical.
+        /// </summary>
+        void HandleGameOver(GameOverCause cause)
         {
             if (over) return;
             over = true;
@@ -471,7 +476,7 @@ namespace RichCoast.Game
             board.Freeze();
             Sfx.Instance?.GameOver();
             Haptics.Pulse(60, 255);
-            GameEvents.RaiseGameOver(score);
+            GameEvents.RaiseGameOver(new GameOverEvent(score, cause));
         }
     }
 }
