@@ -107,15 +107,19 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 ## Status
 
 **Milestones 1–4, the Zone B procedural revamp, and M5's persistence + settings layer are
-implemented and green headlessly** (EditMode 117 · PlayMode 39; run BOTH — `Tools/run-tests.sh`
-defaults to EditMode alone, PlayMode needs `--platform PlayMode`). Screenshots of the A framing,
-the B framing, the first milestone and both title states in `Logs/game-scene*.png`. M1 ran on a
-Pixel 7 (2026-09-11); **M2, M3, M4, the Zone B revamp and the save layer have not yet been built
-to the device** — the hands-on feel sign-off (touch, haptics, audio, perf, door timing, milestone
-shrink/drain pacing, refill particles, cash-in beat, ribbon, the golden fanfare, whether the
-mouth reads as reachable-but-tight) plus **one open device question: whether
-`Application.wantsToQuit` actually fires on Android's Back button** (if not, the fallback is a
-custom activity override) and any resulting `GameFeel.asset` / `ZoneBArena.asset` tuning.
+implemented, green headlessly, and SIGNED OFF ON DEVICE** (EditMode 117 · PlayMode 43; run BOTH —
+`Tools/run-tests.sh` defaults to EditMode alone, PlayMode needs `--platform PlayMode`).
+Screenshots of the A framing, the B framing, the first milestone and both title states in
+`Logs/game-scene*.png`. The Pixel 7 session (2026-09-13) confirmed the feel across M2–M4 and the
+Zone B revamp, and verified the save layer end to end: checkpoint written on settle, a run
+surviving two full reinstalls, correct restore, Zone B reshuffling on resume, clean logs.
+`GameFeel.asset` and `ZoneBArena.asset` needed **no** tuning. Android Back works and raises the
+quit confirm.
+
+> **Testing on device: `adb shell input` is not a usable substitute for hands.** `input keyevent
+> KEYCODE_BACK` produced no reaction even though Back works when pressed, and `input tap` never
+> reached `Pointer.current` (only a held `input swipe X Y X Y 300` registered as a drop). Treat a
+> non-response from injected input as evidence about the injection, never about the build.
 
 The app runs three states from one `GameBootstrap` — **Title → Run → GameOver**:
 - **`GameBootstrap`** owns composition, app state, lifecycle and persistence; **`GameSession`**
@@ -238,15 +242,14 @@ The gameplay loop itself:
   buffer tick (climbing), goal, transition (door suck), multiply (combo-pitched), collect, pan
   down/up, game over.
 
-Next: **on-device feel session for M2 + M3 + M4 + the Zone B revamp + the save layer**
-(`Tools/build-android.sh`; judge the milestone shrink beat, drain pacing, refill particle cadence,
-cash-in hold/drain, ribbon timing, the golden fanfare/haptic, whether the golden mouth reads as
-reachable-but-tight, the reshuffle pop-in length, and whether resuming a run feels seamless — plus
-**verify `Application.wantsToQuit` fires on Back**) · the rest of **M5**: analytics (the
-local-vs-backend-SDK fork is still open, and it drags in consent UI + a privacy policy + the Play
-data-safety form), a perf pass, and store prep (release keystore, AAB — `ProjectSetup.BuildAndroid`
-currently hardcodes `buildAppBundle = false` and `BuildOptions.Development` — adaptive icon,
-versionCode scheme, target API level, listing assets).
+Next — the rest of **M5**, three independent sub-projects (spec:
+`docs/superpowers/specs/2026-09-13-m5-remaining-design.md`):
+1. **Analytics** — the local-vs-backend-SDK fork is still open and decides whether consent UI, a
+   privacy policy and a Play data-safety declaration come with it. `Records` already counts runs.
+2. **Perf** — profile on the Pixel 7 against 60 fps; measure before changing anything.
+3. **Store prep** — release keystore + AAB (`ProjectSetup.BuildAndroid` hardcodes
+   `buildAppBundle = false` and `BuildOptions.Development`, so it cannot yet produce one),
+   adaptive icon, versionCode scheme, listing assets.
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's
 > state *now* — a single snapshot, not a changelog.
