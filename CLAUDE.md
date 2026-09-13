@@ -31,8 +31,10 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   stepping), `ComboPitch`, `NumberFormat.Compact`, `BallQueue`, `PhaseMachine` (A ⇄ B flow),
   `ScoreBar`, `ZoneBGenerator` + `ZoneBGenParams` (the seeded arena grammar and its `Validate`
   contract) over `ZoneBLayouts` (the data model + the fixed funnel/collector), `DoorMath`
-  (nearest-ball / sweep / split fan), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
-  gameplay layer; `RichCoast.UI` (`Assets/Game/UI`) the uGUI shell; `RichCoast.App`
+  (nearest-ball / sweep / split fan), the save model + its contract (`SaveModel`/`SaveNum`,
+  `SaveSchema.ValidateRun`), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
+  gameplay layer (incl. `GameSession`, one live run, and `SaveStore`, the file I/O);
+  `RichCoast.UI` (`Assets/Game/UI`) the uGUI shell; `RichCoast.App`
   (`Assets/Game/App/GameBootstrap.cs`) the composition root — the ONLY component the scene
   holds. `RichCoast.EditorTools` (`Assets/Editor`) = project setup + scene/asset builder.
   Tests: `Assets/Tests/EditMode` (Core math, mirrors master's vitest suites incl. the
@@ -104,24 +106,51 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 
 ## Status
 
-**Milestones 1–4 plus the Zone B procedural revamp are implemented and green headlessly**
-(EditMode 95 tests · PlayMode 19, incl. a Zone B drain test, a full depletion → pan → door-tap →
-Zone B handoff test, three milestone tests (plain level-ups never zoom, the level-20 milestone
-grows/drains/recolours, a milestone cash-in that arrives in phase B defers until the pan lands
-in A) and three M4 polish tests (a refill launches one particle per slot and lands each after
-its flight, the round's cash-in fires only after the bar holds full then drains out, the phase
-ribbon reads "TAP THE DOOR" once the pan lands in B), plus five Zone B arena tests (eight seeds
-each drain a ball, a drop down the golden column strikes the gilded gate on all eight, the
-golden path outscores an ordinary drop on the same arena, the arena reshuffles exactly once and
-only with the playfield clear, a reshuffle preserves the score bar and total); screenshots of
-the A framing, the B framing and the first milestone in `Logs/game-scene*.png`). M1 ran on a
-Pixel 7 (2026-09-11); **M2, M3, M4 and the Zone B revamp have not yet been built to the device**
-— the user's hands-on feel sign-off (touch, haptics, audio, perf, door timing, milestone
-shrink/drain pacing, refill particles, cash-in beat, ribbon, the golden fanfare and whether the
-mouth reads as reachable-but-tight) and any resulting `GameFeel.asset` / `ZoneBArena.asset`
-tuning are pending.
+**Milestones 1–4, the Zone B procedural revamp, and M5's persistence + settings layer are
+implemented and green headlessly** (EditMode 117 · PlayMode 39; run BOTH — `Tools/run-tests.sh`
+defaults to EditMode alone, PlayMode needs `--platform PlayMode`). Screenshots of the A framing,
+the B framing, the first milestone and both title states in `Logs/game-scene*.png`. M1 ran on a
+Pixel 7 (2026-09-11); **M2, M3, M4, the Zone B revamp and the save layer have not yet been built
+to the device** — the hands-on feel sign-off (touch, haptics, audio, perf, door timing, milestone
+shrink/drain pacing, refill particles, cash-in beat, ribbon, the golden fanfare, whether the
+mouth reads as reachable-but-tight) plus **one open device question: whether
+`Application.wantsToQuit` actually fires on Android's Back button** (if not, the fallback is a
+custom activity override) and any resulting `GameFeel.asset` / `ZoneBArena.asset` tuning.
 
-The full loop runs from one `GameBootstrap`:
+The app runs three states from one `GameBootstrap` — **Title → Run → GameOver**:
+- **`GameBootstrap`** owns composition, app state, lifecycle and persistence; **`GameSession`**
+  (`Gameplay/GameSession.cs`) owns ONE live run — the zones, the directors, the board, the tick.
+  RESTART and MENU both reload the scene (the honest reset for pools, tweens and theme) and carry
+  a static `GameBootstrap.PendingIntent` across the load, the same mechanism `GameEvents` relies
+  on. **Every PlayMode test must set `PendingIntent = AppIntent.NewRun` before loading `Main`**,
+  or it boots to the title with no session.
+- **Title** (`UI/TitleView.cs`) — a cream panel inset in a pine cabinet with the wordmark struck
+  on a brass maker's plate; `Best N`, then `PLAY`, or `CONTINUE` + a confirmed `NEW RUN` when a
+  run was saved. Sound/haptics toggles sit *outside* the panel, on the cabinet: machine switches,
+  not game actions. `UI/ConfirmView.cs` is the shared two-button scrim (NEW RUN, QUIT).
+- **Persistence** (`Core/SaveModel.cs`, `Core/SaveSchema.cs`, `Gameplay/SaveStore.cs`) — one
+  atomic JSON file at `persistentDataPath/save.json` holding three INDEPENDENT payloads: records
+  (best score/level, runs played), settings, and an optional run. A run failing
+  `SaveSchema.ValidateRun` is dropped ALONE, and a version mismatch discards the run rather than
+  migrating — losing an interrupted run is a shrug, losing a best score is not. Every failure path
+  degrades to usable data; persistence can never throw into gameplay. Two traps the code encodes:
+  **JsonUtility does not round-trip large doubles**, so money values are `G17` TEXT (`SaveNum`),
+  and it **cannot represent a null nested class**, so `hasRun` is an explicit flag.
+- **Resume** — `GameSession` captures a `RunSnapshot` edge-triggered on `ZoneASystem.IsQuiescent`
+  (phase A, board settled, Zone B empty, no zoom/cash-in/launches in flight) and writes it through
+  immediately, so resuming never depends on the OS delivering a pause. Only the DURABLE state is
+  stored — level, ONE lifetime total (Zone B owns it; Zone A merely mirrors it), buffer,
+  arena scale, queue, bar, and the board as `(tier, x, y)` design px. No velocities, no phase, no
+  arena seed. Cost accepted: a kill mid-cascade loses that turn. `GameSession.Begin`'s order is
+  load-bearing and both mistakes are silent, so each has a test: `SetArenaScale` MUST precede
+  `Board.Restore` (`RadiusForTier` divides by it) and `Themes.SnapTo` MUST follow `ZoneA.Start`
+  (which is what sets the director's target).
+- **Settings** — one sink each: `Sfx.SetMuted` and `Haptics.Enabled`. The editor's M key routes
+  through `GameBootstrap.ToggleSound` so it can never desync from the saved setting.
+- **Quitting** — `Application.wantsToQuit` vetoes and raises a confirm scrim, deliberately NOT the
+  Escape key, so it sits downstream of however the platform delivers Back.
+
+The gameplay loop itself:
 - **Zone A** — tray, pooled material balls, drag-to-aim, finite buffer, merges with juice, death
   line, game over + RESTART. Aiming is frozen outside phase A and during a milestone zoom
   (one `ApplyFreeze` sink). A cash-in that arrives in phase B (or mid-zoom) defers its reward
@@ -209,10 +238,15 @@ The full loop runs from one `GameBootstrap`:
   buffer tick (climbing), goal, transition (door suck), multiply (combo-pitched), collect, pan
   down/up, game over.
 
-Next: **on-device M2 + M3 + M4 + Zone B revamp feel session** (`Tools/build-android.sh`; judge
-the milestone shrink beat, drain pacing, refill particle cadence, cash-in hold/drain, ribbon
-timing, the golden fanfare/haptic, whether the golden mouth reads as reachable-but-tight, and the
-reshuffle pop-in length) · **M5** analytics, perf, store prep.
+Next: **on-device feel session for M2 + M3 + M4 + the Zone B revamp + the save layer**
+(`Tools/build-android.sh`; judge the milestone shrink beat, drain pacing, refill particle cadence,
+cash-in hold/drain, ribbon timing, the golden fanfare/haptic, whether the golden mouth reads as
+reachable-but-tight, the reshuffle pop-in length, and whether resuming a run feels seamless — plus
+**verify `Application.wantsToQuit` fires on Back**) · the rest of **M5**: analytics (the
+local-vs-backend-SDK fork is still open, and it drags in consent UI + a privacy policy + the Play
+data-safety form), a perf pass, and store prep (release keystore, AAB — `ProjectSetup.BuildAndroid`
+currently hardcodes `buildAppBundle = false` and `BuildOptions.Development` — adaptive icon,
+versionCode scheme, target API level, listing assets).
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's
 > state *now* — a single snapshot, not a changelog.

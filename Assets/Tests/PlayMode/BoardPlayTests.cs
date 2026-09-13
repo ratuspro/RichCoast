@@ -108,6 +108,41 @@ namespace RichCoast.Tests.PlayMode
             Capture(cam, rig, "game-scene-b.png");
         }
 
+        /// <summary>
+        /// The title screen in both of its states: a fresh install (PLAY alone) and a returning player
+        /// with a saved run and a best score (CONTINUE + NEW RUN). The two-state split is the whole
+        /// point of the screen, so a shot of only one of them would not be a check.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CaptureTitleScene()
+        {
+            var dir = Path.Combine(Application.temporaryCachePath, "titleshot");
+            Directory.CreateDirectory(dir);
+            RichCoast.Game.SaveStore.PathOverride = Path.Combine(dir, "save.json");
+            RichCoast.Game.SaveStore.Delete();
+
+            GameBootstrap.PendingIntent = AppIntent.Title;
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return new WaitForSeconds(0.6f); // let the group's OutBack settle
+            var boot = Object.FindFirstObjectByType<GameBootstrap>();
+            Assert.IsNotNull(boot);
+            Capture(boot.Cam, boot.Cam.GetComponent<RichCoast.Game.CameraRig>(), "game-scene-title.png");
+
+            var save = new RichCoast.Core.SaveData();
+            save.records.Merge(1_284_000, 37);
+            save.SetRun(new RichCoast.Core.RunSnapshot { level = 12, ballBuffer = 4, barTarget = 500, barFilled = 120 });
+            RichCoast.Game.SaveStore.Save(save);
+
+            GameBootstrap.PendingIntent = AppIntent.Title;
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return new WaitForSeconds(0.6f);
+            boot = Object.FindFirstObjectByType<GameBootstrap>();
+            Capture(boot.Cam, boot.Cam.GetComponent<RichCoast.Game.CameraRig>(), "game-scene-title-saved.png");
+
+            RichCoast.Game.SaveStore.PathOverride = null;
+            Directory.Delete(dir, true);
+        }
+
         /// <summary>The M3 look: the board at the first milestone — arena grown ×1.92, dusk palette, window [5,8].</summary>
         [UnityTest]
         public IEnumerator CaptureMilestoneScene()
