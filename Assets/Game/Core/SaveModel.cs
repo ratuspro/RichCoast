@@ -51,12 +51,15 @@ namespace RichCoast.Core
         public string scoreText = "0";
         public string barFilledText = "0";
         public string barTargetText = "1";
-        public string zoneBTotalText = "0";
 
+        /// <summary>
+        /// The run's lifetime total — ONE number, not two. Zone B owns it; Zone A only mirrors it
+        /// (<c>GameEvents.ScoreChanged += total =&gt; score = total</c>), so storing a separate Zone A
+        /// score would be the same quantity twice, free to disagree and impossible to validate.
+        /// </summary>
         public double score { get => SaveNum.Parse(scoreText); set => scoreText = SaveNum.Format(value); }
         public double barFilled { get => SaveNum.Parse(barFilledText); set => barFilledText = SaveNum.Format(value); }
         public double barTarget { get => SaveNum.Parse(barTargetText); set => barTargetText = SaveNum.Format(value); }
-        public double zoneBTotal { get => SaveNum.Parse(zoneBTotalText); set => zoneBTotalText = SaveNum.Format(value); }
     }
 
     /// <summary>Lifetime bests. Survives a discarded run — a corrupt snapshot must never cost a best score.</summary>

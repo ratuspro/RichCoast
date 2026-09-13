@@ -30,7 +30,6 @@ namespace RichCoast.Tests.EditMode
                 nextTier = window.min,
                 barFilled = 10,
                 barTarget = 100,
-                zoneBTotal = 500,
                 board = new List<BallSpawn>
                 {
                     new BallSpawn { tier = window.min, x = 100, yFromTop = 400 },

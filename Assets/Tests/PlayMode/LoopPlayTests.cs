@@ -15,6 +15,8 @@ namespace RichCoast.Tests.PlayMode
     {
         static IEnumerator LoadMain()
         {
+            // The scene boots to the title unless told otherwise; these tests all want a live run.
+            GameBootstrap.PendingIntent = AppIntent.NewRun;
             yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             yield return null;
             yield return null;

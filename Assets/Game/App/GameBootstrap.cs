@@ -9,36 +9,57 @@ using UnityEngine.SceneManagement;
 
 namespace RichCoast.App
 {
+    /// <summary>What the NEXT scene load should do once it boots. See <see cref="GameBootstrap.PendingIntent"/>.</summary>
+    public enum AppIntent { Title, NewRun }
+
     /// <summary>
-    /// The composition root: the ONLY MonoBehaviour the scene needs. Builds the camera rig, the Zone A
-    /// tray, the ball factory/board/aim/death line, the juice + audio, the Zone C trap-door, the Zone
-    /// B split arena, the phase + theme directors and the uGUI shell — all from three
-    /// ScriptableObjects — then ticks the plain-C# systems. Zones never see each other here; they
-    /// share only <see cref="GameEvents"/>.
+    /// The composition root: the ONLY MonoBehaviour the scene needs. Builds the camera rig, the audio
+    /// singleton and the uGUI shell, loads the save, and then runs one of three app states — the title
+    /// screen, a live <see cref="GameSession"/>, or the game-over overlay. The run itself lives in
+    /// <see cref="GameSession"/>; this class owns composition, app state and persistence.
+    /// <para>Zones never see each other here; they share only <see cref="GameEvents"/>.</para>
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
+        public enum AppState { Title, Run, GameOver }
+
         public TierLadderSO tierLadder;
         public ProgressionSO progression;
         public GameFeelSO feel;
         public ZoneBArenaSO zoneBArena;
 
-        public Board Board { get; private set; }
-        public ZoneASystem ZoneA { get; private set; }
-        public ZoneBSystem ZoneB { get; private set; }
-        public ZoneCSystem ZoneC { get; private set; }
-        public PhaseDirector Phases { get; private set; }
-        public ThemeDirector Themes { get; private set; }
+        /// <summary>
+        /// RESTART reloads the scene — the honest reset for pools, tweens and theme — and would
+        /// otherwise land on the title, so it sets this first. Statics survive scene loads, the same
+        /// mechanism <see cref="GameEvents"/> already relies on. PlayMode tests set it too.
+        /// </summary>
+        public static AppIntent PendingIntent = AppIntent.Title;
+
+        public AppState State { get; private set; } = AppState.Title;
+        public GameSession Session { get; private set; }
+        public SaveData Save { get; private set; }
+
         public BoardGeometry Geometry { get; private set; }
         public Camera Cam { get; private set; }
         public HudView Hud { get; private set; }
-        /// <summary>The milestone arena-growth factor in force (balls are 1/this of their ladder size).</summary>
-        public float ArenaScale => factory.ArenaScale;
 
-        AimController aim;
-        BallFactory factory;
+        // Shims so existing callers and the PlayMode suite keep reaching the live run directly.
+        public Board Board => Session?.Board;
+        public ZoneASystem ZoneA => Session?.ZoneA;
+        public ZoneBSystem ZoneB => Session?.ZoneB;
+        public ZoneCSystem ZoneC => Session?.ZoneC;
+        public PhaseDirector Phases => Session?.Phases;
+        public ThemeDirector Themes => Session?.Themes;
+        /// <summary>The milestone arena-growth factor in force (balls are 1/this of their ladder size).</summary>
+        public float ArenaScale => Session?.ArenaScale ?? 1f;
+
+        ProgressionCurve curve;
+        CameraRig rig;
         Canvas overlayCanvas;
+        GameObject titleUi;
+        GameObject quitDialog;
         bool restarting;
+        bool quitConfirmed;
 
         void Awake()
         {
@@ -53,46 +74,120 @@ namespace RichCoast.App
             Theme.Apply(Palettes.Workshop);
             GameEvents.ThemeChanged += Themed.RestyleAll;
 
-            var ladder = tierLadder.ToLadder();
-            var curve = progression.ToCurve();
+            curve = progression.ToCurve();
+            Save = SaveStore.Load(curve);
 
             Geometry = new BoardGeometry();
             Cam = Camera.main != null ? Camera.main : new GameObject("Main Camera", typeof(Camera), typeof(AudioListener)) { tag = "MainCamera" }.GetComponent<Camera>();
-            var rig = Cam.gameObject.GetComponent<CameraRig>() ?? Cam.gameObject.AddComponent<CameraRig>();
+            rig = Cam.gameObject.GetComponent<CameraRig>() ?? Cam.gameObject.AddComponent<CameraRig>();
             rig.Init(Cam, Geometry);
             ConfigurePhysicsLayers();
-
-            var world = new GameObject("ZoneA").transform;
-            var arena = new ArenaBuilder(world, Geometry, feel);
-            arena.Build();
-
-            factory = new BallFactory(world, ladder, feel);
-            Board = new Board(factory, Geometry, feel);
-            var deathLine = new DeathLineView(world, Geometry);
-            var queue = new BallQueue();
-            aim = new AimController(world, Cam, Geometry, factory, feel, queue, () => Time.unscaledTime * 1000.0);
-            var mergeFx = new MergeFx(world, feel, Geometry);
-            var highlight = new DropHighlight(world);
-            var growth = new ArenaGrowth(factory, Board, feel);
+            // The audio singleton outlives sessions, so settings apply once at boot, not per run.
             Sfx.Create(feel);
-
-            ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, ladder, feel, mergeFx, factory, highlight, growth, Geometry, world);
-            // The arena is generated per drop, not per run. It is handed the trap-door's columns so the
-            // golden mouth always lands on one a player can actually hit.
-            ZoneB = new ZoneBSystem(transform, Geometry, feel, Cam, zoneBArena != null ? zoneBArena.ToParams() : new ZoneBGenParams(),
-                DoorColumns(), Random.Range(int.MinValue, int.MaxValue), curve.ScoreBarTargetForLevel(1));
-            ZoneC = new ZoneCSystem(transform, Board, Geometry, feel);
-            Phases = new PhaseDirector(rig, feel);
-            Themes = new ThemeDirector(curve, feel);
+            ApplySettings();
 
             BuildUi();
-            aim.QueueChanged += () => Hud.SetNextTier(aim.Queue.NextTier);
-            Hud.SetNextTier(aim.Queue.NextTier);
-            GameEvents.GameOver += finalScore => GameOverView.Show(overlayCanvas, finalScore, Restart);
 
-            // Announce initial state LAST, after every system has subscribed.
-            ZoneA.Start();
-            Phases.Start();
+            var intent = PendingIntent;
+            PendingIntent = AppIntent.Title;
+            if (intent == AppIntent.NewRun) StartRun(null);
+            else ShowTitle();
+        }
+
+        void OnEnable() => Application.wantsToQuit += WantsToQuit;
+        void OnDisable() => Application.wantsToQuit -= WantsToQuit;
+
+        void ShowTitle()
+        {
+            State = AppState.Title;
+            if (Hud != null) Hud.gameObject.SetActive(false);
+            titleUi = TitleView.Show(overlayCanvas, Save,
+                run => StartRun(run),
+                on => { Save.settings.soundOn = on; ApplySettings(); SaveStore.Save(Save); },
+                on => { Save.settings.hapticsOn = on; ApplySettings(); SaveStore.Save(Save); });
+        }
+
+        /// <summary>Begin a run — fresh when <paramref name="restore"/> is null, otherwise resumed.</summary>
+        public void StartRun(RunSnapshot restore)
+        {
+            if (titleUi != null) { Destroy(titleUi); titleUi = null; }
+            State = AppState.Run;
+            if (Hud != null) Hud.gameObject.SetActive(true);
+
+            Session = new GameSession(transform, Cam, rig, Geometry, tierLadder.ToLadder(), curve, feel,
+                zoneBArena != null ? zoneBArena.ToParams() : new ZoneBGenParams(),
+                DoorColumns(), Random.Range(int.MinValue, int.MaxValue), restore);
+            Session.CheckpointReady += Checkpoint;
+            Session.Aim.QueueChanged += () => Hud.SetNextTier(Session.Queue.NextTier);
+            GameEvents.GameOver += OnGameOver;
+
+            Session.Begin(restore);
+            Hud.SetNextTier(Session.Queue.NextTier);
+        }
+
+        /// <summary>
+        /// The run settled. Written straight through rather than held for the pause callback: the
+        /// payload is a few hundred bytes and turns are seconds apart, so paying for the write here
+        /// removes all dependence on the OS delivering a pause before it evicts us.
+        /// </summary>
+        void Checkpoint()
+        {
+            Save.SetRun(Session.Capture());
+            SaveStore.Save(Save);
+        }
+
+        void OnGameOver(double finalScore)
+        {
+            State = AppState.GameOver;
+            bool newBest = Save.records.Merge(finalScore, Session != null ? Session.ZoneA.Level : 1);
+            Save.ClearRun();
+            SaveStore.Save(Save);
+            GameOverView.Show(overlayCanvas, finalScore, Save.records, newBest, Restart, ToTitle);
+        }
+
+        /// <summary>The one path to muted: the editor's M shortcut and the title toggle share it.</summary>
+        public void ToggleSound()
+        {
+            Save.settings.soundOn = !Save.settings.soundOn;
+            ApplySettings();
+            SaveStore.Save(Save);
+        }
+
+        public void ApplySettings()
+        {
+            Sfx.Instance?.SetMuted(!Save.settings.soundOn);
+            Haptics.Enabled = Save.settings.hapticsOn;
+        }
+
+        /// <summary>
+        /// Android's Back finishes the activity with no confirmation of its own, so veto the quit and
+        /// ask. Built on wantsToQuit rather than the Escape key because this sits downstream of however
+        /// the platform delivers Back — it works whether or not the Input System surfaces it.
+        /// </summary>
+        bool WantsToQuit()
+        {
+            if (quitConfirmed) return true;
+            Flush();
+            if (quitDialog != null) return false; // already asking
+            quitDialog = ConfirmView.Show(overlayCanvas, "QUIT RICHCOAST?", "QUIT",
+                () => { quitConfirmed = true; Flush(); Application.Quit(); },
+                () => { quitDialog = null; });
+            return false;
+        }
+
+        void OnApplicationPause(bool paused) { if (paused) Flush(); }
+        void OnApplicationQuit() => Flush();
+
+        /// <summary>
+        /// Belt-and-braces only: the run's lifeline is the per-checkpoint write. This exists for
+        /// settings changes, and for the case where the last checkpoint is already current.
+        /// </summary>
+        void Flush()
+        {
+            if (Save == null) return;
+            if (State == AppState.Run && Session != null && Session.ZoneA.IsQuiescent)
+                Save.SetRun(Session.Capture());
+            SaveStore.Save(Save);
         }
 
         /// <summary>
@@ -137,31 +232,42 @@ namespace RichCoast.App
 
         void Update()
         {
-            float deltaMs = Time.deltaTime * 1000f;
-            aim.Tick();
-            ZoneA.Tick(deltaMs);
-            ZoneC.Tick(deltaMs);
-            ZoneB.Tick(deltaMs);
             if (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.mKey.wasPressedThisFrame)
-                Sfx.Instance?.ToggleMute();
+                ToggleSound();
+            if (State != AppState.Run || Session == null) return;
+            Session.Tick(Time.deltaTime * 1000f);
         }
 
         void FixedUpdate()
         {
-            Board.FixedTick();
-            ZoneB.FixedTick();
+            if (State != AppState.Run || Session == null) return;
+            Session.FixedTick();
         }
 
         public void Restart()
         {
             if (restarting) return;
             restarting = true;
+            PendingIntent = AppIntent.NewRun;
+            Reload();
+        }
+
+        public void ToTitle()
+        {
+            if (restarting) return;
+            restarting = true;
+            PendingIntent = AppIntent.Title;
+            Reload();
+        }
+
+        void Reload()
+        {
             Tween.StopAll();
             GameEvents.Reset();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
         /// <summary>Test/debug: drop a tier at a world x through the real system (spends the buffer).</summary>
-        public void DebugDrop(float x, int tier) => ZoneA.DebugDrop(x, tier);
+        public void DebugDrop(float x, int tier) => Session?.DebugDrop(x, tier);
     }
 }

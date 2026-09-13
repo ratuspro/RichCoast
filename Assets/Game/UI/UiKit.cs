@@ -103,6 +103,30 @@ namespace RichCoast.UI
             return button;
         }
 
+        /// <summary>
+        /// A settings toggle: a <see cref="Button"/> carrying its own on/off state in its label and
+        /// fill. No icon assets — the whole game is procedural, and at this size a word reads better
+        /// than a glyph.
+        /// </summary>
+        public static Button Toggle(Transform parent, string name, string label, bool on, System.Action<bool> onChanged)
+        {
+            var button = Button(parent, name, ToggleLabel(label, on),
+                on ? Theme.Brass : Theme.PineDark, Theme.BrassBright, Theme.Cream, 44f);
+            var text = button.GetComponentInChildren<TextMeshProUGUI>();
+            var fill = button.GetComponent<Image>();
+            bool state = on;
+            button.onClick.AddListener(() =>
+            {
+                state = !state;
+                text.text = ToggleLabel(label, state);
+                fill.color = state ? Theme.Brass : Theme.PineDark;
+                onChanged?.Invoke(state);
+            });
+            return button;
+        }
+
+        static string ToggleLabel(string label, bool on) => $"{label}: {(on ? "ON" : "OFF")}";
+
         /// <summary>Bind a uGUI graphic's colour to the active palette (restyled through milestone cross-fades).</summary>
         public static Game.Themed Themed(Graphic graphic, ThemeKey key) =>
             Game.Themed.Bind(graphic, key, () => graphic.color, c => graphic.color = c);

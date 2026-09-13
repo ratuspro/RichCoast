@@ -27,7 +27,6 @@ namespace RichCoast.Core
 
             if (run.level < 1) { reason = $"level {run.level} < 1"; return false; }
             if (!Finite(run.score) || run.score < 0) { reason = $"bad score {run.score}"; return false; }
-            if (!Finite(run.zoneBTotal) || run.zoneBTotal < 0) { reason = $"bad zoneBTotal {run.zoneBTotal}"; return false; }
             if (run.ballBuffer < 0 || run.ballBuffer > MaxBuffer) { reason = $"bad ballBuffer {run.ballBuffer}"; return false; }
             if (!Finite(run.arenaScale) || run.arenaScale < MinArenaScale || run.arenaScale > MaxArenaScale)
             { reason = $"bad arenaScale {run.arenaScale}"; return false; }

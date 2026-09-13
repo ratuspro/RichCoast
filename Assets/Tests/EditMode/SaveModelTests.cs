@@ -64,13 +64,12 @@ namespace RichCoast.Tests.EditMode
             const double big = 987654321987.65432;
             var save = new SaveData();
             save.records.bestScore = big;
-            save.SetRun(new RunSnapshot { score = big, zoneBTotal = big / 3.0, barTarget = 1e9, barFilled = 123456.789 });
+            save.SetRun(new RunSnapshot { score = big, barTarget = 1e9, barFilled = 123456.789 });
 
             var round = JsonUtility.FromJson<SaveData>(JsonUtility.ToJson(save));
 
             Assert.AreEqual(big, round.records.bestScore, 0.0, "best score lost precision through JSON");
             Assert.AreEqual(big, round.run.score, 0.0, "run score lost precision through JSON");
-            Assert.AreEqual(big / 3.0, round.run.zoneBTotal, 0.0, "zone B total lost precision through JSON");
             Assert.AreEqual(123456.789, round.run.barFilled, 0.0, "bar fill lost precision through JSON");
         }
 

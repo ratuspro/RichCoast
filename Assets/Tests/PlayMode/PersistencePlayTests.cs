@@ -1,8 +1,13 @@
+using System;
+using System.Collections;
 using System.IO;
 using NUnit.Framework;
+using RichCoast.App;
 using RichCoast.Core;
 using RichCoast.Game;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
 
 namespace RichCoast.Tests.PlayMode
 {
@@ -126,6 +131,232 @@ namespace RichCoast.Tests.PlayMode
             Assert.IsFalse(Haptics.Enabled);
             Haptics.Enabled = true;
             Assert.IsTrue(Haptics.Enabled);
+        }
+
+        // ---- the live game: capture, restore and the app states ----
+
+        static GameBootstrap Boot() => UnityEngine.Object.FindFirstObjectByType<GameBootstrap>();
+
+        static IEnumerator LoadWith(AppIntent intent)
+        {
+            GameBootstrap.PendingIntent = intent;
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+        }
+
+        static IEnumerator LoadRun() => LoadWith(AppIntent.NewRun);
+
+        static IEnumerator WaitUntil(Func<bool> condition, float timeoutS)
+        {
+            float deadline = Time.time + timeoutS;
+            while (!condition() && Time.time < deadline) yield return null;
+        }
+
+        /// <summary>
+        /// Drop a ball and wait for a FULL settle cycle. Waiting only for quiescence is not enough:
+        /// in the instant after a spawn the body is awake but still at zero speed, so IsSettled is
+        /// briefly true and the checkpoint edge never fires. Wait for motion first, then for rest.
+        /// </summary>
+        static IEnumerator DropAndSettle(GameBootstrap boot, float x, int tier)
+        {
+            boot.DebugDrop(x, tier);
+            yield return WaitUntil(() => !boot.ZoneA.IsQuiescent, 5f);
+            Assert.IsFalse(boot.ZoneA.IsQuiescent, "the dropped ball never started moving");
+            yield return WaitUntil(() => boot.ZoneA.IsQuiescent, 15f);
+            Assert.IsTrue(boot.ZoneA.IsQuiescent, "the board never settled");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator ADropThatSettlesWritesACheckpointContainingTheBoard()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+
+            yield return DropAndSettle(boot, 0f, 3);
+
+            var loaded = SaveStore.Load(Curve());
+            Assert.IsTrue(loaded.hasRun, "settling must have written a checkpoint");
+            Assert.GreaterOrEqual(loaded.run.board.Count, 1, "the dropped ball belongs in the snapshot");
+            Assert.AreEqual(boot.ZoneA.Level, loaded.run.level);
+            Assert.AreEqual(boot.ZoneA.BallBuffer, loaded.run.ballBuffer);
+        }
+
+        [UnityTest]
+        public IEnumerator ACapturedSnapshotSatisfiesItsOwnContract()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+
+            yield return DropAndSettle(boot, 0f, 2);
+
+            // Load re-validates; hasRun surviving means a REAL capture passes SaveSchema.ValidateRun.
+            Assert.IsTrue(SaveStore.Load(Curve()).hasRun, "a real capture must survive its own validation");
+        }
+
+        [UnityTest]
+        public IEnumerator NoCheckpointIsTakenWhileZoneBHasBallsInFlight()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+
+            GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(3), DesignSpace.Width / 2));
+            yield return null;
+            Assert.Greater(boot.ZoneB.InFlight, 0, "precondition: a ball is cascading");
+            Assert.IsFalse(boot.ZoneA.IsQuiescent, "a cascading Zone B is not a safe capture point");
+        }
+
+        [UnityTest]
+        public IEnumerator ARestoredRunCarriesLevelScoreBufferAndBoard()
+        {
+            var snap = new RunSnapshot
+            {
+                level = 4, score = 9999, ballBuffer = 3, arenaScale = 1f,
+                currentTier = 2, nextTier = 3, barFilled = 12, barTarget = 400,
+                board =
+                {
+                    new BallSpawn { tier = 2, x = 120, yFromTop = 300 },
+                    new BallSpawn { tier = 3, x = 260, yFromTop = 300 },
+                },
+            };
+            yield return LoadWith(AppIntent.Title);
+            var boot = Boot();
+            boot.StartRun(snap);
+            yield return null;
+
+            Assert.AreEqual(4, boot.ZoneA.Level);
+            Assert.AreEqual(9999, boot.ZoneA.Score, 1e-6);
+            Assert.AreEqual(3, boot.ZoneA.BallBuffer);
+            Assert.AreEqual(2, boot.Board.BallCount);
+            Assert.AreEqual(9999, boot.ZoneB.Total, 1e-6, "Zone B owns the lifetime total that Zone A mirrors");
+            Assert.AreEqual(12, boot.ZoneB.BarFilled, 1e-6);
+        }
+
+        /// <summary>
+        /// The step-2-before-step-5 ordering trap: RadiusForTier divides by ArenaScale, so restoring
+        /// balls BEFORE the scale gives every one of them the unscaled radius. Comparing a scaled
+        /// restore against an unscaled one catches exactly that, without depending on the ladder asset.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ArenaScaleIsAppliedBeforeBallsSoRadiiAreCorrect()
+        {
+            RunSnapshot Snap(float scale) => new RunSnapshot
+            {
+                level = 1, ballBuffer = 3, arenaScale = scale,
+                currentTier = 1, nextTier = 1, barTarget = 100,
+                board = { new BallSpawn { tier = 3, x = DesignSpace.Width / 2, yFromTop = 300 } },
+            };
+
+            yield return LoadWith(AppIntent.Title);
+            Boot().StartRun(Snap(1f));
+            yield return null;
+            float unscaled = 0f;
+            foreach (var ball in Boot().Board.Balls) unscaled = ball.Radius;
+            Assert.Greater(unscaled, 0f, "precondition: the unscaled ball restored");
+
+            yield return LoadWith(AppIntent.Title);
+            Boot().StartRun(Snap(2f));
+            yield return null;
+            float scaled = 0f;
+            foreach (var ball in Boot().Board.Balls) scaled = ball.Radius;
+
+            Assert.AreEqual(unscaled / 2f, scaled, 1e-3f,
+                "a restored ball ignored the milestone arena scale — SetArenaScale must precede Board.Restore");
+        }
+
+        /// <summary>
+        /// Without ThemeDirector.SnapTo a restored run stays painted workshop until the next milestone
+        /// zoom, because BeginFade is the only thing that ever moves the director's current palette.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ARestoredMidRunLevelPaintsItsPaletteImmediately()
+        {
+            var curve = Curve();
+            int level = 0;
+            for (int l = 2; l <= 400 && level == 0; l++)
+                if (curve.PaletteNameForLevel(l) != Palettes.WorkshopName) level = l;
+            Assert.Greater(level, 0, "no non-workshop palette found anywhere in the curve");
+
+            var window = curve.WindowForLevel(level);
+            var snap = new RunSnapshot
+            {
+                level = level, ballBuffer = 3, arenaScale = 1f,
+                currentTier = window.min, nextTier = window.min,
+                barFilled = 1, barTarget = curve.ScoreBarTargetForLevel(level),
+            };
+
+            yield return LoadWith(AppIntent.Title);
+            var boot = Boot();
+            boot.StartRun(snap);
+            yield return null;
+
+            Assert.AreEqual(curve.PaletteNameForLevel(level), boot.Themes.CurrentPaletteName,
+                "a restored run must boot already wearing its palette");
+        }
+
+        [UnityTest]
+        public IEnumerator AGameOverClearsTheSavedRunAndMergesRecords()
+        {
+            yield return LoadRun();
+            GameEvents.RaiseGameOver(5555);
+            yield return null;
+
+            var loaded = SaveStore.Load(Curve());
+            Assert.IsFalse(loaded.hasRun, "a dead run must not be resumable");
+            Assert.AreEqual(5555, loaded.records.bestScore, 1e-6);
+            Assert.AreEqual(1, loaded.records.runsPlayed);
+        }
+
+        [UnityTest]
+        public IEnumerator GameOverShowsTheRecordAndOffersTheMenu()
+        {
+            yield return LoadRun();
+            GameEvents.RaiseGameOver(1234);
+            yield return null;
+            Assert.IsNotNull(GameObject.Find("Best"), "game over must show the record");
+            Assert.IsNotNull(GameObject.Find("MenuButton"), "game over must offer a way back to the menu");
+        }
+
+        [UnityTest]
+        public IEnumerator BootingWithoutAnIntentShowsTheTitleAndNoSession()
+        {
+            yield return LoadWith(AppIntent.Title);
+            var boot = Boot();
+            Assert.AreEqual(GameBootstrap.AppState.Title, boot.State);
+            Assert.IsNull(boot.Session, "no run may exist behind the title");
+            Assert.IsNotNull(GameObject.Find("TitleScreen"), "the title screen must be on the overlay canvas");
+        }
+
+        [UnityTest]
+        public IEnumerator TheTitleOffersContinueOnlyWhenARunWasSaved()
+        {
+            yield return LoadWith(AppIntent.Title);
+            Assert.IsNull(GameObject.Find("Continue"), "a fresh install has nothing to continue");
+            Assert.IsNotNull(GameObject.Find("Play"));
+
+            var save = new SaveData();
+            save.SetRun(new RunSnapshot { level = 2, ballBuffer = 3, barTarget = 100 });
+            SaveStore.Save(save);
+
+            yield return LoadWith(AppIntent.Title);
+            Assert.IsNotNull(GameObject.Find("Continue"), "a saved run must be resumable from the title");
+            Assert.IsNotNull(GameObject.Find("NewRun"));
+            Assert.IsNull(GameObject.Find("Play"), "PLAY is replaced by CONTINUE + NEW RUN");
+        }
+
+        [UnityTest]
+        public IEnumerator PausingPersistsASettledRun()
+        {
+            yield return LoadRun();
+            var boot = Boot();
+            yield return DropAndSettle(boot, 0f, 2);
+
+            SaveStore.Delete();
+            boot.SendMessage("OnApplicationPause", true);
+            yield return null;
+
+            Assert.IsTrue(SaveStore.Load(Curve()).hasRun, "a pause with the run settled must persist it");
         }
     }
 }
