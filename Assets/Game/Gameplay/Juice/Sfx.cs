@@ -18,7 +18,7 @@ namespace RichCoast.Game
         GameFeelSO feel;
         AudioSource[] voices;
         int nextVoice;
-        AudioClip drop, merge, mergeHigh, tick, goal, gameOver, transition, multiply, collect;
+        AudioClip drop, merge, mergeHigh, tick, goal, gameOver, transition, multiply, collect, panDown, panUp, golden;
         readonly ComboState mergeCombo = new ComboState();
         readonly ComboState multiplyCombo = new ComboState();
         bool muted;
@@ -55,10 +55,23 @@ namespace RichCoast.Game
             transition = Synth("transition", 520f, 180f, Wave.Triangle, 0.004f, 0.2f, 0.22f);
             multiply = Synth("multiply", 392f, 392f, Wave.Triangle, 0.003f, 0.16f, 0.2f);
             collect = Synth("collect", 880f, 880f, Wave.Sine, 0.002f, 0.07f, 0.09f);
+            panDown = Synth("panDown", 440f, 220f, Wave.Triangle, 0.02f, 0.3f, 0.12f);
+            panUp = Synth("panUp", 220f, 440f, Wave.Triangle, 0.02f, 0.3f, 0.12f);
+            // The rarest cue in the game: a four-note climb an octave above `goal`, with a rising
+            // shimmer laid over it so it cannot be mistaken for an ordinary bar fill.
+            golden = Layer("golden",
+                Arpeggio("goldenArp", new[] { 987.77f, 1244.51f, 1567.98f, 1975.53f }, 0.07f, 0.34f, 0.55f),
+                Synth("goldenShimmer", 2093f, 2637f, Wave.Sine, 0.01f, 0.5f, 0.12f));
         }
+
+        /// <summary>Zone B: a ball threaded the golden mouth and struck the gilded gate. The jackpot fanfare.</summary>
+        public void Golden() => Play(golden, 1f);
 
         /// <summary>Zone C: the trap-door sucks a ball through. Downward whoosh.</summary>
         public void Transition() => Play(transition, 1f);
+
+        /// <summary>PhaseDirector: the camera pans between framings. Soft glide — down into Zone B, up back to Zone A.</summary>
+        public void Pan(bool up) => Play(up ? panUp : panDown, 1f);
 
         /// <summary>Zone B: a ball splits into <paramref name="n"/> copies. Bright pluck that climbs through a fast chain.</summary>
         public void Multiply(int n)

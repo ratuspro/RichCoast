@@ -25,7 +25,8 @@ namespace RichCoast.EditorTools
             var ladder = EnsureAsset<TierLadderSO>($"{DataDir}/TierLadder.asset");
             var progression = EnsureAsset<ProgressionSO>($"{DataDir}/Progression.asset");
             var feel = EnsureAsset<GameFeelSO>($"{DataDir}/GameFeel.asset");
-            BuildMainScene(ladder, progression, feel);
+            var zoneBArena = EnsureAsset<ZoneBArenaSO>($"{DataDir}/ZoneBArena.asset");
+            BuildMainScene(ladder, progression, feel, zoneBArena);
             AssetDatabase.SaveAssets();
             Debug.Log("[SceneBuilder] data assets + Main scene ready");
         }
@@ -41,7 +42,7 @@ namespace RichCoast.EditorTools
             return asset;
         }
 
-        static void BuildMainScene(TierLadderSO ladder, ProgressionSO progression, GameFeelSO feel)
+        static void BuildMainScene(TierLadderSO ladder, ProgressionSO progression, GameFeelSO feel, ZoneBArenaSO zoneBArena)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -61,6 +62,7 @@ namespace RichCoast.EditorTools
             boot.tierLadder = ladder;
             boot.progression = progression;
             boot.feel = feel;
+            boot.zoneBArena = zoneBArena;
 
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath)!);
             EditorSceneManager.SaveScene(scene, ScenePath);

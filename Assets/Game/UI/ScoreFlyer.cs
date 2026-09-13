@@ -1,7 +1,6 @@
 using System;
 using PrimeTween;
 using RichCoast.Game;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,28 +9,43 @@ namespace RichCoast.UI
     /// <summary>
     /// The overlay fly-up (port of the Phaser <c>overlayFx.launchOverlayFlyer</c>): a token arcs from a
     /// screen point to a HUD anchor along a jittered quadratic bezier, shrinking, shedding a short
-    /// fading trail, then fires <c>onArrive</c>. Lives on the top-most overlay canvas so it rides
-    /// above every world object and HUD element.
+    /// fading trail, then fires <c>onArrive</c>. Two tokens ride it: the harvest "+N" text and the
+    /// buffer-refill brass dot. Lives on the top-most overlay canvas so it rides above every world
+    /// object and HUD element.
     /// </summary>
     public static class ScoreFlyer
     {
-        const float BowJitter = 110f; // reference px
+        const float TextBowJitter = 110f; // reference px
         const float TrailFadeS = 0.22f;
 
+        /// <summary>Fly a brass "+N" text token to <paramref name="target"/>.</summary>
         public static void Launch(RectTransform overlay, string label, Vector2 startScreen, RectTransform target, float durationS, Action onArrive)
+        {
+            var token = UiKit.Text(overlay, "Flyer", label, 60f, Theme.BrassBright);
+            token.outlineWidth = 0.25f;
+            token.outlineColor = Theme.Ink;
+            var rt = (RectTransform)token.transform;
+            rt.sizeDelta = new Vector2(600f, 120f);
+            Fly(overlay, rt, startScreen, target, durationS, TextBowJitter, 0.55f, Theme.BrassBright, onArrive);
+        }
+
+        /// <summary>Fly a small solid dot (a buffer-refill particle) to <paramref name="target"/>, at constant size.</summary>
+        public static void LaunchDot(RectTransform overlay, string name, Color color, float size, Vector2 startScreen, RectTransform target, float durationS, float bowJitter, Action onArrive)
+        {
+            var dot = UiKit.Image(overlay, name, color, BallArt.Disc);
+            var rt = (RectTransform)dot.transform;
+            rt.sizeDelta = new Vector2(size, size);
+            Fly(overlay, rt, startScreen, target, durationS, bowJitter, 1f, color, onArrive);
+        }
+
+        static void Fly(RectTransform overlay, RectTransform rt, Vector2 startScreen, RectTransform target, float durationS, float bowJitter, float scaleTo, Color trailColor, Action onArrive)
         {
             var canvas = overlay.GetComponentInParent<Canvas>();
             var cam = canvas.worldCamera;
             var start = ToLocal(overlay, startScreen, cam);
             var endScreen = RectTransformUtility.WorldToScreenPoint(cam, target.position);
             var end = ToLocal(overlay, endScreen, cam);
-            var control = new Vector2((start.x + end.x) / 2f + UnityEngine.Random.Range(-BowJitter, BowJitter), Mathf.Lerp(start.y, end.y, 0.45f));
-
-            var token = UiKit.Text(overlay, "Flyer", label, 60f, Theme.BrassBright);
-            token.outlineWidth = 0.25f;
-            token.outlineColor = Theme.Ink;
-            var rt = (RectTransform)token.transform;
-            rt.sizeDelta = new Vector2(600f, 120f);
+            var control = new Vector2((start.x + end.x) / 2f + UnityEngine.Random.Range(-bowJitter, bowJitter), Mathf.Lerp(start.y, end.y, 0.45f));
             rt.anchoredPosition = start;
 
             int frame = 0;
@@ -41,8 +55,8 @@ namespace RichCoast.UI
             {
                 var p = Bezier(start, control, end, t);
                 r.anchoredPosition = p;
-                r.localScale = Vector3.one * Mathf.Lerp(1f, 0.55f, t);
-                if (frame++ % 3 == 0) ShedTrail(overlay, p, Theme.BrassBright);
+                r.localScale = Vector3.one * Mathf.Lerp(1f, scaleTo, t);
+                if (frame++ % 3 == 0) ShedTrail(overlay, p, trailColor);
             }, Ease.InOutSine).OnComplete(() =>
             {
                 if (rt != null) UnityEngine.Object.Destroy(rt.gameObject);

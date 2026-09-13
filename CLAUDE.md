@@ -11,8 +11,10 @@ kept only as reference (its two-camera pixel-locked rig is deliberately NOT carr
   balls merge into the next tier (value ×3, `3^(tier-1)`), with a neighbour-shoving blast.
   A ball resting above the death line ends the run.
 - **Zone C (boundary)** — a manually-tapped trap-door that sucks the nearest Zone A ball into B.
-- **Zone B (bottom)** — no-control physics arena; gates split a ball into copies; drained value
-  fills a score bar. Filling it levels up and refills Zone A's finite ball buffer.
+- **Zone B (bottom)** — no-control physics arena, PROCEDURALLY GENERATED and reshuffled after
+  every drop; gates split a ball into copies; drained value fills a score bar. Filling it levels
+  up and refills Zone A's finite ball buffer. Its barrier row is solid but for one narrow golden
+  mouth on a door column: thread it and a brass chute drops the ball onto a gilded ×6–×8 gate.
 - Two phases (A: drop; B: trap-door) joined by a camera pan. Endless; merging scores nothing —
   value is realised only when balls exit B.
 
@@ -27,8 +29,9 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   neutral-growth/milestone-zoom math), `BallMath`, `Materials` (the 20-material ladder),
   `ProgressionCurve` (anchor-interpolated targets, buffer oscillation, tail growth, window
   stepping), `ComboPitch`, `NumberFormat.Compact`, `BallQueue`, `PhaseMachine` (A ⇄ B flow),
-  `ScoreBar`, `ZoneBLayouts` (the two authored arenas), `DoorMath` (nearest-ball / sweep /
-  split fan), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
+  `ScoreBar`, `ZoneBGenerator` + `ZoneBGenParams` (the seeded arena grammar and its `Validate`
+  contract) over `ZoneBLayouts` (the data model + the fixed funnel/collector), `DoorMath`
+  (nearest-ball / sweep / split fan), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
   gameplay layer; `RichCoast.UI` (`Assets/Game/UI`) the uGUI shell; `RichCoast.App`
   (`Assets/Game/App/GameBootstrap.cs`) the composition root — the ONLY component the scene
   holds. `RichCoast.EditorTools` (`Assets/Editor`) = project setup + scene/asset builder.
@@ -37,12 +40,14 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
 - **Zones never call each other** — they talk only through `GameEvents` (typed C# events,
   same names/meanings as the Phaser bus: `BallDropped`, `ZoneBBusy/Empty`, `ScoreChanged`,
   `ScoreBarFilled/CashedIn/Changed`, `ScoreHarvested`, `BallBufferChanged`,
-  `ProgressionChanged`, `ArenaZoom`, `PhaseChanged`, `ZoneADepleted`, plus `GameOver`).
+  `BufferSlotLaunched`, `ProgressionChanged`, `ArenaZoom`, `PhaseChanged`, `ZoneADepleted`,
+  `GoldenGateHit`, plus `GameOver`).
   `GameEvents.Reset()` runs on every scene load and in test setup.
 - **Tuning is ScriptableObjects**, editable live in play mode (`Assets/Game/Data`, created by
   the scene builder if missing): `TierLadder.asset`, `Progression.asset` (port of
-  `progression.json`), and **`GameFeel.asset`** — THE feel file (physics, blast, squash/stretch,
-  burst, audio, haptics, HUD timings).
+  `progression.json`), **`ZoneBArena.asset`** (the Zone B generator's grammar knobs), and
+  **`GameFeel.asset`** — THE feel file (physics, blast, squash/stretch, burst, audio, haptics,
+  HUD timings).
 - **World & screen:** Core tables are authored in the Phaser 390×844 **design px**;
   `DesignSpace`/`BoardGeometry` convert to world units (board = 10 units wide, funnel apex at
   the origin, y-up). ONE orthographic camera (`CameraRig`) fits board width to screen width
@@ -58,8 +63,9 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
 - **Juice:** `BallView` (child of the body: landing squash along the contact normal, merge-birth
   pop, blast punch, idle wobble), `MergeFx` (rim sparks + flash ring), `Sfx` (procedural
   synthesised clips, combo pitch-climb via `ComboPitch`), `Haptics` (Android
-  `VibrationEffect` via JNI, no-op elsewhere), `ScoreFlyer` (the overlay "+N" bezier fly-up
-  into the HUD total). All driven by PrimeTween + `GameFeel.asset`.
+  `VibrationEffect` via JNI, no-op elsewhere), `ScoreFlyer` (the overlay bezier fly-up: the
+  "+N" harvest token into the HUD total, and one brass dot per refilled buffer slot into the
+  balls-left count). All driven by PrimeTween + `GameFeel.asset`.
 
 ## Tech stack
 
@@ -98,14 +104,22 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 
 ## Status
 
-**Milestones 1, 2 + 3 are implemented and green headlessly** (EditMode 88 tests · PlayMode 11,
-incl. a Zone B drain test, a full depletion → pan → door-tap → Zone B handoff test, and three
-milestone tests: plain level-ups never zoom, the level-20 milestone grows/drains/recolours, a
-milestone cash-in that arrives in phase B defers until the pan lands in A; screenshots of the A
-framing, the B framing and the first milestone in `Logs/game-scene*.png`). M1 ran on a Pixel 7
-(2026-09-11); **M2 and M3 have not yet been built to the device** — the user's hands-on feel
-sign-off (touch, haptics, audio, perf, door timing, milestone shrink/drain pacing) and any
-resulting `GameFeel.asset` tuning are pending.
+**Milestones 1–4 plus the Zone B procedural revamp are implemented and green headlessly**
+(EditMode 95 tests · PlayMode 19, incl. a Zone B drain test, a full depletion → pan → door-tap →
+Zone B handoff test, three milestone tests (plain level-ups never zoom, the level-20 milestone
+grows/drains/recolours, a milestone cash-in that arrives in phase B defers until the pan lands
+in A) and three M4 polish tests (a refill launches one particle per slot and lands each after
+its flight, the round's cash-in fires only after the bar holds full then drains out, the phase
+ribbon reads "TAP THE DOOR" once the pan lands in B), plus five Zone B arena tests (eight seeds
+each drain a ball, a drop down the golden column strikes the gilded gate on all eight, the
+golden path outscores an ordinary drop on the same arena, the arena reshuffles exactly once and
+only with the playfield clear, a reshuffle preserves the score bar and total); screenshots of
+the A framing, the B framing and the first milestone in `Logs/game-scene*.png`). M1 ran on a
+Pixel 7 (2026-09-11); **M2, M3, M4 and the Zone B revamp have not yet been built to the device**
+— the user's hands-on feel sign-off (touch, haptics, audio, perf, door timing, milestone
+shrink/drain pacing, refill particles, cash-in beat, ribbon, the golden fanfare and whether the
+mouth reads as reachable-but-tight) and any resulting `GameFeel.asset` / `ZoneBArena.asset`
+tuning are pending.
 
 The full loop runs from one `GameBootstrap`:
 - **Zone A** — tray, pooled material balls, drag-to-aim, finite buffer, merges with juice, death
@@ -143,25 +157,62 @@ The full loop runs from one `GameBootstrap`:
   edge distance (`DoorTarget` → `Core.DoorMath`, shared with the highlight), raises `ZoneBBusy`
   up front, `Board.Extract`s it, plays suck→pop (PrimeTween) and only then raises `BallDropped`
   with the frozen column (design-px x).
-- **Zone B** (`Gameplay/ZoneB/`) — one of `Core.ZoneBLayouts` (LAYOUT_1/2, a 1:1 port, design
-  px rebased to the band) built in world space below Zone C: capsule-collider pine rails,
-  static/kinematic gate slabs (`ZoneBGate`, painted sign + world-space TMP `X N`), trigger
-  collectors, invisible containment. Small pooled `ZoneBBall`s (10 design px, layer 10; fresh
-  split copies on layer 11 ignore gates for `splitGraceMs`); contacts are reported and resolved
-  once per frame. Owns scoring via `Core.ScoreBar`: live per-level `ScoreBarFilled` wraps, the
-  world-space bar + `+N` haul label, then `ScoreHarvested` → `ZoneBEmpty` → `ScoreBarCashedIn`
-  after the wraps + dwell. Safety: `maxBallsInFlight` cap and a stuck-ball nudge.
+- **Zone B** (`Gameplay/ZoneB/`) — a `Core.ZoneBGenerator` arena built in world space below Zone
+  C and **re-rolled every time the zone drains empty**, so no two drops play the same board.
+  Capsule-collider pine rails, static/kinematic gate slabs (`ZoneBGate`, painted sign +
+  world-space TMP `X N`), trigger collectors, invisible containment. The playfield hangs off an
+  `Arena` child; the backdrop, containment and score bar hang off the root and outlive every
+  reshuffle. `ReleaseArena` rebuilds BEFORE raising `ZoneBEmpty` (so the door re-arms onto the
+  board the player will actually play) and only with `inFlight == 0 && balls.Count == 0` plus a
+  250 ms guard since the last arrival — Zone A's milestone drain raises several `BallDropped` in
+  one tween batch. Pieces stagger in over `arenaPopInMs`. Small pooled `ZoneBBall`s (10 design px,
+  layer 10; fresh split copies on layer 11 ignore gates for `splitGraceMs`); contacts are reported
+  and resolved once per frame. Owns scoring via `Core.ScoreBar`: live per-level `ScoreBarFilled`
+  wraps, the world-space bar + `+N` haul label, then `ScoreHarvested` → `ZoneBEmpty` →
+  `ScoreBarCashedIn` after the wraps + dwell. Safety: `maxBallsInFlight` cap and a stuck-ball nudge.
+- **The golden path (Zone B)** — the generated grammar is three rows: a BARRIER row whose cracks
+  are narrower than a ball (so an ordinary drop always splits), then two spread rows with passable
+  gaps, plus 2–3 guide diagonals, feeding the fixed funnel + collector. Exactly one barrier gap
+  admits a ball: a 32 px golden mouth centred on one of the trap-door's interior sweep columns,
+  flanked by two brass chute rails running down to a single gilded ×6–×8 gate (everything else
+  stays ≤ ×4). The aperture is the narrower of the mouth and the rails' inner faces, and the
+  mouth's jitter is capped at `aperture − ballRadius − clearance`, so a ball dropped down the right
+  column ALWAYS reaches the gilded gate — the difficulty is the tap, not luck. A hit fans 6–8
+  copies over `goldenSplitSpread` on two alternating radii (one arc would interpenetrate), plays
+  `Sfx.Golden`, a heavy haptic and a gilded spark burst, and raises `GoldenGateHit`.
+  `ZoneBGenerator.Validate` is the contract (band bounds, gate overlap, one passable barrier gap
+  and it being the mouth, a clear mouth→gate channel, the mouth on an entry column, funnel region
+  clear) and every guide diagonal must keep a full ball's width from every other rail — a sloped
+  rail passing under a divider makes a wedge no ball can escape. 500 seeds are swept in EditMode.
 - **Phase pan** — `PhaseDirector` runs `Core.PhaseMachine` (A ⇄ B with the queued-refill
   bounce) and tweens `CameraRig.Pan` 0→1: A pins the top edge above the tray + HUD, B pins Zone
   B's bottom (score bar) to the screen bottom, both safe-area inset; on the 390×844 design
   screen the two differ by exactly `DesignSpace.PanDistance` (394 px).
+- **UI polish (M4)** — three beats, all knobs under `GameFeel.asset`'s "HUD" / "Score bar" /
+  "Phase pan" headers. *Buffer particles:* `ZoneASystem` launches refill slots on the tick
+  cadence (`BufferSlotLaunched(index)`) and LANDS each one `bufferFlightMs` later (count +1,
+  blip, unlock — `cashInPending` clears with the last landing; a refill re-triggered mid-flight
+  settles the in-flight slots at once). `HudView` answers each launch with `ScoreFlyer.LaunchDot`
+  from a random point along the safe-area bottom to the balls-left count over the same time, so
+  the dot arrives as the count pops by shared timing — Zone A never waits on a visual.
+  *Cash-in drain-out:* Zone B's bar never snaps from full any more (`BarMode`): a roll-through
+  still snaps between wraps, a mid-round last wrap drains down over `wrapDrainMs`, and the
+  round's final wrap (arena drained) holds full through `settleDwellMs` then drains over
+  `barDrainMs` (ease-in) — `ScoreBarCashedIn` fires only once the bar is empty, the hold
+  replacing `UpdateResolve`'s dwell. The HUD chrome flashes brass + a light haptic when the
+  harvest lands; the milestone fill pops per level. *Phase cues:* a themed brass ribbon under the
+  HUD bar ("DROP" / "TAP THE DOOR") lifts out on `AToB`/`BToA` and drops in on `A`/`B`
+  (`ribbonMs`); the aim ghost + guide fade over `aimFadeMs` instead of toggling; each pan start
+  plays `Sfx.Pan(up)` (triangle glide, down into B / up back to A) + `panHaptic`.
 - Physics layers: Zone A balls 8, walls 9 (shared), Zone B balls 10, grace 11, gates 12 —
-  ignores set in `GameBootstrap.ConfigurePhysicsLayers`. Sfx gained transition / multiply
-  (combo-pitched) / collect cues.
+  ignores set in `GameBootstrap.ConfigurePhysicsLayers`. Sfx cues: drop, merge (combo-pitched),
+  buffer tick (climbing), goal, transition (door suck), multiply (combo-pitched), collect, pan
+  down/up, game over.
 
-Next: **on-device M2 + M3 feel session** (`Tools/build-android.sh`; judge the milestone
-shrink beat and drain pacing) · **M4** UI polish (buffer particles, cash-in sequence, phase
-transitions) · **M5** analytics, perf, store prep.
+Next: **on-device M2 + M3 + M4 + Zone B revamp feel session** (`Tools/build-android.sh`; judge
+the milestone shrink beat, drain pacing, refill particle cadence, cash-in hold/drain, ribbon
+timing, the golden fanfare/haptic, whether the golden mouth reads as reachable-but-tight, and the
+reshuffle pop-in length) · **M5** analytics, perf, store prep.
 
 > **Keep this section current.** As phases finish, **rewrite** it to describe the project's
 > state *now* — a single snapshot, not a changelog.

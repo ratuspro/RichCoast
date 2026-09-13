@@ -91,6 +91,8 @@ namespace RichCoast.Core
         public static event Action<ScoreHarvestedEvent> ScoreHarvested;
         /// <summary>Zone A → HUD: balls left to drop changed.</summary>
         public static event Action<int> BallBufferChanged;
+        /// <summary>Zone A → HUD: one refill slot launched (its index in the batch); it lands after the buffer flight time.</summary>
+        public static event Action<int> BufferSlotLaunched;
         /// <summary>Zone A → all: internal level advanced.</summary>
         public static event Action<ProgressionChangedEvent> ProgressionChanged;
         /// <summary>Zone A → Zone C: milestone arena zoom-out animating (true) / landed (false).</summary>
@@ -101,6 +103,8 @@ namespace RichCoast.Core
         public static event Action ZoneADepleted;
         /// <summary>Zone A → all: the run ended (final score). Replaces the Phaser build's in-zone overlay wiring.</summary>
         public static event Action<double> GameOver;
+        /// <summary>Zone B → all: a ball threaded the golden mouth and struck the gilded gate (its multiplier).</summary>
+        public static event Action<int> GoldenGateHit;
         /// <summary>ThemeDirector → all: the active palette changed (fired per cross-fade tick); baked surfaces restyle.</summary>
         public static event Action ThemeChanged;
 
@@ -113,11 +117,13 @@ namespace RichCoast.Core
         public static void RaiseScoreBarChanged(double filled, double target) => ScoreBarChanged?.Invoke(filled, target);
         public static void RaiseScoreHarvested(ScoreHarvestedEvent e) => ScoreHarvested?.Invoke(e);
         public static void RaiseBallBufferChanged(int count) => BallBufferChanged?.Invoke(count);
+        public static void RaiseBufferSlotLaunched(int index) => BufferSlotLaunched?.Invoke(index);
         public static void RaiseProgressionChanged(ProgressionChangedEvent e) => ProgressionChanged?.Invoke(e);
         public static void RaiseArenaZoom(bool active) => ArenaZoom?.Invoke(active);
         public static void RaisePhaseChanged(GamePhase phase) => PhaseChanged?.Invoke(phase);
         public static void RaiseZoneADepleted() => ZoneADepleted?.Invoke();
         public static void RaiseGameOver(double finalScore) => GameOver?.Invoke(finalScore);
+        public static void RaiseGoldenGateHit(int multiplier) => GoldenGateHit?.Invoke(multiplier);
         public static void RaiseThemeChanged() => ThemeChanged?.Invoke();
 
         /// <summary>Drop every subscriber — call on scene reload and between tests so handlers never leak.</summary>
@@ -132,11 +138,13 @@ namespace RichCoast.Core
             ScoreBarChanged = null;
             ScoreHarvested = null;
             BallBufferChanged = null;
+            BufferSlotLaunched = null;
             ProgressionChanged = null;
             ArenaZoom = null;
             PhaseChanged = null;
             ZoneADepleted = null;
             GameOver = null;
+            GoldenGateHit = null;
             ThemeChanged = null;
         }
     }

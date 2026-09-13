@@ -6,6 +6,8 @@ namespace RichCoast.Game
     public sealed class ZoneBGate : MonoBehaviour
     {
         public int Multiplier;
+        /// <summary>The gilded gate at the foot of the golden chute: a wider burst, a fanfare, its own event.</summary>
+        public bool IsGolden;
     }
 
     /// <summary>Marks a collector's trigger; a ball entering drains for value × <see cref="ScoreMultiplier"/>.</summary>
@@ -60,7 +62,7 @@ namespace RichCoast.Game
         {
             if (system == null) return;
             var gate = collision.collider.GetComponent<ZoneBGate>();
-            if (gate != null) system.ReportSplit(this, gate.Multiplier);
+            if (gate != null) system.ReportSplit(this, gate.Multiplier, gate.IsGolden);
         }
 
         void OnTriggerEnter2D(Collider2D other)

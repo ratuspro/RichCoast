@@ -87,10 +87,17 @@ namespace RichCoast.Tests.PlayMode
             Capture(cam, rig, "game-scene.png");
 
             // B framing: pan the camera to Zone B with a few balls mid-cascade and a live score bar.
+            // A FIXED arena seed keeps this shot comparable between runs — the playfield is generated
+            // fresh per drop — and the middle ball goes down the golden column, so the gilded chute and
+            // its burst are in frame.
             rig.Pan = 1f;
-            for (int i = 0; i < 3; i++)
+            boot.ZoneB.DebugRebuild(104);
+            yield return null;
+            yield return null;
+            double[] columns = { 60, boot.ZoneB.GoldenMouthX, 320 };
+            for (int i = 0; i < columns.Length; i++)
             {
-                GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(2 + i), 60 + 130 * i));
+                GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(2 + i), columns[i]));
                 yield return new WaitForSeconds(0.4f);
             }
             yield return new WaitForSeconds(0.6f);

@@ -21,6 +21,7 @@ namespace RichCoast.App
         public TierLadderSO tierLadder;
         public ProgressionSO progression;
         public GameFeelSO feel;
+        public ZoneBArenaSO zoneBArena;
 
         public Board Board { get; private set; }
         public ZoneASystem ZoneA { get; private set; }
@@ -76,8 +77,10 @@ namespace RichCoast.App
             Sfx.Create(feel);
 
             ZoneA = new ZoneASystem(Board, aim, deathLine, queue, curve, ladder, feel, mergeFx, factory, highlight, growth, Geometry, world);
-            // One of the two layouts per run — every restart reloads the scene, so this re-rolls.
-            ZoneB = new ZoneBSystem(transform, Geometry, feel, Cam, ZoneBLayouts.Pick(Random.value), curve.ScoreBarTargetForLevel(1));
+            // The arena is generated per drop, not per run. It is handed the trap-door's columns so the
+            // golden mouth always lands on one a player can actually hit.
+            ZoneB = new ZoneBSystem(transform, Geometry, feel, Cam, zoneBArena != null ? zoneBArena.ToParams() : new ZoneBGenParams(),
+                DoorColumns(), Random.Range(int.MinValue, int.MaxValue), curve.ScoreBarTargetForLevel(1));
             ZoneC = new ZoneCSystem(transform, Board, Geometry, feel);
             Phases = new PhaseDirector(rig, feel);
             Themes = new ThemeDirector(curve, feel);
@@ -90,6 +93,18 @@ namespace RichCoast.App
             // Announce initial state LAST, after every system has subscribed.
             ZoneA.Start();
             Phases.Start();
+        }
+
+        /// <summary>
+        /// The columns the trap-door can drop a ball down — its nine sweep positions. Zone B centres the
+        /// golden mouth on one of them, so hitting the mouth is a timing skill rather than luck.
+        /// </summary>
+        static double[] DoorColumns()
+        {
+            var xs = new double[DesignSpace.SweepPositions];
+            for (int i = 0; i < xs.Length; i++)
+                xs[i] = DoorMath.SweepPositionX(i, DesignSpace.SweepPositions, DesignSpace.SweepMargin, DesignSpace.Width - DesignSpace.SweepMargin);
+            return xs;
         }
 
         /// <summary>

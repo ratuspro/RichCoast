@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using PrimeTween;
 using RichCoast.Core;
 using UnityEngine;
@@ -61,9 +62,11 @@ namespace RichCoast.Game
         // Depletion settle gate.
         bool gateArmed;
         float gateSettledMs, gateElapsedMs;
-        // Ticked buffer refill.
-        int ticksRemaining, tickIndex;
-        float tickTimerMs, tickIntervalMs;
+        // Ticked buffer refill: slots LAUNCH on a cadence (each one a particle the HUD flies up) and
+        // LAND a fixed flight later — the count pops when the particle arrives, by shared timing.
+        int launchesRemaining, launchIndex, landIndex;
+        float launchTimerMs, launchIntervalMs;
+        readonly List<float> inFlightMs = new List<float>();
         // Stalemate grace.
         float stalemateMs = -1f;
 
@@ -316,38 +319,71 @@ namespace RichCoast.Game
             if (stage.BufferBalls != null && stage.FromLevel == level) queue.Seed(stage.BufferBalls);
         }
 
-        /// <summary>Refill one slot at a time so the HUD count visibly ticks up (the reward beat). Never confiscates.</summary>
+        /// <summary>
+        /// Refill one slot at a time so the HUD count visibly ticks up (the reward beat). Each slot is
+        /// LAUNCHED on a cadence (<c>BufferSlotLaunched</c> — the HUD flies a brass particle for it) and
+        /// LANDS <c>bufferFlightMs</c> later: count up, blip, unlock. Zone A never waits on the visual;
+        /// the two coincide by sharing the feel file's flight time. Never confiscates. A refill
+        /// re-triggered mid-flight (overflow cascade) lands the in-flight slots at once — one emit, no
+        /// blip spam — so the arithmetic below starts from an honest count.
+        /// </summary>
         void AnimateBufferTo(int newCapacity)
         {
+            SettleInFlight();
+            launchesRemaining = 0;
             if (newCapacity <= ballBuffer)
             {
                 MaybeUnlockDrop();
-                ticksRemaining = 0;
                 cashInPending = false;
                 return;
             }
-            ticksRemaining = newCapacity - ballBuffer;
-            tickIndex = 0;
-            tickIntervalMs = ticksRemaining <= BufferTickFullCount
+            launchesRemaining = newCapacity - ballBuffer;
+            launchIndex = 0;
+            landIndex = 0;
+            launchIntervalMs = launchesRemaining <= BufferTickFullCount
                 ? feel.bufferTickMs
-                : Mathf.Max(feel.bufferTickMinMs, Mathf.Round(feel.bufferTickMs * BufferTickFullCount / ticksRemaining));
-            tickTimerMs = 0f;
+                : Mathf.Max(feel.bufferTickMinMs, Mathf.Round(feel.bufferTickMs * BufferTickFullCount / launchesRemaining));
+            launchTimerMs = 0f;
         }
 
         void AdvanceRefill(float deltaMs)
         {
-            if (ticksRemaining <= 0) return;
-            tickTimerMs += deltaMs;
-            while (ticksRemaining > 0 && tickTimerMs >= tickIntervalMs)
+            // Land first, then launch: a slot launched this frame waits its whole flight.
+            for (int i = 0; i < inFlightMs.Count; i++) inFlightMs[i] -= deltaMs;
+            while (inFlightMs.Count > 0 && inFlightMs[0] <= 0f)
             {
-                tickTimerMs -= tickIntervalMs;
-                ballBuffer += 1;
-                ticksRemaining -= 1;
-                EmitBuffer();
-                Sfx.Instance?.BufferTick(tickIndex++);
-                MaybeUnlockDrop();
-                if (ticksRemaining == 0) cashInPending = false;
+                inFlightMs.RemoveAt(0);
+                LandSlot();
             }
+            if (launchesRemaining <= 0) return;
+            launchTimerMs += deltaMs;
+            while (launchesRemaining > 0 && launchTimerMs >= launchIntervalMs)
+            {
+                launchTimerMs -= launchIntervalMs;
+                launchesRemaining -= 1;
+                inFlightMs.Add(feel.bufferFlightMs);
+                GameEvents.RaiseBufferSlotLaunched(launchIndex++);
+            }
+        }
+
+        /// <summary>One refilled slot arrives: count up, blip, unlock. Clears cashInPending only once the LAST slot of the batch has landed.</summary>
+        void LandSlot()
+        {
+            ballBuffer += 1;
+            EmitBuffer();
+            Sfx.Instance?.BufferTick(landIndex++);
+            MaybeUnlockDrop();
+            if (launchesRemaining == 0 && inFlightMs.Count == 0) cashInPending = false;
+        }
+
+        /// <summary>Land every in-flight slot immediately (one emit, no per-slot blip) — a new refill is starting on top.</summary>
+        void SettleInFlight()
+        {
+            if (inFlightMs.Count == 0) return;
+            ballBuffer += inFlightMs.Count;
+            inFlightMs.Clear();
+            EmitBuffer();
+            MaybeUnlockDrop();
         }
 
         void MaybeUnlockDrop()

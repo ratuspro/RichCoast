@@ -1,4 +1,5 @@
 using System;
+using PrimeTween;
 using RichCoast.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -149,11 +150,42 @@ namespace RichCoast.Game
             QueueChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Fade the ghost + guide in or out over <c>aimFadeMs</c> instead of switching them off — a phase
+        /// pan or milestone freeze reads as the aim receding, not vanishing. The renderers only disable
+        /// once a fade-out lands; the freeze itself (input) is immediate regardless.
+        /// </summary>
         void SetVisible(bool on)
         {
-            ghostSprite.enabled = on;
-            guide.enabled = on;
+            visibleTarget = on;
+            float seconds = feel.aimFadeMs / 1000f;
+            ghostFade.Stop();
+            guideFade.Stop();
+            if (on)
+            {
+                ghostSprite.enabled = true;
+                guide.enabled = true;
+            }
+            float ghostAlpha = on ? 1f : 0f;
+            float guideAlpha = on ? GuideAlpha : 0f;
+            ghostFade = Tween.Alpha(ghostSprite, ghostAlpha, seconds);
+            var c = guide.startColor;
+            guideFade = Tween.Custom(this, c.a, guideAlpha, seconds, (self, a) =>
+            {
+                var g = self.guide.startColor;
+                g.a = a;
+                self.guide.startColor = self.guide.endColor = g;
+            }).OnComplete(this, self =>
+            {
+                if (self.visibleTarget) return;
+                self.ghostSprite.enabled = false;
+                self.guide.enabled = false;
+            });
         }
+
+        const float GuideAlpha = 0.55f;
+        bool visibleTarget = true;
+        Tween ghostFade, guideFade;
 
         static Texture2D dash;
 

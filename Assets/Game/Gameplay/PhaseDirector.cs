@@ -49,6 +49,9 @@ namespace RichCoast.Game
             tween.Stop();
             float from = rig.Pan;
             float seconds = feel.panMs / 1000f;
+            // The pan's own cue: a soft glide (down into Zone B, up back to Zone A) and a light tap.
+            Sfx.Instance?.Pan(up: target < from);
+            Haptics.Pulse(feel.panHapticMs, feel.panHapticAmp);
             tween = Tween.Custom(rig, from, target, seconds, (r, v) => r.Pan = v, Ease.InOutSine)
                 .OnComplete(this, self =>
                 {

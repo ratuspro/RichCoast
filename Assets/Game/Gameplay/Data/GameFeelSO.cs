@@ -102,6 +102,14 @@ namespace RichCoast.Game
         public int maxBallsInFlight = 48;
         [Tooltip("A Zone B ball resting this long without draining gets a small random nudge (ms). Keeps the door from locking forever.")]
         public float stuckNudgeMs = 2500f;
+        [Tooltip("Gilded gate: total angular spread of its copies (radians). Wider than an ordinary split — it throws 6-8 at once.")]
+        public float goldenSplitSpread = 2.2f;
+        [Tooltip("Gilded gate: spawn radius of the copies, in ball radii. Odd-indexed copies go one radius further out so they don't interpenetrate.")]
+        public float goldenSplitOffsetMult = 4.5f;
+        [Tooltip("Gilded gate: multiplies the split kick, so the jackpot bursts rather than dribbles.")]
+        public float goldenSplitKickMult = 1.25f;
+        [Tooltip("A reshuffled arena staggers its pieces in over this long (ms). 0 = snap in.")]
+        public float arenaPopInMs = 180f;
 
         [Header("Zone C trap-door")]
         [Tooltip("One edge→edge leg of the marker sweep (ms). The difficulty knob for column timing.")]
@@ -114,6 +122,9 @@ namespace RichCoast.Game
         [Header("Phase pan")]
         [Tooltip("Camera pan between the A and B framings (ms). Snappier than a reward beat — it's a scene change.")]
         public float panMs = 650f;
+        [Tooltip("Light haptic on each pan start (ms / amplitude 1-255).")]
+        public int panHapticMs = 10;
+        public int panHapticAmp = 70;
 
         [Header("Milestone")]
         [Tooltip("Arena zoom-out (and the palette cross-fade that rides it) at a draw-window milestone (ms).")]
@@ -128,6 +139,10 @@ namespace RichCoast.Game
         public float wrapFillMs = 150f;
         [Tooltip("Beat the settled final bar holds after the last ball drains, before the pan up (ms).")]
         public float settleDwellMs = 350f;
+        [Tooltip("The round's final wrap holds full through the settle dwell, then drains the bar to empty in this long (ms).")]
+        public float barDrainMs = 280f;
+        [Tooltip("A mid-round wrap drains the bar back down in this long before the live fill takes over again (ms).")]
+        public float wrapDrainMs = 120f;
 
         [Header("HUD")]
         [Tooltip("Buffer refill: one slot every this many ms (≤10 slots); larger refills tighten the gap.")]
@@ -136,5 +151,17 @@ namespace RichCoast.Game
         [Tooltip("Score fly-up: flight time from the harvest point to the HUD total (ms).")]
         public float scoreFlyMs = 620f;
         public float scoreCountUpMs = 420f;
+        [Tooltip("Buffer refill: each launched slot's particle flies from the screen bottom to the count in this long (ms); the slot lands on arrival.")]
+        public float bufferFlightMs = 500f;
+        [Tooltip("Buffer refill: sideways jitter on each particle's flight path (design px).")]
+        public float bufferBowJitter = 60f;
+        [Tooltip("Harvest landing: the HUD bar flashes brass for this long (ms), with a light haptic.")]
+        public float harvestFlashMs = 260f;
+        public int harvestHapticMs = 14;
+        public int harvestHapticAmp = 110;
+        [Tooltip("Phase ribbon: slide-out / slide-in time around a pan (ms).")]
+        public float ribbonMs = 220f;
+        [Tooltip("Aim ghost + guide fade in/out on a phase or milestone freeze (ms).")]
+        public float aimFadeMs = 150f;
     }
 }

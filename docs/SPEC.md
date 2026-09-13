@@ -93,7 +93,9 @@ The lower portion of the screen. Once a ball falls through the trap-door it ente
 arena with no player control. Gates split the ball into multiple copies of the same value;
 walls guide trajectories; a collector captures balls and cashes them out as score.
 
-- **Player input:** none — fully automatic once the ball enters.
+- **Player input:** none once the ball enters — but WHERE it enters is everything. The arena's
+  barrier row is solid except for one narrow golden mouth, and the mouth sits on one of the
+  trap-door's nine columns. Timing the tap onto that column is the only skill Zone B rewards.
 - **Gate mechanic:** a ball hitting a ×N gate is replaced by N balls of the same value.
   Example: a ball of value 8 hitting a ×2 gate becomes 2 balls of value 8.
 - **Cascading splits:** split balls can hit further gates and split again. A single ball can
@@ -114,11 +116,39 @@ walls guide trajectories; a collector captures balls and cashes them out as scor
 
 ### Layout
 
-The playfield is one of two hand-built "shelf cascade" layouts (`LAYOUT_1`, `LAYOUT_2`),
-picked at random each run (including every restart). Both are stacked horizontal gate rows
-split by vertical/diagonal guide rails, funnelling down into a single bottom collector via
-two funnel-ramp walls. Gate multipliers are tuned (≤4) so cascades stay balanced; higher
-multipliers are painted as green signs, lower as brass, each with a stencilled `×N` label.
+The playfield is **generated from a seed** and **re-rolled every time Zone B drains empty**, so
+no two drops play the same board. The grammar is a three-row shelf cascade funnelling into the
+one fixed bottom collector via two fixed funnel-ramp walls:
+
+- **Row 1 — the barrier** (y ≈ 160–185). Three to five gates separated by cracks 10–16 px wide:
+  narrower than a 20 px ball, so an ordinary drop ALWAYS hits a gate and splits. A short vertical
+  divider drops from each crack so nothing can perch in it.
+- **Rows 2 and 3 — the spread** (y ≈ 330–365 and 485–515). Gates separated by real 44–64 px gaps
+  a ball falls through.
+- **Guide diagonals.** Two or three sloped rails in the bands between rows, deflecting the
+  cascade. These are the only sloped surfaces in an arena, so they are the only ones that can
+  form a wedge; each must keep a full ball's width of clear air from every other rail.
+
+Ordinary gate multipliers stay ≤4 so cascades stay balanced. Higher multipliers are painted as
+green signs, lower as brass, each with a stencilled `×N` label.
+
+### The golden path
+
+Exactly one gap in the barrier row is wide enough to admit a ball: a **32 px golden mouth**,
+centred on one of the trap-door's nine sweep columns (never the outermost two — a chute there
+would run into a side wall). Two brass rails flank it and form a **chute** down to a single
+**gilded ×6–×8 gate**, the one gate in the game that pays more than ×4.
+
+- **Threading the mouth is a timing skill, and it pays off deterministically.** A ball dropped
+  down the right column always clears the mouth and the rails, and always reaches the gilded
+  gate. The aperture is sized from the ball diameter plus a clearance margin, so the mouth's
+  small per-arena jitter can never pinch a well-aimed drop.
+- **Missing costs nothing extra.** The ball lands on an ordinary barrier gate and the usual
+  ×2–×4 cascade plays out, exactly as before.
+- **The payoff is loud:** a fanfare unlike any other cue, a heavy haptic, a gilded spark burst,
+  and six to eight copies fanned wide enough not to interpenetrate.
+- **It is telegraphed, not hidden.** The brass chute and the gilded gate sit in the top third of
+  Zone B, which is on screen during phase A, so the player sees where to aim before the pan.
 
 ### Gate types
 
@@ -206,8 +236,12 @@ by relevance (goal loudest, collect quietest). Muted with **M**.
   yet implemented.
 - Whether a direct superlinear merge bonus is warranted (see Merge Incentive below) — the
   draw-window shift is the current, indirect answer.
-- Whether more than the current two Zone B layouts are worth authoring, and whether layout
-  selection should ever be anything other than uniform-random per run.
+- Whether the golden mouth should ever be worth more than one gilded gate — a second chute, or
+  a gilded collector — once the ×6–×8 beat has been judged on device.
+- Whether the entry position should become continuous (drag-to-aim along the door) rather than
+  the nine-column sweep. Zone B does not depend on the discrete columns: the generator takes an
+  optional list of candidate entry positions and snaps the mouth to one, and takes none at all
+  for a continuous aim.
 
 ---
 
