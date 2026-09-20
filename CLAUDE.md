@@ -11,10 +11,14 @@ kept only as reference (its two-camera pixel-locked rig is deliberately NOT carr
   balls merge into the next tier (value ×3, `3^(tier-1)`), with a neighbour-shoving blast.
   A ball resting above the death line ends the run.
 - **Zone C (boundary)** — a manually-tapped trap-door that sucks the nearest Zone A ball into B.
-- **Zone B (bottom)** — no-control physics arena, PROCEDURALLY GENERATED and reshuffled after
-  every drop; gates split a ball into copies; drained value fills a score bar. Filling it levels
-  up and refills Zone A's finite ball buffer. Its barrier row is solid but for one narrow golden
-  mouth on a door column: thread it and a brass chute drops the ball onto a gilded ×6–×8 gate.
+- **Zone B (bottom)** — no-control physics arena, PROCEDURALLY GENERATED on a TWO-SPEED cadence:
+  its silhouette holds for a whole 20-level milestone window, and only the golden mouth's column
+  and the gate multipliers change, once per level. Gates split a ball into copies; drained value
+  fills a score bar. Filling it levels up and refills Zone A's finite ball buffer. Its barrier row
+  is solid but for one narrow golden mouth on a door column: thread it and a brass chute drops the
+  ball onto a gilded ×6–×8 gate.
+- **TILT** — three cabinet shakes per run, never refilled. Re-deals a board whose orphans can no
+  longer find partners, and can loft a ball over the death line while doing it.
 - Two phases (A: drop; B: trap-door) joined by a camera pan. Endless; merging scores nothing —
   value is realised only when balls exit B.
 
@@ -29,11 +33,12 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   neutral-growth/milestone-zoom math), `BallMath`, `Materials` (the 20-material ladder),
   `ProgressionCurve` (anchor-interpolated targets, buffer oscillation, tail growth, window
   stepping), `ComboPitch`, `NumberFormat.Compact`, `BallQueue`, `PhaseMachine` (A ⇄ B flow),
-  `ScoreBar`, `ZoneBGenerator` + `ZoneBGenParams` (the seeded arena grammar and its `Validate`
+  `ScoreBar`, `ZoneBGenerator` + `ZoneBGenParams` (the two-seed arena grammar and its `Validate`
   contract) over `ZoneBLayouts` (the data model + the fixed funnel/collector), `DoorMath`
-  (nearest-ball / sweep / split fan), the save model + its contract (`SaveModel`/`SaveNum`,
-  `SaveSchema.ValidateRun`), the analytics primitives (`AnalyticsEvent`, `IAnalyticsSink`,
-  `RunTelemetry`, `PrivacyPolicy`), and the typed static **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
+  (nearest-ball / sweep / split fan), `TiltMath` (the cabinet-shake pulse train), the save model
+  + its contract (`SaveModel`/`SaveNum`, `SaveSchema.ValidateRun`), the analytics primitives
+  (`AnalyticsEvent`, `IAnalyticsSink`, `RunTelemetry`, `PrivacyPolicy`), and the typed static
+  **`GameEvents`** seam. `RichCoast.Game` (`Assets/Game/Gameplay`) is the MonoBehaviour/plain-C#
   gameplay layer (incl. `GameSession`, one live run, and `SaveStore`, the file I/O);
   `RichCoast.UI` (`Assets/Game/UI`) the uGUI shell; `RichCoast.App`
   (`Assets/Game/App/GameBootstrap.cs`) the composition root — the ONLY component the scene
@@ -44,13 +49,13 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   same names/meanings as the Phaser bus: `BallDropped`, `ZoneBBusy/Empty`, `ScoreChanged`,
   `ScoreBarFilled/CashedIn/Changed`, `ScoreHarvested`, `BallBufferChanged`,
   `BufferSlotLaunched`, `ProgressionChanged`, `ArenaZoom`, `PhaseChanged`, `ZoneADepleted`,
-  `GoldenGateHit`, `DoorTapped`, plus `GameOver`).
+  `GoldenGateHit`, `DoorTapped`, `TiltUsed`, plus `GameOver`).
   `GameEvents.Reset()` runs on every scene load and in test setup.
 - **Tuning is ScriptableObjects**, editable live in play mode (`Assets/Game/Data`, created by
   the scene builder if missing): `TierLadder.asset`, `Progression.asset` (port of
   `progression.json`), **`ZoneBArena.asset`** (the Zone B generator's grammar knobs), and
-  **`GameFeel.asset`** — THE feel file (physics, blast, squash/stretch, burst, audio, haptics,
-  HUD timings).
+  **`GameFeel.asset`** — THE feel file (physics, blast, squash/stretch, burst, tilt, audio,
+  haptics, HUD timings).
 - **World & screen:** Core tables are authored in the Phaser 390×844 **design px**;
   `DesignSpace`/`BoardGeometry` convert to world units (board = 10 units wide, funnel apex at
   the origin, y-up). ONE orthographic camera (`CameraRig`) fits board width to screen width
@@ -68,7 +73,8 @@ event seam and zone ownership). Read the relevant section on demand, not wholesa
   synthesised clips, combo pitch-climb via `ComboPitch`), `Haptics` (Android
   `VibrationEffect` via JNI, no-op elsewhere), `ScoreFlyer` (the overlay bezier fly-up: the
   "+N" harvest token into the HUD total, and one brass dot per refilled buffer slot into the
-  balls-left count). All driven by PrimeTween + `GameFeel.asset`.
+  balls-left count), `CameraRig.Shake` (a transient offset added on top of the pan, never a rival
+  writer). All driven by PrimeTween + `GameFeel.asset`.
 
 ## Tech stack
 
@@ -108,13 +114,16 @@ Feel verification tiers: EditMode tests (math) → PlayMode + screenshot (behavi
 ## Status
 
 **Milestones 1–4, the Zone B procedural revamp, and M5's persistence + settings layer are
-implemented, green headlessly, and SIGNED OFF ON DEVICE; M5's analytics layer is implemented and
-green headlessly but NOT yet device-verified** (EditMode 146 · PlayMode 57; run BOTH —
-`Tools/run-tests.sh` defaults to EditMode alone, PlayMode needs `--platform PlayMode`).
+implemented, green headlessly, and SIGNED OFF ON DEVICE; M5's analytics layer, Zone B's two-speed
+cadence and the TILT are implemented and green headlessly but NOT yet device-verified**
+(EditMode 163 · PlayMode 67; run BOTH — `Tools/run-tests.sh` defaults to EditMode alone, PlayMode
+needs `--platform PlayMode`).
 Screenshots of the A framing, the B framing, the first milestone, the privacy gate and both title
-states in `Logs/game-scene*.png`. The Pixel 7 session (2026-09-13) confirmed the feel across M2–M4 and the
+states in `Logs/game-scene*.png`. The Pixel 7 session (2026-09-13) confirmed the feel across M2–M4
+and the
 Zone B revamp, and verified the save layer end to end: checkpoint written on settle, a run
-surviving two full reinstalls, correct restore, Zone B reshuffling on resume, clean logs.
+surviving two full reinstalls, correct restore, clean logs (that session predates the two-speed
+cadence, so it saw Zone B reshuffle on resume where it now restores the same arena).
 `GameFeel.asset` and `ZoneBArena.asset` needed **no** tuning. Android Back works and raises the
 quit confirm.
 
@@ -146,8 +155,16 @@ The app runs three states from one `GameBootstrap` — **Title → Run → GameO
   (phase A, board settled, Zone B empty, no zoom/cash-in/launches in flight) and writes it through
   immediately, so resuming never depends on the OS delivering a pause. Only the DURABLE state is
   stored — level, ONE lifetime total (Zone B owns it; Zone A merely mirrors it), buffer,
-  arena scale, queue, bar, and the board as `(tier, x, y)` design px. No velocities, no phase, no
-  arena seed. Cost accepted: a kill mid-cascade loses that turn. `GameSession.Begin`'s order is
+  arena scale, queue, bar, the board as `(tier, x, y)` design px, **Zone B's two arena seeds** and
+  **tilts left**. No velocities, no phase. The arena IS stored now: it outlives the drop that built
+  it,
+  so handing the player a different board on resume would throw away the familiarity the two-speed
+  cadence exists to build. Both are additive ints needing no schema bump — JsonUtility leaves a
+  missing
+  field at its initialiser, so `0/0` seeds mean "roll fresh" and `tiltsLeft = -1` means "grant the
+  full
+  allowance" rather than "all three already spent". Cost accepted: a kill mid-cascade loses that
+  turn. `GameSession.Begin`'s order is
   load-bearing and both mistakes are silent, so each has a test: `SetArenaScale` MUST precede
   `Board.Restore` (`RadiusForTier` divides by it) and `Themes.SnapTo` MUST follow `ZoneA.Start`
   (which is what sets the director's target).
@@ -163,6 +180,35 @@ The gameplay loop itself:
   beat until the pan lands back in A; a roll-through burst composes its zoom factors by product
   into that deferred slot. A brass `DropHighlight` breathes under the ball the door would grab
   while the buffer is spent.
+- **TILT (Zone A)** — the answer to an ORPHAN LOCK: a board holding a few same-window balls with no
+  merge partners left, each worth ~1/62 of the level's bar, which drains the buffer and ends the
+  run.
+  (The door was never the culprit — `DoorMath.NearestDoorBall` subtracts the radius, so a tier-10
+  ball
+  already has an 82 px head start and the door takes the biggest ball almost unconditionally.) Three
+  charges per run, NEVER refilled; a `tiltCooldownMs` lockout only stops a double-tap spending two.
+  A press runs a lurch train from `Core.TiltMath` through `Board.ApplyTiltPulse`, plus
+  `CameraRig.Shake`, a wooden `Sfx.Tilt` rattle and a heavy haptic. Two properties are load-bearing
+  and both were regressions first: the train is **mean-corrected to sum to zero** (a decaying
+  alternation nets a shove and walks the whole board sideways, further with every tilt), and the
+  kick
+  **varies with position** — modelled as the cabinet ROCKING about the funnel apex, tangential
+  velocity (−ω·y, ω·x), because a uniform delta is a rigid translation that slides the pile and
+  leaves
+  every ball with the same neighbours. A uniform upward lift rides on top, sized (`tiltKickY` 7, hop
+  = v²/49 ≈ 1.0 unit) to clear one small-ball diameter: on a packed board every ball sits in a
+  pocket
+  its neighbours make, so that is the floor for a shake to do anything at all. **The danger is
+  emergent, not scripted** — nothing special-cases the death line; `ScanOverflow` still needs a full
+  second of rest above it, so a tilt on a half-empty board is free and one on a crowded board is a
+  gamble. Gated exactly like `ZoneCSystem.IsArmed` (phase A, no zoom, no modal, not over, board not
+  empty) and hidden with the phase ribbon, because in the B framing it would sit on Zone B's score
+  bar.
+  What it guarantees is a RE-DEALT contact graph, not a merge: three shakes usually resolve a
+  crowded
+  pile, but three balls in the funnel V with the small one at the bottom is a stable equilibrium
+  that
+  re-forms after any shake, and the tests assert the graph rather than the luck.
 - **Milestones (M3)** — every 20 levels the draw window shifts (`Core.ProgressionCurve`) and
   `ZoneASystem` runs master's cash-in sequence: `TierLadder.MilestoneZoomFactor` (neutral
   growth × stage tightness; flat ×1.2 tail) → `ArenaGrowth.Grow`. Master grew the walls and
@@ -193,14 +239,21 @@ The gameplay loop itself:
   up front, `Board.Extract`s it, plays suck→pop (PrimeTween) and only then raises `BallDropped`
   with the frozen column (design-px x).
 - **Zone B** (`Gameplay/ZoneB/`) — a `Core.ZoneBGenerator` arena built in world space below Zone
-  C and **re-rolled every time the zone drains empty**, so no two drops play the same board.
+  C on a **two-speed cadence**: nothing changes per drop, so the board a player is learning is the
+  board they keep.
   Capsule-collider pine rails, static/kinematic gate slabs (`ZoneBGate`, painted sign +
   world-space TMP `X N`), trigger collectors, invisible containment. The playfield hangs off an
   `Arena` child; the backdrop, containment and score bar hang off the root and outlive every
-  reshuffle. `ReleaseArena` rebuilds BEFORE raising `ZoneBEmpty` (so the door re-arms onto the
-  board the player will actually play) and only with `inFlight == 0 && balls.Count == 0` plus a
-  250 ms guard since the last arrival — Zone A's milestone drain raises several `BallDropped` in
-  one tween batch. Pieces stagger in over `arenaPopInMs`. Small pooled `ZoneBBall`s (10 design px,
+  reshuffle. `ReleaseArena` is the ONE place the arena may change, and only when a beat has asked:
+  `ProgressionChanged` sets `pendingDressing`, `ArenaZoom(true)` sets `pendingStructure` (which
+  saves
+  this system a `ProgressionCurve` dependency just to count to twenty). It rebuilds BEFORE raising
+  `ZoneBEmpty` (so the door re-arms onto the board the player will actually play) and only with
+  `inFlight == 0 && balls.Count == 0` plus a 250 ms guard since the last arrival — Zone A's
+  milestone
+  drain raises several `BallDropped` in one tween batch. A request that cannot be spent is KEPT for
+  the next drain; the old code dropped it silently and never retried. Pieces stagger in over
+  `arenaPopInMs`. Small pooled `ZoneBBall`s (10 design px,
   layer 10; fresh split copies on layer 11 ignore gates for `splitGraceMs`); contacts are reported
   and resolved once per frame. Owns scoring via `Core.ScoreBar`: live per-level `ScoreBarFilled`
   wraps, the world-space bar + `+N` haul label, then `ScoreHarvested` → `ZoneBEmpty` →
@@ -210,15 +263,33 @@ The gameplay loop itself:
   gaps, plus 2–3 guide diagonals, feeding the fixed funnel + collector. Exactly one barrier gap
   admits a ball: a 32 px golden mouth centred on one of the trap-door's interior sweep columns,
   flanked by two brass chute rails running down to a single gilded ×6–×8 gate (everything else
-  stays ≤ ×4). The aperture is the narrower of the mouth and the rails' inner faces, and the
-  mouth's jitter is capped at `aperture − ballRadius − clearance`, so a ball dropped down the right
-  column ALWAYS reaches the gilded gate — the difficulty is the tap, not luck. A hit fans 6–8
+  stays ≤ ×4). The aperture is the narrower of the mouth and the rails' inner faces, and the mouth
+  now snaps DEAD onto a column (the old ±4 px jitter bought nothing a player could see and cost the
+  aim its dead centre), so a ball dropped down the right column ALWAYS reaches the gilded gate — the
+  difficulty is the tap, not luck. A hit fans 6–8
   copies over `goldenSplitSpread` on two alternating radii (one arc would interpenetrate), plays
   `Sfx.Golden`, a heavy haptic and a gilded spark burst, and raises `GoldenGateHit`.
   `ZoneBGenerator.Validate` is the contract (band bounds, gate overlap, one passable barrier gap
   and it being the mouth, a clear mouth→gate channel, the mouth on an entry column, funnel region
   clear) and every guide diagonal must keep a full ball's width from every other rail — a sloped
-  rail passing under a divider makes a wedge no ball can escape. 500 seeds are swept in EditMode.
+  rail passing under a divider makes a wedge no ball can escape. 500 seed PAIRS are swept in
+  EditMode.
+- **The two-speed split** — `Generate(structureSeed, dressingSeed, …)` draws from per-section
+  sub-RNGs
+  (`Sub(seed, salt)`), never one interleaved stream: the barrier consumes a different number of
+  values
+  depending on how its partition falls, and a shared stream would leak that into the spread rows and
+  diagonals. STRUCTURE fixes row depths, the barrier's gates and cracks, the spread rows, the guide
+  diagonals and the gilded gate's depth; DRESSING picks the mouth column and rolls every multiplier.
+  The barrier is laid across the FULL width with no knowledge of the mouth and the mouth is PUNCHED
+  into it later, which is what keeps the cracks — and so the dividers, and so the diagonals that
+  dodge
+  them — skeletal. A punch must leave `MouthFlankMin` (14, deliberately below `MinGateLen`) either
+  side. `BuildSkeleton` then reserves a run of **`MinMouthColumns` (3) NEIGHBOURING** punchable
+  columns, validates a trial arena at each, and requires all three to pass; diagonals are built
+  afterwards and dodge every reserved corridor, so a dressing roll can never fail on a diagonal it
+  lands behind. Neighbouring on purpose: a level-up nudges the aim one sweep step, not across the
+  board.
 - **Phase pan** — `PhaseDirector` runs `Core.PhaseMachine` (A ⇄ B with the queued-refill
   bounce) and tweens `CameraRig.Pan` 0→1: A pins the top edge above the tray + HUD, B pins Zone
   B's bottom (score bar) to the screen bottom, both safe-area inset; on the 390×844 design
@@ -247,19 +318,32 @@ The gameplay loop itself:
 - **Analytics (M5)** — a measurement layer that no zone knows exists. `Core` holds the payload
   (`AnalyticsEvent`: a six-slot inline param buffer, every value pre-formatted in invariant culture,
   money as `G17` for the same reason `SaveNum` is), the `IAnalyticsSink` seam, and `RunTelemetry` —
-  the pure recorder, fed `deltaMs` rather than reading `Time`, so the counters and the per-level clock
+  the pure recorder, fed `deltaMs` rather than reading `Time`, so the counters and the per-level
+  clock
   are EditMode-testable. `Gameplay/Analytics/` wires it: `AnalyticsService` is a PURE `GameEvents`
   subscriber, `RingBufferSink` keeps the last 128 events plus a capped `analytics.jsonl` tail, and
-  `GameAnalyticsSink` is the backend adapter. **Six events** — `run_start`, `run_end`, `level_up`,
-  `golden_gate_hit`, `door_tap`, `milestone` — chosen to answer what the game could not previously
-  say: where runs end, whether the golden mouth is ever hit, how deep the curve is played, and whether
+  `GameAnalyticsSink` is the backend adapter. **Seven events** — `run_start`, `run_end`, `level_up`,
+  `golden_gate_hit`, `door_tap`, `milestone`, `tilt_used` — chosen to answer what the game could not
+  previously say: where runs end, whether the golden mouth is ever hit, how deep the curve is
+  played, and whether
   the trap-door timing reads. Two seam additions were forced by that: `GameOver` now carries a
-  `GameOverCause` (death line vs stalemate funnel through one handler in Zone A, so it must be passed,
-  not inferred), and `DoorTapped` fires on MISSES too — `BallDropped` only ever reports the taps that
+  `GameOverCause` (death line vs stalemate funnel through one handler in Zone A, so it must be
+  passed,
+  not inferred), and `DoorTapped` fires on MISSES too — `BallDropped` only ever reports the taps
+  that
   worked. A run left via MENU calls `AbandonRun` and emits NO `run_end`, so the cause funnel keeps
-  meaning what it says. Drops are counted from `BallDropped`, so the milestone drain counts like play.
-- **Consent + privacy** — `Settings.analyticsConsent` (`Unasked`/`Granted`/`Denied`; 0 is the default,
-  which is exactly right for a save written before the field existed, so no migration). `UI/ConsentView`
+  meaning what it says. Drops are counted from `BallDropped`, so the milestone drain counts like
+  play.
+  `tilt_used` carries `remaining` and `balls_on_board` — how crowded the board was says whether a
+  tilt
+  was a rescue or a gamble, and read against `run_end`'s cause it says how often one was what killed
+  the player. It keeps no run total: `run_end` already carries the six params `AnalyticsEvent`
+  allows,
+  and `remaining == 0` on the last event says the same thing.
+- **Consent + privacy** — `Settings.analyticsConsent` (`Unasked`/`Granted`/`Denied`; 0 is the
+  default,
+  which is exactly right for a save written before the field existed, so no migration).
+  `UI/ConsentView`
   gates the first launch BEFORE the title and reopens from a quiet `PRIVACY` button on the title
   cabinet; ALLOW and NO THANKS are the same size and weight, deliberately. The backend sink is
   constructed ONLY on `Granted` — the gate is in `GameBootstrap`, so the object that could send data
@@ -269,17 +353,28 @@ The gameplay loop itself:
 - **Not finished here:** the GameAnalytics package is NOT installed and there are no keys, so the
   adapter sits behind `RICHCOAST_GAMEANALYTICS` and compiles to an inert sink — adding the package
   must be re-verified against `Tools/build-android.sh`, since a batchmode break would surface at the
-  worst moment. `docs/privacy-policy.md` is written but UNHOSTED; `PrivacyPolicy.Url` is deliberately
-  empty until it has an address (an empty URL shows the short notice; a placeholder would ship a dead
+  worst moment. `docs/privacy-policy.md` is written but UNHOSTED; `PrivacyPolicy.Url` is
+  deliberately
+  empty until it has an address (an empty URL shows the short notice; a placeholder would ship a
+  dead
   link in a compliance surface).
 
 Next — the rest of **M5**, three independent sub-projects (spec:
 `docs/superpowers/specs/2026-09-13-m5-remaining-design.md`):
 1. **Analytics** — seam, sinks, consent and policy TEXT are done (above). What remains is external:
-   host the privacy policy and set `PrivacyPolicy.Url`, create the GameAnalytics game/secret keys, add
-   the package behind `RICHCOAST_GAMEANALYTICS`, re-verify the headless Android build, then fill in the
+   host the privacy policy and set `PrivacyPolicy.Url`, create the GameAnalytics game/secret keys,
+   add
+   the package behind `RICHCOAST_GAMEANALYTICS`, re-verify the headless Android build, then fill in
+   the
    Play data-safety declaration from the event list. Device sign-off of the consent flow is pending.
 2. **Perf** — profile on the Pixel 7 against 60 fps; measure before changing anything.
+   Device sign-off is also pending for the two-speed cadence (does the arena now read as a PLACE,
+   with
+   the milestone re-roll an event and the per-level mouth move a noticed nudge rather than churn?)
+   and
+   for the TILT (does it read as thrilling rather than unfair? if a tilt-caused death feels like a
+   bug,
+   drop `tiltKickY` before touching anything else).
 3. **Store prep** — release keystore + AAB (`ProjectSetup.BuildAndroid` hardcodes
    `buildAppBundle = false` and `BuildOptions.Development`, so it cannot yet produce one),
    adaptive icon, versionCode scheme, listing assets.

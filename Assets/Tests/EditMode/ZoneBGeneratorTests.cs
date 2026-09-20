@@ -213,5 +213,131 @@ namespace RichCoast.Tests.EditMode
             Assert.AreEqual(50, y0, 1e-9);
             Assert.AreEqual(50, y1, 1e-9);
         }
+    
+        // --- The two-speed split -----------------------------------------------------------------
+
+        /// <summary>
+        /// Everything the DRESSING is not allowed to move: the spread rows, the guide diagonals, the
+        /// row depths and the gilded gate's depth. The barrier row is excluded on purpose — the mouth is
+        /// cut into it, so it must shift when the mouth does.
+        /// </summary>
+        static string DescribeSkeleton(ZoneBLayout layout)
+        {
+            double rowY = double.NaN;
+            foreach (var g in layout.Gates) if (!g.IsGolden && (double.IsNaN(rowY) || g.Cy < rowY)) rowY = g.Cy;
+            var parts = new List<string>();
+            foreach (var g in layout.Gates)
+            {
+                if (g.IsGolden || Math.Abs(g.Cy - rowY) <= ZoneBLayouts.GateThickness) continue;
+                parts.Add($"G{g.Cx:0.######},{g.Cy:0.######},{g.Length:0.######}");
+            }
+            foreach (var w in layout.Walls)
+            {
+                if (!w.IsGuide) continue;
+                parts.Add($"W{w.X1:0.######},{w.Y1:0.######},{w.X2:0.######},{w.Y2:0.######}");
+            }
+            parts.Add($"Y{layout.Golden.GateY:0.######}");
+            return string.Join(" ", parts);
+        }
+
+        /// <summary>
+        /// THE test for the whole two-speed idea. Re-dressing an arena forty times must not move one
+        /// pixel of its silhouette — if the RNG streams ever re-couple (a section drawing a different
+        /// NUMBER of values because the mouth moved), this is what catches it.
+        /// </summary>
+        [Test]
+        public void ReDressingNeverMovesTheSkeleton()
+        {
+            var columns = SweepColumns();
+            for (int structure = 0; structure < 60; structure++)
+            {
+                string expected = null;
+                for (int dressing = 0; dressing < 40; dressing++)
+                {
+                    var layout = ZoneBGenerator.Generate(structure, dressing, null, columns);
+                    string actual = DescribeSkeleton(layout);
+                    if (expected == null) expected = actual;
+                    else Assert.AreEqual(expected, actual, $"structure {structure} shifted on dressing {dressing}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// The other half of the contract: a skeleton the player keeps for twenty levels must still
+        /// give the mouth somewhere to go, or the aim target is pinned for the whole window.
+        /// </summary>
+        [Test]
+        public void ReDressingMovesTheMouthAndTheMultipliers()
+        {
+            var columns = SweepColumns();
+            for (int structure = 0; structure < 60; structure++)
+            {
+                var mouths = new HashSet<double>();
+                var goldens = new HashSet<int>();
+                for (int dressing = 0; dressing < 40; dressing++)
+                {
+                    var layout = ZoneBGenerator.Generate(structure, dressing, null, columns);
+                    mouths.Add(Math.Round(layout.Golden.MouthX, 6));
+                    goldens.Add(layout.Golden.Multiplier);
+                }
+                Assert.GreaterOrEqual(mouths.Count, ZoneBGenerator.MinMouthColumns,
+                    $"structure {structure} pins the mouth to {mouths.Count} column(s)");
+                Assert.GreaterOrEqual(goldens.Count, 2, $"structure {structure} never varies the gilded payout");
+            }
+        }
+
+        /// <summary>
+        /// The reserved columns are NEIGHBOURS, so a level-up nudges the aim one sweep step instead of
+        /// throwing it across the board. That is the difference between re-reading the arena and
+        /// re-learning it.
+        /// </summary>
+        [Test]
+        public void TheMouthOnlyEverMovesToAdjacentColumns()
+        {
+            var columns = SweepColumns();
+            double spacing = columns[1] - columns[0];
+            for (int structure = 0; structure < 80; structure++)
+            {
+                double lo = double.MaxValue, hi = double.MinValue;
+                for (int dressing = 0; dressing < 40; dressing++)
+                {
+                    double x = ZoneBGenerator.Generate(structure, dressing, null, columns).Golden.MouthX;
+                    lo = Math.Min(lo, x);
+                    hi = Math.Max(hi, x);
+                }
+                double span = spacing * (ZoneBGenerator.MinMouthColumns - 1);
+                Assert.LessOrEqual(hi - lo, span + 1e-6,
+                    $"structure {structure} spreads the mouth over {hi - lo:0.#} px, wider than {ZoneBGenerator.MinMouthColumns} adjacent columns");
+            }
+        }
+
+        /// <summary>Both halves of the roll are deterministic, and the layout reports both back.</summary>
+        [Test]
+        public void BothSeedsAreRecordedAndDeterministic()
+        {
+            var columns = SweepColumns();
+            var a = ZoneBGenerator.Generate(77, 12, null, columns);
+            var b = ZoneBGenerator.Generate(77, 12, null, columns);
+            Assert.AreEqual(77, a.StructureSeed);
+            Assert.AreEqual(12, a.DressingSeed);
+            Assert.AreEqual(a.StructureSeed, a.Seed, "Seed must stay an alias of the structure seed");
+            Assert.AreEqual(DescribeSkeleton(a), DescribeSkeleton(b));
+            Assert.AreEqual(a.Golden.MouthX, b.Golden.MouthX, 1e-12);
+            Assert.AreEqual(a.Golden.Multiplier, b.Golden.Multiplier);
+        }
+
+        /// <summary>Every (structure, dressing) pair the runtime can reach holds the whole contract.</summary>
+        [Test]
+        public void EverySeedPairHoldsTheInvariants()
+        {
+            var columns = SweepColumns();
+            var p = new ZoneBGenParams();
+            for (int structure = 0; structure < 500; structure++)
+            {
+                var layout = ZoneBGenerator.Generate(structure, structure * 7 + 3, p, columns);
+                Assert.IsTrue(ZoneBGenerator.Validate(layout, p, columns, out string why),
+                    $"structure {structure}: {why}\n{Describe(layout)}");
+            }
+        }
     }
 }

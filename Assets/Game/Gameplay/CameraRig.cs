@@ -23,6 +23,7 @@ namespace RichCoast.Game
         float lastAspect = -1f;
         float lastPan = -1f;
         float pan;
+        float shakeMs, shakeDurationMs, shakeAmp, shakePhase;
 
         /// <summary>0 = A framing (top pinned), 1 = B framing (bottom pinned). Tweened by the PhaseDirector.</summary>
         public float Pan
@@ -41,10 +42,38 @@ namespace RichCoast.Game
             Apply();
         }
 
+        /// <summary>
+        /// Rattle the camera — the cabinet being shaken. A transient offset added ON TOP of whatever
+        /// framing the pan computed, deliberately not a second transform: <see cref="Pan"/> owns the
+        /// camera's position, and a rival writer would fight it mid-pan.
+        /// </summary>
+        public void Shake(float amplitudeDesignPx, float ms)
+        {
+            shakeAmp = BoardGeometry.Units(amplitudeDesignPx);
+            shakeDurationMs = Mathf.Max(1f, ms);
+            shakeMs = shakeDurationMs;
+            shakePhase = UnityEngine.Random.Range(0f, 10f);
+        }
+
         void LateUpdate()
         {
             if (Cam == null) return;
-            if (!Mathf.Approximately(Cam.aspect, lastAspect) || !Mathf.Approximately(pan, lastPan)) Apply();
+            bool shaking = shakeMs > 0f;
+            // Decrement BEFORE the Apply so the frame the shake expires re-centres the camera; the
+            // aspect/pan cache would otherwise leave it parked at the last offset.
+            if (shaking) shakeMs -= Time.deltaTime * 1000f;
+            if (shaking || !Mathf.Approximately(Cam.aspect, lastAspect) || !Mathf.Approximately(pan, lastPan)) Apply();
+        }
+
+        float ShakeFalloff => shakeMs <= 0f ? 0f : shakeMs / shakeDurationMs;
+
+        Vector2 ShakeOffset()
+        {
+            float k = ShakeFalloff;
+            if (k <= 0f) return Vector2.zero;
+            float t = shakeDurationMs - shakeMs;
+            return new Vector2(shakeAmp * k * Mathf.Sin(t * 0.085f + shakePhase),
+                               shakeAmp * 0.45f * k * Mathf.Sin(t * 0.131f + shakePhase * 2f));
         }
 
         public void Apply()
@@ -57,7 +86,9 @@ namespace RichCoast.Game
             float unitsPerPx = (halfWidth * 2f) / Screen.width;
             float safeTop = (Screen.height - (Screen.safeArea.y + Screen.safeArea.height)) * unitsPerPx;
             float safeBottom = Screen.safeArea.y * unitsPerPx;
-            Cam.transform.position = new Vector3(0f, Mathf.Lerp(FramingAY(safeTop), FramingBY(safeTop, safeBottom), pan), -10f);
+            var shake = ShakeOffset();
+            Cam.transform.position = new Vector3(shake.x,
+                Mathf.Lerp(FramingAY(safeTop), FramingBY(safeTop, safeBottom), pan) + shake.y, -10f);
         }
 
         /// <summary>Camera y for the A framing: the top edge pinned above the tray + HUD.</summary>

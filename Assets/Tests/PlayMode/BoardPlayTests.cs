@@ -95,9 +95,14 @@ namespace RichCoast.Tests.PlayMode
             // fresh per drop — and the middle ball goes down the golden column, so the gilded chute and
             // its burst are in frame.
             rig.Pan = 1f;
+            // Announce the phase too, not just the camera: HUD elements that belong to phase A (the
+            // ribbon, the tilt button) leave on this event, and a shot that skipped it would show
+            // chrome the player never actually sees over Zone B.
+            GameEvents.RaisePhaseChanged(GamePhase.B);
             boot.ZoneB.DebugRebuild(104);
             yield return null;
             yield return null;
+            yield return new WaitForSeconds(0.35f);
             double[] columns = { 60, boot.ZoneB.GoldenMouthX, 320 };
             for (int i = 0; i < columns.Length; i++)
             {

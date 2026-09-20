@@ -152,6 +152,11 @@ namespace RichCoast.App
             Session.Begin(restore);
             Analytics?.StartRun(restore != null, Session.ZoneA.Level);
             Hud.SetNextTier(Session.Queue.NextTier);
+            // The HUD outlives a run and ZoneASystem does not, so the tilt button is re-pointed here
+            // rather than held across the reload.
+            Hud.BindTilt(() => Session != null && Session.ZoneA.CanTilt,
+                         () => Session?.ZoneA.Tilt(),
+                         Session.ZoneA.TiltCharges, Session.ZoneA.TiltsLeft);
         }
 
         /// <summary>
@@ -281,6 +286,8 @@ namespace RichCoast.App
             {
                 if (keyboard.mKey.wasPressedThisFrame) ToggleSound();
                 if (keyboard.aKey.wasPressedThisFrame) analyticsOverlay?.Toggle();
+                // Editor convenience only; on device the button is the input.
+                if (keyboard.tKey.wasPressedThisFrame && State == AppState.Run) Session?.ZoneA.Tilt();
                 // Android's Back arrives as Escape. See RequestQuit: Unity consumes Back itself, so
                 // without this the button does nothing at all on device.
                 if (keyboard.escapeKey.wasPressedThisFrame) RequestQuit();

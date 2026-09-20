@@ -18,7 +18,7 @@ namespace RichCoast.Game
         GameFeelSO feel;
         AudioSource[] voices;
         int nextVoice;
-        AudioClip drop, merge, mergeHigh, tick, goal, gameOver, transition, multiply, collect, panDown, panUp, golden;
+        AudioClip drop, merge, mergeHigh, tick, goal, gameOver, transition, multiply, collect, panDown, panUp, golden, tilt;
         readonly ComboState mergeCombo = new ComboState();
         readonly ComboState multiplyCombo = new ComboState();
         bool muted;
@@ -59,6 +59,7 @@ namespace RichCoast.Game
             panUp = Synth("panUp", 220f, 440f, Wave.Triangle, 0.02f, 0.3f, 0.12f);
             // The rarest cue in the game: a four-note climb an octave above `goal`, with a rising
             // shimmer laid over it so it cannot be mistaken for an ordinary bar fill.
+            tilt = Rattle("tilt");
             golden = Layer("golden",
                 Arpeggio("goldenArp", new[] { 987.77f, 1244.51f, 1567.98f, 1975.53f }, 0.07f, 0.34f, 0.55f),
                 Synth("goldenShimmer", 2093f, 2637f, Wave.Sine, 0.01f, 0.5f, 0.12f));
@@ -66,6 +67,9 @@ namespace RichCoast.Game
 
         /// <summary>Zone B: a ball threaded the golden mouth and struck the gilded gate. The jackpot fanfare.</summary>
         public void Golden() => Play(golden, 1f);
+
+        /// <summary>Zone A: the player shook the cabinet. Wood, not tone.</summary>
+        public void Tilt() => Play(tilt, 1f);
 
         /// <summary>Zone C: the trap-door sucks a ball through. Downward whoosh.</summary>
         public void Transition() => Play(transition, 1f);
@@ -144,6 +148,33 @@ namespace RichCoast.Game
                 float env = t < attack ? Mathf.Pow(t / attack, 0.5f) : Mathf.Exp(-(t - attack) / decay * 5f);
                 float s = wave == Wave.Sine ? Mathf.Sin((float)(phase * Mathf.PI * 2)) : Triangle((float)phase);
                 data[i] = s * env * gain;
+            }
+            var clip = AudioClip.Create(name, n, 1, SampleRate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        /// <summary>
+        /// Filtered noise — the only cue in the game with no pitch at all, because a wooden cabinet
+        /// being shaken has none. Two knocks a beat apart over a scatter tail. The RNG is fixed-seed:
+        /// the clip is built once at boot and must sound the same every run.
+        /// </summary>
+        static AudioClip Rattle(string name)
+        {
+            const float length = 0.34f;
+            int n = Mathf.CeilToInt(length * SampleRate);
+            var data = new float[n];
+            var rng = new System.Random(7);
+            float lp = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SampleRate;
+                float white = (float)(rng.NextDouble() * 2.0 - 1.0);
+                lp += (white - lp) * 0.18f; // one-pole lowpass: wood, not hiss
+                float knock = Mathf.Exp(-t / 0.045f);
+                if (t >= 0.11f) knock += 0.75f * Mathf.Exp(-(t - 0.11f) / 0.045f);
+                float tail = 0.3f * Mathf.Exp(-t / 0.18f);
+                data[i] = lp * (knock + tail) * 0.55f;
             }
             var clip = AudioClip.Create(name, n, 1, SampleRate, false);
             clip.SetData(data, 0);

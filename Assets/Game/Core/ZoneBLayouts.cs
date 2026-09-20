@@ -108,7 +108,12 @@ namespace RichCoast.Core
     public sealed class ZoneBLayout
     {
         public string Name;
+        /// <summary>Back-compat alias for <see cref="StructureSeed"/>.</summary>
         public int Seed;
+        /// <summary>Fixes the silhouette. Re-rolled only at a milestone.</summary>
+        public int StructureSeed;
+        /// <summary>Fixes the golden mouth column and every multiplier. Re-rolled once per level.</summary>
+        public int DressingSeed;
         public GateDef[] Gates;
         public CollectorDef[] Collectors;
         public WallDef[] Walls;

@@ -45,6 +45,9 @@ namespace RichCoast.Game
         readonly ZoneBGenParams genParams;
         readonly IReadOnlyList<double> entryXs;
         readonly System.Random rebuildRng;
+        int structureSeed, dressingSeed;
+        /// <summary>Set by the level-up / milestone beats; spent at the next safe drain.</summary>
+        bool pendingStructure, pendingDressing;
         readonly ScoreBar scoreBar;
 
         /// <summary>The playfield in play — walls, gates, collectors. Replaced wholesale on a reshuffle.</summary>
@@ -92,8 +95,12 @@ namespace RichCoast.Game
         public double Total => total;
         public int BallCount => balls.Count;
         public string LayoutName => layout.Name;
-        /// <summary>Seed of the arena in play. Changes on every reshuffle.</summary>
+        /// <summary>Seed of the arena in play. Alias of <see cref="StructureSeed"/>.</summary>
         public int Seed => layout.Seed;
+        /// <summary>Fixes the silhouette. Changes only at a milestone.</summary>
+        public int StructureSeed => layout.StructureSeed;
+        /// <summary>Fixes the golden mouth column and the multipliers. Changes once per level.</summary>
+        public int DressingSeed => layout.DressingSeed;
         public ZoneBLayout Layout => layout;
         /// <summary>The design-space column a drop must hit to take the golden path.</summary>
         public double GoldenMouthX => layout.Golden.MouthX;
@@ -102,11 +109,21 @@ namespace RichCoast.Game
         public double BarTarget => scoreBar.Target;
 
         /// <summary>
-        /// Seed a restored run's banked total and score-bar fill. The arena itself is NOT restored — it
-        /// reshuffles on every drain anyway, so the freshly generated one is exactly as valid.
+        /// Seed a restored run's banked total, score-bar fill and ARENA. The arena is restored because it
+        /// now outlives the drop that built it: it holds for a whole level and its skeleton for a whole
+        /// milestone window, so handing the player a different board on resume would throw away exactly
+        /// the familiarity the two-speed cadence exists to build. Zero seeds mean a pre-arena save.
         /// </summary>
-        public void Restore(double restoredTotal, double barFilled, double barTarget)
+        public void Restore(double restoredTotal, double barFilled, double barTarget,
+            int restoredStructureSeed, int restoredDressingSeed)
         {
+            if (restoredStructureSeed != 0 || restoredDressingSeed != 0)
+            {
+                structureSeed = restoredStructureSeed;
+                dressingSeed = restoredDressingSeed;
+                pendingStructure = pendingDressing = false;
+                BuildArena(ZoneBGenerator.Generate(structureSeed, dressingSeed, genParams, entryXs), popIn: false);
+            }
             total = restoredTotal;
             scoreBar.SetTarget(barTarget);
             scoreBar.Add(barFilled - scoreBar.Filled);
@@ -143,13 +160,22 @@ namespace RichCoast.Game
             BuildContainment();
             BuildScoreBar();
             EmitScoreBar();
-            BuildArena(ZoneBGenerator.Generate(rebuildRng.Next(), this.genParams, entryXs), popIn: false);
+            structureSeed = rebuildRng.Next();
+            dressingSeed = rebuildRng.Next();
+            BuildArena(ZoneBGenerator.Generate(structureSeed, dressingSeed, this.genParams, entryXs), popIn: false);
 
             GameEvents.ProgressionChanged += e =>
             {
                 scoreBar.SetTarget(e.ScoreBarTarget);
                 EmitScoreBar();
+                // A new level re-dresses the arena: the golden mouth shuffles to a neighbouring column
+                // and the multipliers re-roll. A roll-through crossing several levels sets this once,
+                // which is right — one re-dress per cash-in, not one per level crossed.
+                pendingDressing = true;
             };
+            // ArenaZoom(true) fires exactly at a milestone, which saves this system a dependency on
+            // ProgressionCurve just to count to twenty.
+            GameEvents.ArenaZoom += zooming => { if (zooming) pendingStructure = true; };
             GameEvents.BallDropped += e =>
             {
                 sinceLastDropMs = 0f;
@@ -165,10 +191,25 @@ namespace RichCoast.Game
         /// the end of the frame, and the earliest a ball can exist afterwards is a door tap plus the
         /// suck and pop (≥ 260 ms), so nothing ever touches a ghost.
         /// </summary>
-        public void Rebuild(int seed) => BuildArena(ZoneBGenerator.Generate(seed, genParams, entryXs), popIn: true);
+        public void Rebuild(int structure, int dressing)
+        {
+            structureSeed = structure;
+            dressingSeed = dressing;
+            BuildArena(ZoneBGenerator.Generate(structure, dressing, genParams, entryXs), popIn: true);
+        }
 
         /// <summary>Test/debug hook: lay one specific arena so a run is reproducible.</summary>
-        public void DebugRebuild(int seed) => Rebuild(seed);
+        public void DebugRebuild(int structure, int dressing) => Rebuild(structure, dressing);
+
+        /// <summary>Test/debug hook: one seed for both halves, when the caller just wants a fixed arena.</summary>
+        public void DebugRebuild(int seed) => Rebuild(seed, seed);
+
+        /// <summary>Test/debug hook: ask for the re-dress a level-up would have asked for.</summary>
+        public void DebugRequestReshuffle(bool structure)
+        {
+            pendingDressing = true;
+            pendingStructure |= structure;
+        }
 
         /// <summary>
         /// Where every live ball is, in Zone B DESIGN space (x across, y down from the band top) — the
@@ -473,9 +514,24 @@ namespace RichCoast.Game
         /// Hand Zone B back to the trap-door — laying a fresh playfield FIRST, so the door re-arms onto
         /// the arena the player is about to play and the new golden mouth is visible while they aim.
         /// </summary>
+        /// <summary>
+        /// The one place the arena is allowed to change, and only when a beat has asked for it. Drops no
+        /// longer reshuffle: the board a player learns this level is the board they keep, and its
+        /// silhouette holds until the next milestone.
+        /// <para>A pending request that cannot be spent right now (the 250 ms guard, or a milestone drain
+        /// still landing) is KEPT and spent at the next drain — the old code dropped it on the floor and
+        /// never retried.</para>
+        /// </summary>
         void ReleaseArena()
         {
-            if (inFlight == 0 && balls.Count == 0 && sinceLastDropMs >= RebuildGuardMs) Rebuild(rebuildRng.Next());
+            bool clear = inFlight == 0 && balls.Count == 0 && sinceLastDropMs >= RebuildGuardMs;
+            if (clear && (pendingStructure || pendingDressing))
+            {
+                if (pendingStructure) structureSeed = rebuildRng.Next();
+                dressingSeed = rebuildRng.Next();
+                pendingStructure = pendingDressing = false;
+                Rebuild(structureSeed, dressingSeed);
+            }
             GameEvents.RaiseZoneBEmpty();
         }
 

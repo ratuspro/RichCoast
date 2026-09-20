@@ -123,17 +123,17 @@ namespace RichCoast.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator TheArenaReshufflesOnlyWhenNothingIsInFlight()
+        public IEnumerator DropsAloneNeverReshuffleTheArena()
         {
             yield return LoadMain();
             var boot = Boot();
-            int startSeed = boot.ZoneB.Seed;
+            int startStructure = boot.ZoneB.StructureSeed;
+            int startDressing = boot.ZoneB.DressingSeed;
 
-            // Three overlapping drops — the pattern the milestone drain and the screenshot both produce.
-            var reshuffles = new List<string>();
-            int lastSeed = startSeed;
+            // Three overlapping drops — the pattern the milestone drain and the screenshot both
+            // produce. Under the old per-drain reshuffle this laid three different arenas; the whole
+            // point of the two-speed cadence is that the player keeps the board they are learning.
             bool sawFlight = false;
-
             for (int i = 0; i < 3; i++)
             {
                 GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(2 + i), 60 + 130 * i));
@@ -141,10 +141,79 @@ namespace RichCoast.Tests.PlayMode
                 while (Time.time < until)
                 {
                     if (boot.ZoneB.InFlight > 0) sawFlight = true;
-                    if (boot.ZoneB.Seed != lastSeed)
+                    yield return null;
+                }
+            }
+            yield return WaitUntil(() => boot.ZoneB.InFlight == 0 && boot.ZoneB.BallCount == 0, 25f);
+            yield return null;
+            yield return null;
+
+            Assert.IsTrue(sawFlight, "the drops never reached Zone B");
+            Assert.AreEqual(startStructure, boot.ZoneB.StructureSeed, "a drop must not re-roll the skeleton");
+            Assert.AreEqual(startDressing, boot.ZoneB.DressingSeed, "a drop must not re-dress the arena");
+        }
+
+        [UnityTest]
+        public IEnumerator ALevelUpReDressesTheArenaButKeepsItsSkeleton()
+        {
+            yield return LoadMain();
+            var boot = Boot();
+            int startStructure = boot.ZoneB.StructureSeed;
+            int startDressing = boot.ZoneB.DressingSeed;
+
+            boot.ZoneB.DebugRequestReshuffle(structure: false);
+            GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(3), 195));
+            // Not just "the balls are gone": on a cash-in the release waits out the bar's dwell and
+            // drain, so wait for the arena itself to change.
+            yield return WaitUntil(() => boot.ZoneB.DressingSeed != startDressing, 25f);
+
+            Assert.AreEqual(startStructure, boot.ZoneB.StructureSeed,
+                "a level-up moves the mouth and the multipliers, never the silhouette");
+            Assert.AreNotEqual(startDressing, boot.ZoneB.DressingSeed, "a level-up must re-dress the arena");
+        }
+
+        [UnityTest]
+        public IEnumerator AMilestoneRollsAWholeNewSkeleton()
+        {
+            yield return LoadMain();
+            var boot = Boot();
+            int startStructure = boot.ZoneB.StructureSeed;
+
+            boot.ZoneB.DebugRequestReshuffle(structure: true);
+            GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(3), 195));
+            yield return WaitUntil(() => boot.ZoneB.StructureSeed != startStructure, 25f);
+
+            Assert.AreNotEqual(startStructure, boot.ZoneB.StructureSeed, "a milestone must lay a new arena");
+        }
+
+        /// <summary>
+        /// A reshuffle still may not land on a live playfield — and now that it is request-driven, a
+        /// request that arrives while balls are in flight must be KEPT and spent at the next drain
+        /// rather than dropped, which is what the old code silently did when its 250 ms guard failed.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AReshuffleWaitsForAClearPlayfieldAndIsNeverLost()
+        {
+            yield return LoadMain();
+            var boot = Boot();
+            int startDressing = boot.ZoneB.DressingSeed;
+
+            var reshuffles = new List<string>();
+            int lastDressing = startDressing;
+
+            // Ask mid-flight, with drops still landing: the exact shape of a cash-in during a
+            // milestone drain.
+            for (int i = 0; i < 3; i++)
+            {
+                GameEvents.RaiseBallDropped(new BallDroppedEvent(new BallSpec(2 + i), 60 + 130 * i));
+                if (i == 1) boot.ZoneB.DebugRequestReshuffle(structure: false);
+                float until = Time.time + 0.4f;
+                while (Time.time < until)
+                {
+                    if (boot.ZoneB.DressingSeed != lastDressing)
                     {
-                        reshuffles.Add($"seed changed with {boot.ZoneB.InFlight} in flight / {boot.ZoneB.BallCount} alive");
-                        lastSeed = boot.ZoneB.Seed;
+                        reshuffles.Add($"re-dressed with {boot.ZoneB.InFlight} in flight / {boot.ZoneB.BallCount} alive");
+                        lastDressing = boot.ZoneB.DressingSeed;
                     }
                     yield return null;
                 }
@@ -152,19 +221,19 @@ namespace RichCoast.Tests.PlayMode
 
             yield return WaitUntil(() =>
             {
-                if (boot.ZoneB.Seed != lastSeed)
+                if (boot.ZoneB.DressingSeed != lastDressing)
                 {
-                    reshuffles.Add($"seed changed with {boot.ZoneB.InFlight} in flight / {boot.ZoneB.BallCount} alive");
-                    lastSeed = boot.ZoneB.Seed;
+                    reshuffles.Add($"re-dressed with {boot.ZoneB.InFlight} in flight / {boot.ZoneB.BallCount} alive");
+                    lastDressing = boot.ZoneB.DressingSeed;
                 }
-                return boot.ZoneB.InFlight == 0 && boot.ZoneB.BallCount == 0 && lastSeed != startSeed;
-            }, 25f);
+                return boot.ZoneB.InFlight == 0 && boot.ZoneB.BallCount == 0 && lastDressing != startDressing;
+            }, 30f);
 
-            Assert.IsTrue(sawFlight, "the drops never reached Zone B");
-            Assert.That(boot.ZoneB.Seed, Is.Not.EqualTo(startSeed), "draining empty must lay a fresh arena");
+            Assert.That(boot.ZoneB.DressingSeed, Is.Not.EqualTo(startDressing),
+                "the pending reshuffle was dropped instead of being spent at the next drain");
             CollectionAssert.AreEqual(
-                new[] { "seed changed with 0 in flight / 0 alive" }, reshuffles,
-                "the arena must reshuffle exactly once, and only with the playfield clear");
+                new[] { "re-dressed with 0 in flight / 0 alive" }, reshuffles,
+                "the arena must change exactly once, and only with the playfield clear");
         }
 
         [UnityTest]

@@ -111,6 +111,27 @@ namespace RichCoast.Game
         [Tooltip("A reshuffled arena staggers its pieces in over this long (ms). 0 = snap in.")]
         public float arenaPopInMs = 180f;
 
+        [Header("Tilt")]
+        [Tooltip("Cabinet tilts granted at the start of a run. Never refilled — each one is a decision, not a cooldown.")]
+        public int tiltCharges = 3;
+        [Tooltip("Lurches in one tilt. One kick only scatters; alternating pulses MIX, which is what breaks an orphan lock.")]
+        public int tiltPulses = 3;
+        [Tooltip("Total length of the lurch train (ms). Long enough that a ball TRAVELS between reversals — at ~90ms apart the pulses just cancel and the board only buzzes.")]
+        public float tiltMs = 620f;
+        [Tooltip("Sideways velocity added per lurch (world units/s), alternating direction. This is the mixing. Read against maxBallSpeed (24), not against the board width (10).")]
+        public float tiltKickX = 7f;
+        [Tooltip("Angular amplitude of the rock about the funnel apex (rad/s). This is the SHEAR, and it is what mixes: balls high in the pile get thrown sideways harder than ones nestled in the V, and the two flanks move in opposite vertical directions. At 0 the tilt is a rigid translation and shuffles nothing.")]
+        public float tiltRock = 3.2f;
+        [Tooltip("Upward velocity added per lurch, and the knob the whole mechanic lives on. At gravityScale 2.5 the hop is v^2/49 world units, so 7 lifts a ball ~1.0 unit: one small-ball DIAMETER. That is the physical floor for a shake to do anything, because on a packed board every ball sits in a pocket made by its neighbours and has to clear one to move. It is also the GAMBLE — 1.0 unit is 39 design px, and successive lurches stack, so a crowded board can end up with a ball stranded above the death line.")]
+        public float tiltKickY = 7f;
+        [Tooltip("Lockout after a tilt (ms) so a double-tap cannot spend two charges. Not a balance knob.")]
+        public float tiltCooldownMs = 600f;
+        [Tooltip("Camera shake amplitude during a tilt, in design px.")]
+        public float tiltCameraShakePx = 7f;
+        [Tooltip("Heavy haptic on the first lurches (ms / amplitude 1-255).")]
+        public int tiltHapticMs = 34;
+        public int tiltHapticAmp = 220;
+
         [Header("Zone C trap-door")]
         [Tooltip("One edge→edge leg of the marker sweep (ms). The difficulty knob for column timing.")]
         public float sweepMs = 880f;

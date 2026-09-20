@@ -34,6 +34,13 @@ namespace RichCoast.Core
         public double ChuteRise = 24;
 
         public double MinGateLen = 28;
+        /// <summary>
+        /// Shortest barrier gate the mouth may leave when it is punched in. Deliberately below
+        /// <see cref="MinGateLen"/>: a flank only has to be a real gate that splits a ball, and holding
+        /// it to the full minimum would exclude 88 px of barrier around every crack, leaving too few
+        /// columns the mouth could ever sit on.
+        /// </summary>
+        public double MouthFlankMin = 14;
         /// <summary>Vertical divider dropped from each barrier-row crack so a ball cannot perch in it.</summary>
         public double DividerDrop = 90;
 
@@ -67,8 +74,10 @@ namespace RichCoast.Core
     /// funnel ramps and bottom collector.</item>
     /// </list>
     ///
-    /// Pure and deterministic: the same seed always yields the same arena. Every candidate is checked
-    /// against <see cref="Validate"/> and re-rolled with seed+1 until it holds.
+    /// Pure and deterministic: the same pair of seeds always yields the same arena. The roll is split in
+    /// two so the arena can change at two different speeds — a STRUCTURE seed fixes the silhouette and is
+    /// re-rolled only at a milestone, while a DRESSING seed moves the golden mouth and re-rolls the
+    /// multipliers once per level. Every candidate is checked against <see cref="Validate"/>.
     /// </summary>
     public static class ZoneBGenerator
     {
@@ -77,86 +86,367 @@ namespace RichCoast.Core
         const double Height = DesignSpace.ZoneBHeight;
 
         /// <summary>
-        /// A fresh arena for <paramref name="seed"/>. When <paramref name="entryXs"/> is given the
-        /// golden mouth is centred on one of those columns (the interior ones — a chute at the very
-        /// edge would run into a side wall); pass null to let the mouth land anywhere, which is what a
-        /// continuous aim would do.
+        /// How many distinct mouth columns a skeleton must offer before it is accepted. The mouth
+        /// moves every level while the skeleton holds for a whole milestone window, so a skeleton that
+        /// only admits one column would pin the player's aim for twenty levels.
+        /// </summary>
+        public const int MinMouthColumns = 3;
+
+        /// <summary>Internal re-rolls of the skeleton itself before <see cref="Generate"/> moves on.</summary>
+        const int SkeletonAttempts = 64;
+
+        /// <summary>
+        /// A fresh arena for <paramref name="seed"/>, used for both halves of the roll. Convenience for
+        /// callers that do not care about the two-speed split (the screenshot tool and the seed sweeps).
         /// </summary>
         public static ZoneBLayout Generate(int seed, ZoneBGenParams p = null, IReadOnlyList<double> entryXs = null)
+            => Generate(seed, seed, p, entryXs);
+
+        /// <summary>
+        /// A fresh arena from two independent seeds.
+        ///
+        /// <para><paramref name="structureSeed"/> fixes the SKELETON — row depths, the barrier's gates
+        /// and cracks, the spread rows, the guide diagonals and the gilded gate's depth. It is re-rolled
+        /// only at a milestone, so the arena's silhouette is a room the player keeps for twenty levels.</para>
+        ///
+        /// <para><paramref name="dressingSeed"/> fixes the DRESSING — which column the golden mouth sits
+        /// on and every gate's multiplier. It is re-rolled once per level, so the aim target moves often
+        /// enough to stay interesting without the board becoming unrecognisable.</para>
+        ///
+        /// <para>When <paramref name="entryXs"/> is given the mouth is centred exactly on one of those
+        /// columns (the interior ones — a chute at the very edge would run into a side wall); pass null
+        /// to let the mouth land anywhere, which is what a continuous aim would do.</para>
+        /// </summary>
+        public static ZoneBLayout Generate(int structureSeed, int dressingSeed, ZoneBGenParams p = null,
+            IReadOnlyList<double> entryXs = null)
         {
             p = p ?? new ZoneBGenParams();
-            for (int attempt = 0; attempt <= p.MaxRerolls; attempt++)
+            for (int s = 0; s <= p.MaxRerolls; s++)
             {
-                var layout = Build(seed + attempt, p, entryXs);
-                if (Validate(layout, p, entryXs, out _)) return layout;
+                var skeleton = BuildSkeleton(unchecked(structureSeed + s), p, entryXs);
+                if (skeleton == null) continue;
+                // Dressing-first retry: preserving the skeleton matters more than preserving the mouth,
+                // and every column in MouthColumns already validated, so this lands on the first pass.
+                for (int d = 0; d <= p.MaxRerolls; d++)
+                {
+                    var layout = skeleton.Dress(unchecked(dressingSeed + d));
+                    if (layout != null && Validate(layout, p, entryXs, out _)) return layout;
+                }
             }
-            throw new InvalidOperationException($"ZoneBGenerator: no valid arena within {p.MaxRerolls} re-rolls from seed {seed}");
+            throw new InvalidOperationException(
+                $"ZoneBGenerator: no valid arena within {p.MaxRerolls} re-rolls from structure {structureSeed} / dressing {dressingSeed}");
         }
 
-        // --- Build ---------------------------------------------------------------------------------
+        // --- Seeding --------------------------------------------------------------------------------
 
-        static ZoneBLayout Build(int seed, ZoneBGenParams p, IReadOnlyList<double> entryXs)
+        /// <summary>
+        /// One independent RNG stream per section of the grammar. A single interleaved stream would
+        /// couple the sections: the barrier row consumes a different number of draws depending on how
+        /// its partition falls, which would shift the spread rows and the diagonals with it. Separate
+        /// streams are what makes "the skeleton is byte-identical across a milestone window" true rather
+        /// than merely intended.
+        /// </summary>
+        static Random Sub(int seed, int salt) => new Random(unchecked(seed * 486187739 + salt));
+
+        // --- Structure ------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Everything the dressing does not touch, plus the set of mouth columns this skeleton can
+        /// actually accept. The columns are worked out ONCE, here, by dressing a trial arena at each
+        /// candidate and running the full <see cref="Validate"/> contract over it — so a dressing roll
+        /// can never fail on a diagonal it happens to land behind.
+        /// </summary>
+        sealed class Skeleton
         {
-            var rng = new Random(seed);
-            var gates = new List<GateDef>();
-            var walls = new List<WallDef>();
+            public ZoneBGenParams P;
+            public int StructureSeed;
+            public double Row1Y, Row2Y, Row3Y, GateY;
+            public List<Span> BarrierSpans;
+            public List<Span> Row2Spans, Row3Spans;
+            /// <summary>Crack dividers then guide diagonals. The chute rails are dressing, not skeleton.</summary>
+            public List<WallDef> Walls;
+            public List<double> MouthColumns;
 
-            double row1Y = Range(rng, p.Row1YMin, p.Row1YMax);
-            double row2Y = Range(rng, p.Row2YMin, p.Row2YMax);
-            double row3Y = Range(rng, p.Row3YMin, p.Row3YMax);
-            double gateY = row1Y + Range(rng, p.GoldenGateDropMin, p.GoldenGateDropMax);
-
-            double mouthHalf = p.GoldenMouthWidth / 2;
-            double mouthX = PickMouthX(rng, p, entryXs);
-
-            // --- Row 1: the barrier, split either side of the mouth ---------------------------------
-            var cracks = new List<Span>();
-            BuildBarrierSide(rng, p, 0, mouthX - mouthHalf, row1Y, gates, cracks);
-            BuildBarrierSide(rng, p, mouthX + mouthHalf, Width, row1Y, gates, cracks);
-            foreach (var crack in cracks)
+            public ZoneBLayout Dress(int dressingSeed)
             {
-                walls.Add(WallDef.Line(crack.Mid, row1Y - 5, crack.Mid, row1Y + p.DividerDrop));
+                var rng = Sub(dressingSeed, 5);
+                double mouthX = MouthColumns[rng.Next(MouthColumns.Count)];
+                return Compose(mouthX, rng, dressingSeed);
             }
 
-            // --- The golden chute -------------------------------------------------------------------
-            var railL = WallDef.Line(mouthX - p.ChuteHalfWidth, row1Y - p.ChuteRise, mouthX - p.ChuteHalfWidth, gateY - 12);
-            var railR = WallDef.Line(mouthX + p.ChuteHalfWidth, row1Y - p.ChuteRise, mouthX + p.ChuteHalfWidth, gateY - 12);
-            railL.IsGolden = railR.IsGolden = true;
-            walls.Add(railL);
-            walls.Add(railR);
-
-            int goldenMult = rng.Next(p.GoldenMultiplierMin, p.GoldenMultiplierMax + 1);
-            var golden = GateDef.Static(mouthX, gateY, 0, p.GoldenGateLength, goldenMult);
-            golden.IsGolden = true;
-            int goldenIndex = gates.Count;
-            gates.Add(golden);
-
-            // --- Rows 2 and 3: the spread -------------------------------------------------------------
-            BuildSpreadRow(rng, p, row2Y, rng.Next(p.Row2GapsMin, p.Row2GapsMax + 1), 4, gates);
-            BuildSpreadRow(rng, p, row3Y, rng.Next(p.Row3GapsMin, p.Row3GapsMax + 1), 3, gates);
-
-            // --- Guide diagonals ----------------------------------------------------------------------
-            BuildDiagonals(rng, p, row1Y, row2Y, row3Y, mouthX, mouthHalf, golden, walls);
-
-            walls.AddRange(ZoneBLayouts.FunnelRamps());
-
-            return new ZoneBLayout
+            /// <summary>
+            /// Punch the mouth into the barrier, hang the chute and the gilded gate off it, and roll
+            /// every multiplier. Null when the mouth cannot be punched cleanly — it must sit wholly
+            /// inside one barrier gate, leaving a real gate on each side, or the barrier stops being a
+            /// barrier.
+            /// </summary>
+            public ZoneBLayout Compose(double mouthX, Random rng, int dressingSeed)
             {
-                Name = $"GEN-{seed}",
-                Seed = seed,
-                Gates = gates.ToArray(),
-                Walls = walls.ToArray(),
-                Collectors = new[] { ZoneBLayouts.BottomCollector() },
-                Golden = new GoldenPath
+                double half = P.GoldenMouthWidth / 2;
+                double mouthL = mouthX - half, mouthR = mouthX + half;
+                var gates = new List<GateDef>();
+                var walls = new List<WallDef>(Walls);
+
+                bool punched = false;
+                foreach (var span in BarrierSpans)
                 {
-                    MouthX = mouthX,
-                    MouthY = row1Y,
-                    MouthWidth = p.GoldenMouthWidth,
-                    GateY = gateY,
-                    GateIndex = goldenIndex,
-                    Multiplier = goldenMult,
-                },
+                    bool overlaps = mouthR > span.X0 + 1e-9 && mouthL < span.X1 - 1e-9;
+                    if (!overlaps) { gates.Add(BarrierGate(span, rng)); continue; }
+                    if (punched) return null;
+                    var left = new Span(span.X0, mouthL);
+                    var right = new Span(mouthR, span.X1);
+                    if (left.Len < P.MouthFlankMin || right.Len < P.MouthFlankMin) return null;
+                    gates.Add(BarrierGate(left, rng));
+                    gates.Add(BarrierGate(right, rng));
+                    punched = true;
+                }
+                if (!punched) return null; // the mouth fell in a crack: that crack would become passable
+
+                var railL = WallDef.Line(mouthX - P.ChuteHalfWidth, Row1Y - P.ChuteRise, mouthX - P.ChuteHalfWidth, GateY - 12);
+                var railR = WallDef.Line(mouthX + P.ChuteHalfWidth, Row1Y - P.ChuteRise, mouthX + P.ChuteHalfWidth, GateY - 12);
+                railL.IsGolden = railR.IsGolden = true;
+                walls.Add(railL);
+                walls.Add(railR);
+
+                int goldenMult = rng.Next(P.GoldenMultiplierMin, P.GoldenMultiplierMax + 1);
+                var golden = GateDef.Static(mouthX, GateY, 0, P.GoldenGateLength, goldenMult);
+                golden.IsGolden = true;
+                int goldenIndex = gates.Count;
+                gates.Add(golden);
+
+                foreach (var span in Row2Spans) gates.Add(SpreadGate(span, Row2Y, 4, rng));
+                foreach (var span in Row3Spans) gates.Add(SpreadGate(span, Row3Y, 3, rng));
+
+                walls.AddRange(ZoneBLayouts.FunnelRamps());
+
+                return new ZoneBLayout
+                {
+                    Name = $"GEN-{StructureSeed}/{dressingSeed}",
+                    Seed = StructureSeed,
+                    StructureSeed = StructureSeed,
+                    DressingSeed = dressingSeed,
+                    Gates = gates.ToArray(),
+                    Walls = walls.ToArray(),
+                    Collectors = new[] { ZoneBLayouts.BottomCollector() },
+                    Golden = new GoldenPath
+                    {
+                        MouthX = mouthX,
+                        MouthY = Row1Y,
+                        MouthWidth = P.GoldenMouthWidth,
+                        GateY = GateY,
+                        GateIndex = goldenIndex,
+                        Multiplier = goldenMult,
+                    },
+                };
+            }
+
+            /// <summary>
+            /// Can the mouth be cut at this column? It must land wholly inside one barrier gate and
+            /// leave a real gate on each side — a mouth straddling a crack would widen that crack into
+            /// a second way through, and the barrier's whole job is being the only one.
+            /// </summary>
+            public bool CanPunch(double mouthX)
+            {
+                double half = P.GoldenMouthWidth / 2;
+                foreach (var span in BarrierSpans)
+                {
+                    if (!(mouthX + half > span.X0 + 1e-9 && mouthX - half < span.X1 - 1e-9)) continue;
+                    return mouthX - half - span.X0 >= P.MouthFlankMin
+                        && span.X1 - (mouthX + half) >= P.MouthFlankMin;
+                }
+                return false;
+            }
+
+            GateDef BarrierGate(Span span, Random rng) =>
+                GateDef.Static(span.Mid, Row1Y, 0, span.Len, rng.NextDouble() < 0.65 ? 2 : 3);
+
+            static GateDef SpreadGate(Span span, double rowY, int maxMultiplier, Random rng)
+            {
+                double roll = rng.NextDouble();
+                int mult = roll < 0.45 ? 2 : roll < 0.8 ? 3 : 4;
+                return GateDef.Static(span.Mid, rowY, 0, span.Len, Math.Min(mult, maxMultiplier));
+            }
+        }
+
+        static Skeleton BuildSkeleton(int structureSeed, ZoneBGenParams p, IReadOnlyList<double> entryXs)
+        {
+            var candidates = CandidateColumns(p, entryXs, out int stride);
+            for (int attempt = 0; attempt < SkeletonAttempts; attempt++)
+            {
+                int s = unchecked(structureSeed * 31 + attempt);
+                var rowsRng = Sub(s, 1);
+                var barrierRng = Sub(s, 2);
+                var spreadRng = Sub(s, 3);
+                var diagRng = Sub(s, 4);
+
+                var sk = new Skeleton { P = p, StructureSeed = structureSeed };
+                sk.Row1Y = Range(rowsRng, p.Row1YMin, p.Row1YMax);
+                sk.Row2Y = Range(rowsRng, p.Row2YMin, p.Row2YMax);
+                sk.Row3Y = Range(rowsRng, p.Row3YMin, p.Row3YMax);
+                sk.GateY = sk.Row1Y + Range(rowsRng, p.GoldenGateDropMin, p.GoldenGateDropMax);
+
+                sk.BarrierSpans = new List<Span>();
+                var cracks = new List<Span>();
+                if (!BuildBarrierRow(barrierRng, p, sk.BarrierSpans, cracks)) continue;
+
+                sk.Walls = new List<WallDef>();
+                foreach (var crack in cracks)
+                    sk.Walls.Add(WallDef.Line(crack.Mid, sk.Row1Y - 5, crack.Mid, sk.Row1Y + p.DividerDrop));
+
+                int row2Gaps = spreadRng.Next(p.Row2GapsMin, p.Row2GapsMax + 1);
+                sk.Row2Spans = SpreadRow(spreadRng, p, row2Gaps);
+                int row3Gaps = spreadRng.Next(p.Row3GapsMin, p.Row3GapsMax + 1);
+                sk.Row3Spans = SpreadRow(spreadRng, p, row3Gaps);
+
+                var reserved = ReserveMouthColumns(sk, candidates, stride, diagRng);
+                if (reserved == null) continue;
+
+                BuildDiagonals(diagRng, p, sk, reserved);
+
+                var trialRng = Sub(s, 9);
+                sk.MouthColumns = new List<double>();
+                foreach (double x in reserved)
+                {
+                    var trial = sk.Compose(x, trialRng, 0);
+                    if (trial != null && Validate(trial, p, entryXs, out _)) sk.MouthColumns.Add(x);
+                }
+                if (sk.MouthColumns.Count >= MinMouthColumns) return sk;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Every mouth position worth trying, and the index stride that counts as "the next column
+        /// along". With entry columns supplied the mouth snaps EXACTLY onto one — the old ±4 px jitter
+        /// bought nothing a player could see and cost the aim its dead centre, so it is gone. Without
+        /// them (a future continuous aim) the band is sampled coarsely and the stride stands in for a
+        /// column's width.
+        /// </summary>
+        static List<double> CandidateColumns(ZoneBGenParams p, IReadOnlyList<double> entryXs, out int stride)
+        {
+            double minX = p.ChuteHalfWidth + p.GoldenGateLength / 2 + 4;
+            double maxX = Width - minX;
+            var list = new List<double>();
+            if (entryXs != null && entryXs.Count > 0)
+            {
+                foreach (double x in entryXs) if (x >= minX && x <= maxX) list.Add(x);
+                if (list.Count > 0) { stride = 1; return list; }
+            }
+            const double step = 8;
+            for (double x = minX; x <= maxX + 1e-9; x += step) list.Add(x);
+            stride = (int)Math.Ceiling(88 / step);
+            return list;
+        }
+
+        /// <summary>
+        /// The columns this skeleton will offer the mouth: a run of <see cref="MinMouthColumns"/>
+        /// NEIGHBOURING candidates the barrier can be punched at. Neighbouring on purpose — across a
+        /// milestone window the mouth should shuffle one sweep step at a time, a nudge the player
+        /// re-reads in a drop or two, rather than jumping the width of the board every level.
+        /// </summary>
+        static List<double> ReserveMouthColumns(Skeleton sk, IReadOnlyList<double> candidates, int stride, Random rng)
+        {
+            var starts = new List<int>();
+            int span = stride * (MinMouthColumns - 1);
+            for (int i = 0; i + span < candidates.Count; i++)
+            {
+                bool ok = true;
+                for (int k = 0; k < MinMouthColumns && ok; k++) ok = sk.CanPunch(candidates[i + k * stride]);
+                if (ok) starts.Add(i);
+            }
+            if (starts.Count == 0) return null;
+            int start = starts[rng.Next(starts.Count)];
+            var run = new List<double>();
+            for (int k = 0; k < MinMouthColumns; k++) run.Add(candidates[start + k * stride]);
+            return run;
+        }
+
+        /// <summary>
+        /// The barrier row as a solid shelf — gates butted against sub-ball-width cracks, laid across the
+        /// FULL width with no knowledge of the mouth. The mouth is punched in later by the dressing, which
+        /// is what keeps the cracks (and so the dividers, and so the diagonals that dodge them) skeletal.
+        /// </summary>
+        static bool BuildBarrierRow(Random rng, ZoneBGenParams p, List<Span> gates, List<Span> cracks)
+        {
+            // Two cracks leaves three wide gates, and punching the mouth into one of them yields the
+            // four-gate barrier the grammar wants. Three is occasionally drawn for a busier shelf, but
+            // the gates get tight enough that most such skeletons fail the mouth-column count and re-roll.
+            int gaps = rng.NextDouble() < 0.7 ? 2 : 3;
+            while (gaps > 0 && !Partition(rng, 0, Width, gaps, p.CrackMin, p.CrackMax, p.MinGateLen, gates, cracks))
+            {
+                gates.Clear();
+                cracks.Clear();
+                gaps--;
+            }
+            return gates.Count > 0;
+        }
+
+        /// <summary>A lower row: gates separated by gaps a ball can actually fall through.</summary>
+        static List<Span> SpreadRow(Random rng, ZoneBGenParams p, int gaps)
+        {
+            var spans = new List<Span>();
+            var gapSpans = new List<Span>();
+            while (gaps > 0 && !Partition(rng, 0, Width, gaps, p.GapMin, p.GapMax, p.MinGateLen, spans, gapSpans))
+            {
+                spans.Clear();
+                gapSpans.Clear();
+                gaps--;
+            }
+            if (spans.Count == 0) Partition(rng, 0, Width, Math.Max(1, gaps), p.GapMin, p.GapMax, p.MinGateLen, spans, gapSpans);
+            return spans;
+        }
+
+        /// <summary>
+        /// Guide rails in the two inter-row bands. Each band is inset far enough from the rows above and
+        /// below that a diagonal can never touch a gate, so what a candidate must dodge is every other
+        /// RAIL: a sloped rail passing close under a vertical divider makes a wedge no ball can escape.
+        ///
+        /// Blind to WHICH reserved column the mouth will use this level, but not to the reserved set: an
+        /// upper-band diagonal keeps clear of every column the dressing might pick, so the chute can drop
+        /// at any of them without the skeleton moving. Dodging one known mouth instead — what the
+        /// single-seed generator did — would make the diagonals shift every time the mouth did.
+        /// </summary>
+        static void BuildDiagonals(Random rng, ZoneBGenParams p, Skeleton sk, List<double> reserved)
+        {
+            int count = rng.Next(p.DiagonalsMin, p.DiagonalsMax + 1);
+            var bands = new[]
+            {
+                (top: sk.Row1Y + 45, bottom: sk.Row2Y - 25),
+                (top: sk.Row2Y + 45, bottom: sk.Row3Y - 25),
             };
+            // Widest the golden path can be at any reserved column: the mouth plus its chute rails, or
+            // the gilded gate's ends, whichever reaches further.
+            double corridor = Math.Max(p.GoldenMouthWidth / 2 + p.ChuteHalfWidth + 6, p.GoldenGateLength / 2 + 14);
+
+            for (int i = 0; i < count; i++)
+            {
+                var band = bands[i % 2];
+                if (band.bottom - band.top < 30) continue;
+                // Most rejections are the clearance rule in the upper band, where the dividers crowd
+                // things; keep trying rather than silently shipping a bare arena.
+                for (int attempt = 0; attempt < 40; attempt++)
+                {
+                    double y1 = Range(rng, band.top, band.top + (band.bottom - band.top) * 0.35);
+                    double y2 = Range(rng, band.bottom - (band.bottom - band.top) * 0.35, band.bottom);
+                    double run = Range(rng, p.DiagonalRunMin, p.DiagonalRunMax) * (rng.NextDouble() < 0.5 ? -1 : 1);
+                    double edge = p.GuideClearance;
+                    double x1 = Range(rng, edge, Width - edge);
+                    double x2 = Clamp(x1 + run, edge, Width - edge);
+                    if (Math.Abs(x2 - x1) < p.DiagonalRunMin * 0.6) continue;
+                    if (i % 2 == 0)
+                    {
+                        double lo = Math.Min(x1, x2), hi = Math.Max(x1, x2);
+                        bool fouls = false;
+                        foreach (double c in reserved) if (hi > c - corridor && lo < c + corridor) { fouls = true; break; }
+                        if (fouls) continue;
+                    }
+                    var candidate = WallDef.Line(x1, y1, x2, y2);
+                    candidate.IsGuide = true;
+                    if (!GuideIsClear(candidate, sk.Walls, p)) continue;
+                    sk.Walls.Add(candidate);
+                    break;
+                }
+            }
         }
 
         /// <summary>
@@ -172,6 +462,7 @@ namespace RichCoast.Core
         /// <summary>
         /// How far the mouth may sit off an entry column and still swallow a ball dropped straight down
         /// it. Zero or less means the aperture cannot admit a ball at all — the arena is unbuildable.
+        /// The generator now snaps the mouth dead onto a column, so this is headroom rather than budget.
         /// </summary>
         public static double MouthJitterSlack(ZoneBGenParams p)
         {
@@ -179,118 +470,6 @@ namespace RichCoast.Core
             return ApertureHalfWidth(p) - BallRadius - p.ChuteClearance;
         }
 
-        /// <summary>
-        /// The mouth centre. With entry columns supplied it snaps to an interior one, jittered only as
-        /// far as <see cref="MouthJitterSlack"/> allows — so a ball dropped down that column always
-        /// falls clean through the mouth and between the chute rails.
-        /// </summary>
-        static double PickMouthX(Random rng, ZoneBGenParams p, IReadOnlyList<double> entryXs)
-        {
-            double slack = Math.Max(0, MouthJitterSlack(p));
-            double minX = p.ChuteHalfWidth + p.GoldenGateLength / 2 + 4;
-            double maxX = Width - minX;
-            if (entryXs == null || entryXs.Count == 0) return Range(rng, minX, maxX);
-
-            var allowed = new List<double>();
-            foreach (double x in entryXs) if (x >= minX && x <= maxX) allowed.Add(x);
-            if (allowed.Count == 0) return Range(rng, minX, maxX);
-            double chosen = allowed[rng.Next(allowed.Count)];
-            return Clamp(chosen + Range(rng, -slack, slack), minX, maxX);
-        }
-
-        /// <summary>One side of the barrier row: gates butted against sub-ball-width cracks.</summary>
-        static void BuildBarrierSide(Random rng, ZoneBGenParams p, double x0, double x1, double rowY, List<GateDef> gates, List<Span> cracks)
-        {
-            double width = x1 - x0;
-            if (width < p.MinGateLen) return;
-
-            int n = (int)Math.Round(width / 130.0);
-            n = (int)Clamp(n, 0, 2);
-            while (n > 0 && width < (n + 1) * p.MinGateLen + n * p.CrackMax) n--;
-
-            var spans = new List<Span>();
-            var gapSpans = new List<Span>();
-            if (!Partition(rng, x0, x1, n, p.CrackMin, p.CrackMax, p.MinGateLen, spans, gapSpans))
-            {
-                spans.Clear();
-                gapSpans.Clear();
-                Partition(rng, x0, x1, 0, p.CrackMin, p.CrackMax, p.MinGateLen, spans, gapSpans);
-            }
-            foreach (var span in spans) gates.Add(GateDef.Static(span.Mid, rowY, 0, span.Len, rng.NextDouble() < 0.65 ? 2 : 3));
-            cracks.AddRange(gapSpans);
-        }
-
-        /// <summary>A lower row: gates separated by gaps a ball can actually fall through.</summary>
-        static void BuildSpreadRow(Random rng, ZoneBGenParams p, double rowY, int gaps, int maxMultiplier, List<GateDef> gates)
-        {
-            var spans = new List<Span>();
-            var gapSpans = new List<Span>();
-            while (gaps > 0 && !Partition(rng, 0, Width, gaps, p.GapMin, p.GapMax, p.MinGateLen, spans, gapSpans))
-            {
-                spans.Clear();
-                gapSpans.Clear();
-                gaps--;
-            }
-            if (spans.Count == 0) Partition(rng, 0, Width, Math.Max(1, gaps), p.GapMin, p.GapMax, p.MinGateLen, spans, gapSpans);
-            foreach (var span in spans)
-            {
-                double roll = rng.NextDouble();
-                int mult = roll < 0.45 ? 2 : roll < 0.8 ? 3 : 4;
-                gates.Add(GateDef.Static(span.Mid, rowY, 0, span.Len, Math.Min(mult, maxMultiplier)));
-            }
-        }
-
-        /// <summary>
-        /// Guide rails in the two inter-row bands. Each band is inset far enough from the rows above and
-        /// below that a diagonal can never touch a gate, so what a candidate must dodge is the golden
-        /// chute, the gilded gate, and — critically — every other RAIL: a sloped rail passing close
-        /// under a vertical divider makes a wedge no ball can escape.
-        /// </summary>
-        static void BuildDiagonals(Random rng, ZoneBGenParams p, double row1Y, double row2Y, double row3Y,
-            double mouthX, double mouthHalf, GateDef golden, List<WallDef> walls)
-        {
-            int count = rng.Next(p.DiagonalsMin, p.DiagonalsMax + 1);
-            var bands = new[]
-            {
-                (top: row1Y + 45, bottom: row2Y - 25, upper: true),
-                (top: row2Y + 45, bottom: row3Y - 25, upper: false),
-            };
-            double channelL = mouthX - mouthHalf - p.ChuteHalfWidth - 6;
-            double channelR = mouthX + mouthHalf + p.ChuteHalfWidth + 6;
-            double goldenL = golden.Cx - golden.Length / 2 - 14, goldenR = golden.Cx + golden.Length / 2 + 14;
-
-            for (int i = 0; i < count; i++)
-            {
-                var band = bands[i % 2];
-                if (band.bottom - band.top < 30) continue;
-                // Most rejections are the clearance rule in the upper band, where the dividers and the
-                // chute crowd things; keep trying rather than silently shipping a bare arena.
-                for (int attempt = 0; attempt < 40; attempt++)
-                {
-                    double y1 = Range(rng, band.top, band.top + (band.bottom - band.top) * 0.35);
-                    double y2 = Range(rng, band.bottom - (band.bottom - band.top) * 0.35, band.bottom);
-                    double run = Range(rng, p.DiagonalRunMin, p.DiagonalRunMax) * (rng.NextDouble() < 0.5 ? -1 : 1);
-                    double edge = p.GuideClearance;
-                    double x1 = Range(rng, edge, Width - edge);
-                    double x2 = Clamp(x1 + run, edge, Width - edge);
-                    if (Math.Abs(x2 - x1) < p.DiagonalRunMin * 0.6) continue;
-                    if (band.upper)
-                    {
-                        // Never pinch the chute, and never sit close enough to the gilded gate to
-                        // deflect a copy straight back into it.
-                        double lo = Math.Min(x1, x2), hi = Math.Max(x1, x2);
-                        if (hi > channelL && lo < channelR) continue;
-                        bool spansGoldenY = Math.Min(y1, y2) <= golden.Cy + 14 && Math.Max(y1, y2) >= golden.Cy - 14;
-                        if (spansGoldenY && hi > goldenL && lo < goldenR) continue;
-                    }
-                    var candidate = WallDef.Line(x1, y1, x2, y2);
-                    candidate.IsGuide = true;
-                    if (!GuideIsClear(candidate, walls, p)) continue;
-                    walls.Add(candidate);
-                    break;
-                }
-            }
-        }
 
         // --- Wedge avoidance -------------------------------------------------------------------------
 

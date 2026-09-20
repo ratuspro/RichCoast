@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using PrimeTween;
 using RichCoast.Core;
 using RichCoast.Game;
@@ -22,6 +24,15 @@ namespace RichCoast.UI
         const float MilestoneW = 313f, MilestoneH = 56f;
         const float RibbonW = 380f, RibbonH = 54f, RibbonGap = 14f, RibbonSlide = 26f;
         const float DotSize = 24f;
+        // Bottom-right, thumb-reachable, and clear of the top strip the aim drag owns.
+        //
+        // The vertical inset is NOT taste. In the A framing the bottom ~157 design px of the screen is
+        // Zone B's barrier band and the golden chute that hangs above it, and phase A exists partly to
+        // telegraph where that chute is — a button parked in the corner covers it whenever the mouth
+        // rolls onto a right-hand column. 460 ref px (166 design px) puts the button in the empty entry
+        // band between Zone C's door and the barrier instead, which is blank in every arena.
+        const float TiltW = 188f, TiltH = 112f, TiltInset = 40f, TiltLift = 460f;
+        const float PipSize = 22f, PipGap = 14f, PipRise = 26f;
         const float RefPxPerDesignPx = 1080f / 390f;
 
         GameFeelSO feel;
@@ -35,8 +46,16 @@ namespace RichCoast.UI
         CanvasGroup ribbonGroup;
         TextMeshProUGUI ribbonLabel;
         float ribbonBaseY;
+        Button tiltButton;
+        CanvasGroup tiltGroup;
+        Image tiltFill;
+        readonly List<Image> tiltPips = new List<Image>();
+        Func<bool> canTilt;
+        /// <summary>Raised on a live press; the composition root points it at the run's Zone A.</summary>
+        Action OnTiltPressed;
+        Tween tiltPop;
         double shownTotal;
-        Tween countPop, scorePop, countUp, barFlash, milestonePop, ribbonFade, ribbonSlide;
+        Tween countPop, scorePop, countUp, barFlash, milestonePop, ribbonFade, ribbonSlide, tiltFade;
 
         public RectTransform ScoreAnchor => (RectTransform)scoreText.transform;
         public RectTransform CountAnchor => (RectTransform)countText.transform;
@@ -50,6 +69,7 @@ namespace RichCoast.UI
             hud.overlay = (RectTransform)overlayCanvas.transform;
             hud.BuildBar(safe);
             hud.BuildRibbon(safe);
+            hud.BuildTilt(safe);
             hud.Subscribe();
             return hud;
         }
@@ -120,6 +140,39 @@ namespace RichCoast.UI
         /// new word when the pan lands. Sits in the 78 design px between the ceiling and the spawn row,
         /// clear of the aim ghost.
         /// </summary>
+        /// <summary>
+        /// The TILT button and its three pips. A panic button, so there is no confirm step — what keeps
+        /// a mis-tap from being ruinous is the position (far from the aim strip) and the cooldown, not a
+        /// dialog. Greys out when the charges are gone or the board cannot be shaken.
+        /// </summary>
+        void BuildTilt(RectTransform safe)
+        {
+            tiltButton = UiKit.Button(safe, "Tilt", "TILT", Theme.PineDark, Theme.BrassBright, Theme.Cream, 42f);
+            tiltFill = tiltButton.GetComponent<Image>();
+            UiKit.Themed(tiltFill, ThemeKey.PineDark);
+            var rt = (RectTransform)tiltButton.transform;
+            UiKit.Place(rt, new Vector2(1f, 0f), new Vector2(TiltW, TiltH), new Vector2(-TiltInset, TiltLift));
+            tiltGroup = tiltButton.gameObject.AddComponent<CanvasGroup>();
+            tiltButton.onClick.AddListener(() => { if (canTilt == null || canTilt()) OnTiltPressed?.Invoke(); });
+        }
+
+        /// <summary>Lay out the pips for a run's allowance and light them all.</summary>
+        void BuildPips(RectTransform anchor, int charges)
+        {
+            foreach (var pip in tiltPips) if (pip != null) Destroy(pip.gameObject);
+            tiltPips.Clear();
+            float span = charges * PipSize + (charges - 1) * PipGap;
+            for (int i = 0; i < charges; i++)
+            {
+                var pip = UiKit.Image(anchor, $"TiltPip{i}", Theme.BrassBright);
+                UiKit.Themed(pip, ThemeKey.BrassBright);
+                float x = -span / 2f + PipSize / 2f + i * (PipSize + PipGap);
+                UiKit.Place((RectTransform)pip.transform, new Vector2(0.5f, 1f),
+                    new Vector2(PipSize, PipSize), new Vector2(x, PipRise));
+                tiltPips.Add(pip);
+            }
+        }
+
         void BuildRibbon(RectTransform safe)
         {
             var pill = UiKit.Image(safe, "PhaseRibbon", Theme.Brass);
@@ -152,6 +205,7 @@ namespace RichCoast.UI
             };
             GameEvents.ScoreHarvested += FlyHarvest;
             GameEvents.PhaseChanged += OnPhaseChanged;
+            GameEvents.TiltUsed += e => SetTiltsLeft(e.Remaining);
         }
 
         public void SetNextTier(int tier)
@@ -178,7 +232,7 @@ namespace RichCoast.UI
         void FlyBufferSlot(int index)
         {
             float margin = Screen.width * 0.06f;
-            var start = new Vector2(Random.Range(margin, Screen.width - margin), Screen.safeArea.y + 5f);
+            var start = new Vector2(UnityEngine.Random.Range(margin, Screen.width - margin), Screen.safeArea.y + 5f);
             float bow = feel.bufferBowJitter * RefPxPerDesignPx;
             ScoreFlyer.LaunchDot(overlay, "BufferDot", Theme.BrassBright, DotSize, start, CountAnchor, feel.bufferFlightMs / 1000f, bow, null);
         }
@@ -229,6 +283,53 @@ namespace RichCoast.UI
         }
 
         /// <summary>Pan starting (AToB / BToA): the ribbon lifts away. Pan landed (A / B): it drops back in with the new word.</summary>
+        /// <summary>
+        /// Wire the button to the live run. Called by the composition root on every run start, because
+        /// the HUD outlives a run but <c>ZoneASystem</c> does not.
+        /// </summary>
+        public void BindTilt(Func<bool> can, Action onPressed, int charges, int remaining)
+        {
+            canTilt = can;
+            OnTiltPressed = onPressed;
+            BuildPips((RectTransform)tiltButton.transform, charges);
+            SetTiltsLeft(remaining);
+        }
+
+        /// <summary>Spent pips go dark rather than vanishing, so the allowance still reads as three.</summary>
+        void SetTiltsLeft(int remaining)
+        {
+            for (int i = 0; i < tiltPips.Count; i++)
+            {
+                if (tiltPips[i] == null) continue;
+                bool lit = i < remaining;
+                var themed = tiltPips[i].GetComponent<Game.Themed>();
+                if (themed != null) themed.enabled = lit;
+                tiltPips[i].color = lit ? Theme.BrassBright : Theme.PineShadow;
+            }
+            tiltPop.Stop();
+            var rt = (RectTransform)tiltButton.transform;
+            rt.localScale = Vector3.one;
+            tiltPop = Tween.PunchScale(rt, Vector3.one * 0.12f, 0.22f, 4);
+        }
+
+        /// <summary>
+        /// The tilt is a phase-A affordance: the board it shakes is off screen anywhere else, and in the
+        /// B framing the button lands on top of Zone B's score bar. So it leaves with the ribbon.
+        /// </summary>
+        void FadeTilt(float alpha, float seconds)
+        {
+            if (tiltGroup == null) return;
+            tiltFade.Stop();
+            tiltFade = Tween.Alpha(tiltGroup, alpha, seconds);
+        }
+
+        void Update()
+        {
+            if (tiltButton == null) return;
+            bool live = canTilt != null && canTilt();
+            if (tiltButton.interactable != live) tiltButton.interactable = live;
+        }
+
         void OnPhaseChanged(GamePhase phase)
         {
             float seconds = feel.ribbonMs / 1000f;
@@ -242,10 +343,12 @@ namespace RichCoast.UI
                     ribbon.anchoredPosition = new Vector2(0f, ribbonBaseY + RibbonSlide);
                     ribbonFade = Tween.Alpha(ribbonGroup, 1f, seconds);
                     ribbonSlide = Tween.UIAnchoredPositionY(ribbon, ribbonBaseY, seconds, Ease.OutBack);
+                    FadeTilt(phase == GamePhase.A ? 1f : 0f, seconds);
                     break;
                 default:
                     ribbonFade = Tween.Alpha(ribbonGroup, 0f, seconds);
                     ribbonSlide = Tween.UIAnchoredPositionY(ribbon, ribbonBaseY + RibbonSlide, seconds, Ease.InSine);
+                    FadeTilt(0f, seconds);
                     break;
             }
         }

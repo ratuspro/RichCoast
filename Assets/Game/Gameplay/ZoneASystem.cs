@@ -72,8 +72,25 @@ namespace RichCoast.Game
         // Stalemate grace.
         float stalemateMs = -1f;
 
+        /// <summary>Cabinet tilts in hand. Granted once at run start and never refilled.</summary>
+        int tiltsLeft;
+        /// <summary>Lurches still to fire in the tilt currently playing out.</summary>
+        int tiltPulsesLeft;
+        float tiltPulseMs;
+        float tiltCooldownMs;
+
         public int Level => level;
         public int BallBuffer => ballBuffer;
+        public int TiltsLeft => tiltsLeft;
+        public int TiltCharges => feel.tiltCharges;
+
+        /// <summary>
+        /// Can the cabinet be shaken right now? Composed exactly like <c>ZoneCSystem.IsArmed</c>: phase A
+        /// only (the board is off screen otherwise), never mid-zoom or under a modal, never with the
+        /// board empty, and a short lockout so one fumbled double-tap cannot spend two of three charges.
+        /// </summary>
+        public bool CanTilt => !over && phase == GamePhase.A && !milestoneZoomActive && !modalOpen
+            && tiltsLeft > 0 && tiltCooldownMs <= 0f && board.BallCount > 0;
         public bool IsOver => over;
         public double Score => score;
         public bool IsMilestoneZoomActive => milestoneZoomActive;
@@ -123,6 +140,7 @@ namespace RichCoast.Game
             ApplyStage();
             aim.RefreshQueue();
             ballBuffer = ProgressionCurve.BufferForLevel(level);
+            tiltsLeft = feel.tiltCharges;
 
             board.GameOver += () => HandleGameOver(GameOverCause.DeathLine);
             board.Emptied += CheckLoss;
@@ -161,6 +179,7 @@ namespace RichCoast.Game
             AdvanceDepletionGate(deltaMs);
             AdvanceRefill(deltaMs);
             AdvanceStalemate(deltaMs);
+            AdvanceTilt(deltaMs);
             // The door-candidate glow shows while the buffer is spent — the "out of balls" window that
             // opens as the last drop settles, rides the pan, and covers the whole B phase. Not during a
             // milestone zoom: the door is locked then and the board is mid-drain.
@@ -169,6 +188,51 @@ namespace RichCoast.Game
 
         /// <summary>Debug/test hook: drop a specific tier at a world x, bypassing input (still spends the buffer).</summary>
         public void DebugDrop(float x, int tier) => OnDrop(x, tier);
+
+        /// <summary>
+        /// Restore a run's remaining tilts. A negative count means a save written before tilts existed:
+        /// grant the full allowance rather than reading a missing field as "all three already spent".
+        /// </summary>
+        public void RestoreTilts(int restored) =>
+            tiltsLeft = restored < 0 ? feel.tiltCharges : Math.Min(restored, feel.tiltCharges);
+
+        /// <summary>
+        /// Shake the cabinet. Spends one of the run's three charges, then plays a short lurch train that
+        /// slides every ball sideways so orphans can find partners.
+        /// <para>This is a GAMBLE, and deliberately so: the lurch has real upward loft, and nothing here
+        /// special-cases the death line. A tilt on a half-empty board is free; a tilt on a crowded one
+        /// can leave a ball perched above the line, and <see cref="ScanOverflow"/> — which needs a full
+        /// second of rest up there — decides the rest. The danger is emergent, not scripted.</para>
+        /// </summary>
+        public bool Tilt()
+        {
+            if (!CanTilt) return false;
+            tiltsLeft -= 1;
+            tiltCooldownMs = feel.tiltCooldownMs;
+            tiltPulsesLeft = Math.Max(1, feel.tiltPulses);
+            tiltPulseMs = 0f; // the first lurch lands this frame, so the button feels connected
+            GameEvents.RaiseTiltUsed(new TiltEvent(tiltsLeft, board.BallCount));
+            Sfx.Instance?.Tilt();
+            Haptics.Pulse(feel.tiltHapticMs, feel.tiltHapticAmp);
+            return true;
+        }
+
+        /// <summary>The lurch train, spread evenly over <c>feel.tiltMs</c>.</summary>
+        void AdvanceTilt(float deltaMs)
+        {
+            if (tiltCooldownMs > 0f) tiltCooldownMs -= deltaMs;
+            if (tiltPulsesLeft <= 0) return;
+            tiltPulseMs -= deltaMs;
+            if (tiltPulseMs > 0f) return;
+
+            int pulses = Math.Max(1, feel.tiltPulses);
+            int index = pulses - tiltPulsesLeft;
+            board.ApplyTiltPulse(p => TiltMath.Kick(index, pulses, p.x, p.y,
+                feel.tiltKickX, feel.tiltRock, feel.tiltKickY));
+            if (index == 1) Haptics.Pulse(feel.tiltHapticMs, feel.tiltHapticAmp);
+            tiltPulsesLeft -= 1;
+            tiltPulseMs = feel.tiltMs / pulses;
+        }
 
         void OnDrop(float x, int tier)
         {

@@ -52,6 +52,7 @@ namespace RichCoast.Game
             GameEvents.GoldenGateHit += OnGoldenGateHit;
             GameEvents.ProgressionChanged += OnProgressionChanged;
             GameEvents.DoorTapped += OnDoorTapped;
+            GameEvents.TiltUsed += OnTiltUsed;
             GameEvents.GameOver += OnGameOver;
         }
 
@@ -63,6 +64,7 @@ namespace RichCoast.Game
             GameEvents.GoldenGateHit -= OnGoldenGateHit;
             GameEvents.ProgressionChanged -= OnProgressionChanged;
             GameEvents.DoorTapped -= OnDoorTapped;
+            GameEvents.TiltUsed -= OnTiltUsed;
             GameEvents.GameOver -= OnGameOver;
             telemetry.Flush();
         }
@@ -90,6 +92,7 @@ namespace RichCoast.Game
         void OnBallDropped(BallDroppedEvent _) => telemetry.RecordDrop();
         void OnGoldenGateHit(int multiplier) => telemetry.RecordGoldenHit(multiplier);
         void OnDoorTapped(DoorTapEvent e) => telemetry.RecordDoorTap(e.Grabbed, e.SweepIndex, e.DropX);
+        void OnTiltUsed(TiltEvent e) => telemetry.RecordTilt(e.Remaining, e.BallsOnBoard);
         void OnGameOver(GameOverEvent e) => telemetry.EndRun(e.FinalScore, e.Cause);
 
         void OnProgressionChanged(ProgressionChangedEvent e)

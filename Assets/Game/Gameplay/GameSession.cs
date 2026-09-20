@@ -64,6 +64,10 @@ namespace RichCoast.Game
             ZoneC = new ZoneCSystem(owner, Board, geometry, feel);
             Phases = new PhaseDirector(rig, feel);
             Themes = new ThemeDirector(curve, feel);
+
+            // The camera answers a tilt, but Zone A must not know a camera exists — so the shake hangs
+            // off the seam here, next to the other composition wiring.
+            GameEvents.TiltUsed += _ => rig.Shake(feel.tiltCameraShakePx, feel.tiltMs);
         }
 
         /// <summary>
@@ -85,7 +89,9 @@ namespace RichCoast.Game
                                   b.tier);
                 // Zone B owns the lifetime total and re-announces it, which is what re-syncs Zone A's
                 // mirror — so this must come after ZoneA.Restore, not before.
-                ZoneB.Restore(restore.score, restore.barFilled, restore.barTarget);
+                ZoneB.Restore(restore.score, restore.barFilled, restore.barTarget,
+                              restore.zbStructureSeed, restore.zbDressingSeed);
+                ZoneA.RestoreTilts(restore.tiltsLeft);
             }
 
             ZoneA.Start();
@@ -121,7 +127,7 @@ namespace RichCoast.Game
 
         /// <summary>
         /// The durable half of the run, in design px — exactly what <see cref="Begin"/> needs and
-        /// nothing more. No velocities, no phase, no Zone B arena seed.
+        /// nothing more. No velocities, no phase.
         /// </summary>
         public RunSnapshot Capture()
         {
@@ -136,6 +142,9 @@ namespace RichCoast.Game
                 nextTier = queue.NextTier,
                 barFilled = ZoneB.BarFilled,
                 barTarget = ZoneB.BarTarget,
+                zbStructureSeed = ZoneB.StructureSeed,
+                zbDressingSeed = ZoneB.DressingSeed,
+                tiltsLeft = ZoneA.TiltsLeft,
             };
             foreach (var ball in Board.Balls)
                 snap.board.Add(new BallSpawn

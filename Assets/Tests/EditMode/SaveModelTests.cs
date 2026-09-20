@@ -147,5 +147,32 @@ namespace RichCoast.Tests.EditMode
             var settings = new Settings { analyticsConsent = 99 };
             Assert.AreEqual(ConsentState.Unasked, settings.Consent);
         }
+
+        [Test]
+        public void TheArenaSeedsAndTiltsSurviveARoundTrip()
+        {
+            var save = new SaveData();
+            save.SetRun(new RunSnapshot { zbStructureSeed = -991234, zbDressingSeed = 4242, tiltsLeft = 1 });
+
+            var round = JsonUtility.FromJson<SaveData>(JsonUtility.ToJson(save));
+
+            Assert.AreEqual(-991234, round.run.zbStructureSeed);
+            Assert.AreEqual(4242, round.run.zbDressingSeed);
+            Assert.AreEqual(1, round.run.tiltsLeft);
+        }
+
+        [Test]
+        public void ARunWrittenBeforeArenasAndTiltsExistedAsksForFreshOnes()
+        {
+            // Both fields absent, exactly as an older save has it. Zero seeds mean "roll a fresh
+            // arena"; a negative tilt count means "grant the full allowance" — reading the missing
+            // field as zero would silently hand the player a run with no rescues left.
+            var round = JsonUtility.FromJson<SaveData>(
+                "{\"schemaVersion\":1,\"hasRun\":true,\"run\":{\"level\":7,\"ballBuffer\":9}}");
+
+            Assert.AreEqual(0, round.run.zbStructureSeed);
+            Assert.AreEqual(0, round.run.zbDressingSeed);
+            Assert.Less(round.run.tiltsLeft, 0, "a missing tilt count must not read as 'all spent'");
+        }
     }
 }

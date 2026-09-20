@@ -33,8 +33,9 @@ namespace RichCoast.Core
 
     /// <summary>
     /// The DURABLE half of a run — everything needed to rebuild it, and nothing tween-bound.
-    /// Deliberately excludes velocities, the phase and Zone B's arena seed: the arena reshuffles on
-    /// every drain, and balls are only ever captured at rest, so both would be noise.
+    /// Deliberately excludes velocities and the phase: balls are only ever captured at rest, so both
+    /// would be noise. Zone B's two arena seeds ARE stored — the arena now lasts a whole level, and a
+    /// player who learned where the golden mouth is should still find it there after a kill.
     /// <para>The money fields are lowercase PROPERTIES over "…Text" string fields (see
     /// <see cref="SaveNum"/>); JsonUtility serialises the fields, callers use the properties.</para>
     /// </summary>
@@ -46,6 +47,19 @@ namespace RichCoast.Core
         public float arenaScale = 1f;
         public int currentTier = 1;
         public int nextTier = 1;
+
+        /// <summary>
+        /// Zone B's arena. Zero/zero means a save written before the arena persisted, so roll a fresh
+        /// one — additive ints need no schema bump, and losing one arena is a shrug.
+        /// </summary>
+        public int zbStructureSeed;
+        public int zbDressingSeed;
+
+        /// <summary>
+        /// Cabinet tilts left this run. Minus one means a save written before tilts existed: grant the
+        /// full allowance rather than reading a missing field as "all spent".
+        /// </summary>
+        public int tiltsLeft = -1;
         public List<BallSpawn> board = new List<BallSpawn>();
 
         public string scoreText = "0";

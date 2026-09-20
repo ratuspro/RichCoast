@@ -222,6 +222,25 @@ namespace RichCoast.Game
             if (!merging && balls.Count == 0) Emptied?.Invoke();
         }
 
+        /// <summary>
+        /// One lurch of a cabinet tilt. The delta is looked up PER BALL from its position, because a
+        /// uniform delta is a rigid translation — the board would slide and every ball would keep its
+        /// neighbours, which is the one thing a rescue cannot do (see <see cref="Core.TiltMath"/>).
+        /// Sleeping bodies are woken first, or the shake would pass the settled balls by, and those are
+        /// precisely the ones that need moving.
+        /// </summary>
+        public void ApplyTiltPulse(Func<Vector2, Vec2> kickAt)
+        {
+            foreach (var ball in balls)
+            {
+                if (!ball.Body.simulated) continue;
+                var p = ball.Position;
+                var dv = kickAt(p);
+                ball.Body.WakeUp();
+                ball.Body.linearVelocity += new Vector2((float)dv.X, (float)dv.Y);
+            }
+        }
+
         /// <summary>Push nearby balls outward from a merge point (additive velocity kick + a scale punch).</summary>
         void ApplyBlast(Vector2 origin, Ball exclude)
         {

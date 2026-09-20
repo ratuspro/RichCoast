@@ -84,6 +84,22 @@ namespace RichCoast.Core
         }
 
         /// <summary>
+        /// A cabinet tilt. Worth its own event because it is the only move in the game the player can
+        /// run out of: the funnel of interest is how many runs spend all three, how crowded the board is
+        /// when they do, and — read against <c>run_end</c>'''s cause — how often a tilt is what killed them.
+        /// </summary>
+        public void RecordTilt(int remaining, int ballsOnBoard)
+        {
+            // Deliberately no run-total counter: run_end already carries the six params the payload
+            // allows, and "remaining == 0" on the last tilt_used says the same thing.
+            if (!inRun) return;
+            Emit(new AnalyticsEvent("tilt_used")
+                .With("remaining", remaining)
+                .With("balls_on_board", ballsOnBoard)
+                .With("level", level));
+        }
+
+        /// <summary>
         /// Fed from <c>ProgressionChanged</c>, which also fires on restore and on re-emit — so only a
         /// strict advance counts, and the per-level clock restarts rather than reporting the run total.
         /// </summary>

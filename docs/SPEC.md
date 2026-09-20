@@ -31,6 +31,22 @@ ends on overflow or on a full stalemate (see Failure conditions).
 - **Physics:** gravity-driven; balls rest on each other and on the floor. Physics feel is
   normalized across arena scale changes (see Arena Growth) so drops, shoves, and settling
   look identical at every milestone.
+- **Tilt (the cabinet shake):** three times per run — never replenished — the player may shake the
+  whole machine. Every ball on the board is thrown by a short train of alternating lurches, modelled
+  as the cabinet rocking about the funnel apex, so balls high in the pile move further than ones
+  nestled in the V and the two flanks rise and fall against each other. It exists for one failure:
+  an **orphan lock**, a board holding a few same-window balls with no merge partners left, each
+  worth
+  a fraction of the level's bar. Shaking re-deals the pile so orphans can meet.
+  - **It is a gamble.** Each lurch throws the board upward hard enough to clear a small ball's
+    diameter — the only way to pop a ball out of the pocket its neighbours make — and nothing
+    exempts
+    the death line. A tilt on a half-empty board is free; a tilt on a crowded one can strand a ball
+    above the line. There is no confirm step: a panic button that asks twice is not a panic button.
+  - **It cannot do everything.** What it guarantees is a re-dealt board, not a merge. A small ball
+    pinned at the bottom of the funnel V by two larger ones is a stable arrangement that re-forms
+    after any shake.
+  - Available only during the drop phase, and locked during a milestone zoom or under a dialog.
 - **Failure conditions** (either ends the run):
   - **Overflow** — a ball rests above the death line for about a second. A red warning line
     appears once a slow ball is within a band just below the boundary, before it's actually
@@ -116,9 +132,22 @@ walls guide trajectories; a collector captures balls and cashes them out as scor
 
 ### Layout
 
-The playfield is **generated from a seed** and **re-rolled every time Zone B drains empty**, so
-no two drops play the same board. The grammar is a three-row shelf cascade funnelling into the
-one fixed bottom collector via two fixed funnel-ramp walls:
+The playfield is **generated from two seeds** on a **two-speed cadence**, so the arena is a room
+the player learns rather than a new board every tap:
+
+- **Nothing changes per drop.** The board a player is reading is the board they keep.
+- **Per level** (when the score bar cashes in) the arena is *re-dressed*: the golden mouth moves to
+  a
+  neighbouring sweep column and every gate multiplier re-rolls. The aim shifts by one step, which is
+  a nudge to re-read rather than a fresh lottery.
+- **Per milestone** (every 20 levels) the whole *skeleton* re-rolls — row depths, gates, cracks,
+  guide
+  diagonals. This rides the arena zoom and palette cross-fade that already mark a new chapter, so
+  the
+  biggest visual change lands on a beat the player already reads as "the game changed".
+
+The grammar is a three-row shelf cascade funnelling into the one fixed bottom collector via two
+fixed funnel-ramp walls:
 
 - **Row 1 — the barrier** (y ≈ 160–185). Three to five gates separated by cracks 10–16 px wide:
   narrower than a 20 px ball, so an ordinary drop ALWAYS hits a gate and splits. A short vertical
@@ -141,8 +170,12 @@ would run into a side wall). Two brass rails flank it and form a **chute** down 
 
 - **Threading the mouth is a timing skill, and it pays off deterministically.** A ball dropped
   down the right column always clears the mouth and the rails, and always reaches the gilded
-  gate. The aperture is sized from the ball diameter plus a clearance margin, so the mouth's
-  small per-arena jitter can never pinch a well-aimed drop.
+  gate. The mouth sits dead centre on its column — the aperture is sized from the ball diameter plus
+  a clearance margin, and nothing is left to jitter.
+- **The mouth only ever moves between three neighbouring columns**, fixed for a whole milestone
+  window. Which of the three is live changes each level. So the skill compounds: the player learns a
+  small neighbourhood of the board and gets better at hitting it, instead of re-finding it every
+  tap.
 - **Missing costs nothing extra.** The ball lands on an ordinary barrier gate and the usual
   ×2–×4 cascade plays out, exactly as before.
 - **The payoff is loud:** a fanfare unlike any other cue, a heavy haptic, a gilded spark burst,

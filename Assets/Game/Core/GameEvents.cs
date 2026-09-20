@@ -113,6 +113,25 @@ namespace RichCoast.Core
     }
 
     /// <summary>
+    /// Zone A → all: the player spent a cabinet tilt. Carries what the HUD needs to redraw the pips and
+    /// what the measurement layer needs to tell a rescue from a gamble — a tilt on a crowded board is a
+    /// very different act from one on an empty board, and only the ball count says which it was.
+    /// </summary>
+    public readonly struct TiltEvent
+    {
+        /// <summary>Tilts still in hand AFTER this one.</summary>
+        public readonly int Remaining;
+        /// <summary>Balls on the Zone A board when the cabinet was shaken.</summary>
+        public readonly int BallsOnBoard;
+
+        public TiltEvent(int remaining, int ballsOnBoard)
+        {
+            Remaining = remaining;
+            BallsOnBoard = ballsOnBoard;
+        }
+    }
+
+    /// <summary>
     /// THE SEAM between the game's halves — the typed replacement for the Phaser string event bus.
     /// Zones never reference each other; they publish and subscribe here. Static so any system can
     /// reach it without wiring, and <see cref="Reset"/> clears every subscriber on a restart /
@@ -154,6 +173,8 @@ namespace RichCoast.Core
         public static event Action<DoorTapEvent> DoorTapped;
         /// <summary>Zone B → all: a ball threaded the golden mouth and struck the gilded gate (its multiplier).</summary>
         public static event Action<int> GoldenGateHit;
+        /// <summary>Zone A → HUD + analytics: a cabinet tilt was spent.</summary>
+        public static event Action<TiltEvent> TiltUsed;
         /// <summary>ThemeDirector → all: the active palette changed (fired per cross-fade tick); baked surfaces restyle.</summary>
         public static event Action ThemeChanged;
         /// <summary>
@@ -180,6 +201,7 @@ namespace RichCoast.Core
         public static void RaiseGameOver(GameOverEvent e) => GameOver?.Invoke(e);
         public static void RaiseDoorTapped(DoorTapEvent e) => DoorTapped?.Invoke(e);
         public static void RaiseGoldenGateHit(int multiplier) => GoldenGateHit?.Invoke(multiplier);
+        public static void RaiseTiltUsed(TiltEvent e) => TiltUsed?.Invoke(e);
         public static void RaiseThemeChanged() => ThemeChanged?.Invoke();
         public static void RaiseModalOpen(bool open) => ModalOpen?.Invoke(open);
 
@@ -203,6 +225,7 @@ namespace RichCoast.Core
             GameOver = null;
             DoorTapped = null;
             GoldenGateHit = null;
+            TiltUsed = null;
             ThemeChanged = null;
             ModalOpen = null;
         }
